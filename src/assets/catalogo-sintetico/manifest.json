@@ -1,0 +1,60 @@
+{
+  "createdOn": "2026-10-15",
+  "source": "ImageGen",
+  "purpose": "Ilustraciones IA de los productos de referencia D89; no fotografías verificadas de fabricación ni recetas reales.",
+  "referencePreview": "duco-catalogo-productos-imagenes-20261015.html",
+  "referenceSha256": "badaf65e755f5f0a1cc078bd68ab467827220bdbdc315a3a1a117bfeb1fb6b78",
+  "visualInspection": "5 reference assets inspected locally",
+  "assets": [
+    {
+      "id": "SYN-NUBE-C",
+      "file": "SYN-NUBE-C.png",
+      "sha256": "9faac7309907ccdb332a22ea72341bd1ffd11e1aab1a909c8e1505b6b87bb7fa",
+      "bytes": 1847722,
+      "width": 1254,
+      "height": 1254,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "mesa-florencia-tzalam.png"
+    },
+    {
+      "id": "SYN-NUBE-O",
+      "file": "SYN-NUBE-O.png",
+      "sha256": "61a86090784e13202420ee36cb69cf9ce6c9baa7b90ab76d9201ca13a1637b9c",
+      "bytes": 1862590,
+      "width": 1254,
+      "height": 1254,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "mesa-florencia-encino-rojo.png"
+    },
+    {
+      "id": "SYN-PRISMA-C",
+      "file": "SYN-PRISMA-C.png",
+      "sha256": "1f474ef00cd3f6166836ab83a733eb510ef882cc1dcc93c375571ed96361949a",
+      "bytes": 2315541,
+      "width": 1254,
+      "height": 1254,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "cubierta-tzalam.png"
+    },
+    {
+      "id": "SYN-PRISMA-O",
+      "file": "SYN-PRISMA-O.png",
+      "sha256": "3e84df98ae3d0329b0a8ebe69a542aa2b3b7d70712cc9c24da920b2e7f5f1322",
+      "bytes": 2228526,
+      "width": 1254,
+      "height": 1254,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "cubierta-encino-blanco.png"
+    },
+    {
+      "id": "SYN-PRISMA-G",
+      "file": "SYN-PRISMA-G.png",
+      "sha256": "7373503c9ead9b734ded65dd7231b89295a66b32e14cb8cd403d96671f9f43e5",
+      "bytes": 2381795,
+      "width": 1254,
+      "height": 1254,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "cubierta-encino-rojo.png"
+    }
+  ]
+}

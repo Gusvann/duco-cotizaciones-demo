@@ -1,0 +1,25 @@
+/* Only the integrated demo shell. The quotation rules and calculator are unchanged. */
+body{--demo-sidebar-width:237px;margin:0;background:#f6faff;color:#13293d;font-family:"Public Sans",Arial,sans-serif}
+#quote-host[hidden]{display:none!important}
+#quote-host>.skip,#quote-host>.topbar{display:none!important}
+#quote-host{display:block;box-sizing:border-box;width:calc(100% - var(--demo-sidebar-width));margin:0 0 0 var(--demo-sidebar-width);padding:0 38px}
+#quote-host #workspace{padding:0;max-width:none}
+#quote-host .editor-context>[data-action="list"]{display:none}
+#quote-host [data-action="pdf"],#quote-host [data-action="send-review"],#quote-host [data-action="approve"],#quote-host [data-action="reject"]{display:none}
+#quote-host .editor-context{margin-bottom:14px}
+#quote-host .editor-context h2{font-size:24px}
+#quote-host[data-journey-screen="request"] .editor-context,
+#quote-host[data-journey-screen="request"] .steps{display:none}
+#quote-host[data-journey-screen="request"] .shell{grid-template-columns:minmax(0,1fr)}
+/* Readable action buttons even within the nested narrow wood editor. */
+#quote-host .break-editor-actions{flex-wrap:wrap;min-width:0}
+#quote-host .break-editor-actions>.meta{flex:1 1 200px;min-width:0}
+#quote-host .break-editor-actions>button{flex:0 0 auto;min-width:max-content;overflow-wrap:normal;word-break:normal}
+@media(min-width:1550px){#quote-host{padding-inline:50px}}
+@media(max-width:1100px){body{--demo-sidebar-width:205px}#quote-host{padding-inline:23px}}
+@media(max-width:750px){body{--demo-sidebar-width:0px}#quote-host{padding-inline:16px}}
+@media(max-width:600px){
+ #quote-host{padding:0 16px}
+ #quote-host .break-editor-actions>.meta{flex-basis:100%}
+ #quote-host .break-editor-actions>button{flex:1 1 90px;min-width:90px}
+}

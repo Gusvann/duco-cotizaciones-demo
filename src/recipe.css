@@ -1,0 +1,19 @@
+#quote-host .recipe-catalog-products {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+#quote-host .recipe-catalog-card {display:block;padding:0;overflow:hidden;border:1px solid #d9d8d1;border-radius:14px;background:#fff;min-width:0}
+#quote-host .recipe-product-figure {margin:0;background:#eeece7}
+#quote-host .recipe-product-figure .line-product-image {display:block;width:100%;height:210px;max-width:none;object-fit:contain;border-radius:0;background:#eeece7}
+#quote-host .recipe-product-figure figcaption {padding:8px 16px;color:#696c65;font-size:11px;line-height:1.4;background:#f6f5f1}
+#quote-host .recipe-product-content {padding:18px}
+#quote-host .recipe-product-content .line-product-copy {min-width:0}
+#quote-host .recipe-product-content .line-product-copy h4 {font-size:19px;margin:5px 0 9px}
+#quote-host .recipe-product-content .line-product-copy p {line-height:1.55;margin:0 0 15px;overflow-wrap:anywhere}
+#quote-host .recipe-product-content .line-card-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center;justify-content:space-between}
+#quote-host .recipe-product-content .line-variant-choice {width:100%;max-width:none}
+#quote-host .recipe-product-content .line-variant-choice select {width:100%}
+#quote-host .recipe-product-content .line-product-detail {margin-top:15px;border-top:1px solid #e4e3dd;padding-top:15px}
+#quote-host .recipe-product-content .line-variant-summary {display:grid;grid-template-columns:1fr;gap:10px}
+#quote-host .recipe-product-content .line-variant-summary dd {overflow-wrap:anywhere}
+#quote-host .recipe-preview-note {font-size:12px;line-height:1.6;background:#f1f3ec;padding:12px;border-radius:8px;color:#4d5844}
+#quote-host .synthetic-recipe-source {margin-bottom:14px}
+#quote-host .synthetic-recipe-source li {line-height:1.6}
+@media(max-width:760px){#quote-host .recipe-catalog-products{grid-template-columns:1fr}#quote-host .recipe-product-figure .line-product-image{height:190px}}

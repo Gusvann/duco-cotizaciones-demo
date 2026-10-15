@@ -1,0 +1,53 @@
+/* D87–D91 presentation only. Native capture and cost evaluation stay intact. */
+#quote-host .wood-unit-pricing .wood-editor-group{min-width:0}
+#quote-host .wood-unit-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px 13px;margin:10px 0}
+#quote-host .wood-unit-metrics>span{display:grid;gap:3px;min-width:0;padding:10px 12px;border:1px solid #d4e4f2;border-radius:9px;background:#f6faff}
+#quote-host .wood-unit-metrics small,#quote-host .wood-unit-price-reference small{font-size:11px;color:#526779;line-height:1.5}
+#quote-host .wood-unit-metrics strong{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:#073b72;overflow-wrap:anywhere}
+#quote-host .wood-unit-price-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:end}
+#quote-host .wood-unit-cost{display:grid;gap:4px;min-width:0;padding:12px 14px;border:1px solid #cce3f8;border-radius:9px;background:#edf6ff}
+#quote-host .wood-unit-cost small{font-size:11px;line-height:1.45;color:#526779}
+#quote-host .wood-unit-cost strong{font-size:20px;color:#073b72;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#quote-host .wood-unit-price-reference{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 8px}
+#quote-host .wood-unit-price-reference>span{display:grid;gap:4px;min-width:0}
+#quote-host .wood-unit-price-reference strong{font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#quote-host .wood-unit-article-cost{margin-top:12px}
+#quote-host .wood-unit-pricing [data-editor-group="technical"]{border-top:1px solid #d4e4f2;padding-top:12px}
+#quote-host .recipe-line-economics{display:block;margin-top:5px;line-height:1.7;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media(max-width:950px){#quote-host .wood-unit-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){#quote-host .wood-unit-price-grid,#quote-host .wood-unit-price-reference{grid-template-columns:minmax(0,1fr)}#quote-host .wood-unit-metrics{gap:7px}#quote-host .wood-unit-metrics>span{padding:8px}#quote-host .wood-unit-cost strong{font-size:18px}}
+
+/* D90: the existing Article capsule clips this terminal action band. The inset
+   matches its native body spacing; no subeditor action row is a consumer. */
+#quote-host .article-panel-approved > .part-accordion-body > .inline-editor{--article-footer-inset:18px}
+#quote-host .article-panel-approved > .part-accordion-body > .inline-editor > .inline-editor-actions{flex-wrap:wrap;margin-inline:calc(-1 * var(--article-footer-inset));margin-bottom:calc(-1 * var(--article-footer-inset));padding:var(--article-footer-inset);border-top:1px solid var(--line);background:#e3f1fd}
+@media(max-width:760px){#quote-host .article-panel-approved > .part-accordion-body > .inline-editor{--article-footer-inset:14px}}
+
+/* D91: remove stacked spacing only around the ordered F exceptions/CNC rows. */
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] > .wood-editor-group:is([data-editor-group="exceptions"],[data-editor-group="cnc"]){padding-block:0;border-bottom:0}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] > .wood-editor-group[data-editor-group="exceptions"] > .wood-params-row,
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] > .wood-editor-group[data-editor-group="cnc"] > .solid-wood-minimal-cnc{margin-block:0;padding-block:8px;border-block:0;border-bottom:1px solid var(--line)}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .wood-params-row[open] > summary{margin-bottom:8px}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .wood-params-row > .meta,
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .wood-params-row > .solid-wood-f-actions{margin-block:8px}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .solid-wood-minimal-cnc [data-solid-cnc]{margin-top:8px}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .solid-wood-minimal-cnc > .solid-cnc-mini-actions{margin-block:8px 0;padding-top:8px;border-top:0}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .wood-params-toggle,
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .wood-params-row > button[data-solid-action],
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .wood-params-row > .solid-wood-f-actions > button,
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .solid-wood-minimal-cnc button[data-solid-cnc-choice],
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .solid-cnc-mini-actions > button[data-solid-action="apply-cnc"]{min-height:40px;max-inline-size:100%;padding:6px 10px;font-size:.8rem;font-weight:500;border:1px solid var(--line);background:var(--white);color:var(--navy)}
+#quote-host .article-panel-approved .solid-wood-f.solid-wood-reference .wood-editor-ordered[data-editor-presentation="ORDERED_CAPTURE"] .solid-wood-minimal-cnc button[data-solid-cnc-choice][aria-pressed="true"]{border-color:var(--blue);background:var(--soft);color:var(--navy);font-weight:600}
+
+/* Documentary tables are a disclosure, separate from calculated costs. */
+#quote-host .recipe-economics-reference{clear:both;margin:1rem 0;padding-block:.8rem;border-block:1px solid var(--line)}
+#quote-host .recipe-economics-reference > summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+#quote-host .recipe-economics-reference h6{margin:1rem 0 .5rem}
+#quote-host .recipe-economics-table{max-width:100%;overflow-x:auto}
+#quote-host .recipe-economics-table table{width:100%;border-collapse:collapse;font-size:.8rem}
+#quote-host .recipe-economics-table caption{text-align:left;padding:.4rem 0}
+#quote-host .recipe-economics-table th,#quote-host .recipe-economics-table td{padding:.5rem;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
+#quote-host .recipe-economics-table th:first-child{text-align:left;min-width:10rem}
+#quote-host .article-panel-approved .recipe-economics-reference .recipe-documentary-subtotal th,
+#quote-host .article-panel-approved .recipe-economics-reference .recipe-documentary-subtotal td{font-weight:600;background:var(--soft)}
+#quote-host .article-panel-approved .recipe-economics-reference .recipe-documentary-subtotal small{display:block;margin-top:4px;font-weight:400;color:var(--muted)}
