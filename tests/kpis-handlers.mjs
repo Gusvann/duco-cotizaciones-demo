@@ -9,7 +9,7 @@ import vm from 'node:vm';
 const read=name=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 const template=read('cotizador.html');
 // A test run uses one immutable source checkpoint, even if a collaborator edits later.
-const scripts=['recipe-reference.js','recipe-catalog.js','quote-bridge.js','portfolio-kpis.js','journey.js'].map(name=>[name,read(name)]);
+const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','journey.js'].map(name=>[name,read(name)]);
 const domain=[...template.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])
   .find(source=>source.includes('var QuoteSchema')&&source.includes('var QuoteManufacturing_'));
 if(!domain) throw new Error('The shared public domain is required.');
@@ -101,34 +101,143 @@ async function harness({mobile=false,portfolioFixtures=false}={}){
   return {sandbox,root,footer,click,field,key,inspect,metrics,setPortfolioFixtures,Q:sandbox.DemoQuote,app:sandbox.__client.app};
 }
 
-test('request and quote omit the extra demo blocks while keeping confirmed and pending save states',async()=>{
+test('session presentation hides testing labels without hiding the session and recovery context',async()=>{
+  const h=await harness();
+  const text=()=>[h.root.innerHTML,h.footer.innerHTML].join(' ').replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ');
+  const check=()=>{
+    assert.doesNotMatch(text(),/DEMO LOCAL|\b(?:UAT|PREVIEW|PENDING_CONFIG|PARAMETER_PENDING)\b|\bsimulaci[oó]n\b|\bsimulad[ao]s?\b|datos sint[eé]ticos/i);
+    assert.match(text(),/SÓLO EN ESTA SESIÓN/);
+    assert.match(text(),/Los cambios se conservan sólo durante esta sesión/);
+  };
+  check();await h.click('open',{id:'DEMO-101'});check();
+  await h.click('stage',{screen:'quote'});check();
+  await h.click('kpis');check();
+});
+
+test('quote omits the duplicate action strip but preserves native saving, status and unknown-result recovery',async()=>{
   const h=await harness();
   const clean=()=>{
     assert.doesNotMatch(h.root.innerHTML,/Clasificación comercial e hitos sintéticos|j-classification|data-kpi-field/);
     assert.doesNotMatch(h.root.innerHTML,/Cambios de borrador en memoria|Datos sintéticos, sólo en memoria\. La recarga reinicia la simulación\./);
-    assert.match(h.root.innerHTML,/data-action="(?:save|resolve-save)"/,'The save action remains available');
   };
   await h.click('open',{id:'DEMO-101'});
   clean();
+  assert.doesNotMatch(h.root.innerHTML,/j-save-strip|data-action="save"/,'Request omits the duplicate upper strip; the native form owns save');
+  assert.match(h.root.innerHTML,/data-action="stage" data-screen="quote"/,'Request keeps access to the editor');
   assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status" hidden><\/strong>/,'An unused status has no visible placeholder');
-  await h.click('save');
+  await h.sandbox.DemoJourney.saveCurrent();
   clean();
-  assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Guardado en esta simulación<\/strong>/);
+  assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Guardado durante esta sesión<\/strong>/);
   await h.click('stage',{screen:'quote'});
   clean();
+  assert.doesNotMatch(h.root.innerHTML,/j-save-strip|data-action="save"/,'Quote has no duplicate upper action band');
+  assert.match(h.footer.innerHTML,/data-action="stage" data-screen="review"/,'Review remains available in the footer with its existing guard');
   h.app.partDraft={synthetic:true};
   await h.click('toggle-menu');
   assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Captura sin aplicar<\/strong>/);
   await h.click('discard-pending');
   h.app.q.items[0].unitPrice='4000';
   await h.field('j-save-outcome','unknown',{container:h.footer});
-  await h.click('save');
+  // This is the same entry point used by the embedded native Save button.
+  await h.sandbox.DemoJourney.saveCurrent();
   clean();
   assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Resultado de guardado desconocido<\/strong>/);
-  assert.match(h.root.innerHTML,/id="j-resolve-save"/);
-  await h.click('resolve-save');
-  assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Guardado en esta simulación<\/strong>/);
+  assert.doesNotMatch(h.root.innerHTML,/j-save-strip|id="j-resolve-save"/);
+  assert.match(h.footer.innerHTML,/id="j-resolve-save"/,'Recovery remains reachable after removing the duplicate strip');
+  await h.click('resolve-save',{},h.footer);
+  assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Guardado durante esta sesión<\/strong>/);
+  assert.doesNotMatch(h.footer.innerHTML,/id="j-resolve-save"/,'Confirmed results remove the recovery action');
   assert.equal(h.metrics().totalCents,21000000,'Removing presentation does not alter accepted sales');
+});
+
+test('active steps reveal themselves horizontally without scrolling the form vertically',async()=>{
+  const h=await harness();
+  await h.click('open',{id:'DEMO-101'});
+  await h.click('stage',{screen:'quote'});
+  const scrollingNavigation=()=>{
+    let target={left:350,right:490};
+    const navigation={scrollLeft:0,scrollTop:75,
+      getBoundingClientRect:()=>({left:0,right:320}),
+      querySelector:()=>({
+        getBoundingClientRect:()=>({left:target.left-navigation.scrollLeft,right:target.right-navigation.scrollLeft}),
+        scrollIntoView(){throw Error('Navigation must not scroll the document vertically');}
+      })};
+    return {navigation,target:value=>{target=value;}};
+  };
+  const outer=scrollingNavigation(),inner=scrollingNavigation();
+  h.root.querySelector=selector=>selector==='.j-stages'&&h.root.innerHTML.includes('class="j-stages"')?outer.navigation:null;
+  h.sandbox.__nodes.get('quote-host').querySelector=selector=>selector==='.steps'?inner.navigation:null;
+  await h.click('toggle-menu');
+  assert.doesNotMatch(h.root.innerHTML,/class="j-stages"/,'The quote editor has one section bar');
+  assert.equal(outer.navigation.scrollLeft,0,'The absent commercial menu does not scroll');
+  for(const {navigation} of [inner]) {
+    assert.equal(navigation.scrollLeft,170,'A later active step is revealed at the right edge');
+    assert.equal(navigation.scrollTop,75,'Vertical position is preserved');
+  }
+  outer.target({left:20,right:100});inner.target({left:20,right:100});
+  await h.click('toggle-menu');
+  for(const {navigation} of [inner]) {
+    assert.equal(navigation.scrollLeft,20,'Returning to an earlier step reveals its left edge');
+    assert.equal(navigation.scrollTop,75,'Returning never moves the form vertically');
+  }
+});
+
+test('request can continue without saving and unknown saves require explicit resolution',async()=>{
+  const h=await harness();
+  await h.click('open',{id:'DEMO-101'});
+  assert.doesNotMatch(h.root.innerHTML,/j-save-strip/);
+  h.app.q.name='Solicitud editada sin guardar';
+  assert.equal(h.Q.snapshot('DEMO-101'),null);
+  await h.click('stage',{screen:'quote'});
+  assert.equal(h.inspect().state.screen,'quote');
+  assert.equal(h.inspect().state.guard,null);
+  assert.equal(h.Q.snapshot('DEMO-101'),null,'Continuing does not create a save');
+  assert.equal(h.app.q.name,'Solicitud editada sin guardar');
+  assert.equal(await h.sandbox.DemoJourney.saveCurrent(),true);
+  const previous=h.Q.snapshot('DEMO-101');
+  await h.click('stage',{screen:'request'});
+  assert.equal(h.inspect().state.screen,'request');
+  h.app.q.name='Cambio con resultado desconocido';
+  await h.field('j-save-outcome','unknown',{container:h.footer});
+  assert.equal(await h.sandbox.DemoJourney.saveCurrent(),false);
+  assert.match(h.root.innerHTML,/id="j-resolve-save"/,'Recovery is visible outside the inert form');
+  assert.equal(h.sandbox.__nodes.get('quote-host').inert,true);
+  assert.equal(h.Q.snapshot('DEMO-101').quote.name,previous.quote.name);
+  await h.click('stage',{screen:'quote'});
+  assert.equal(h.inspect().state.guard,'unknown','The outer stage navigation cannot bypass an unknown outcome');
+  assert.equal(h.inspect().state.screen,'request');
+  await h.click('stay',{},h.footer);
+  await h.click('resolve-save');
+  assert.equal(h.Q.summary('DEMO-101').saveState,'success');
+  assert.equal(h.Q.snapshot('DEMO-101').quote.name,'Cambio con resultado desconocido');
+  assert.doesNotMatch(h.root.innerHTML,/id="j-resolve-save"/);
+});
+
+test('accepted synthetic version and project use the same phone without an extension',async()=>{
+  const h=await harness();
+  await h.click('open',{id:'DEMO-101'});
+  h.app.q.contactPhone='+52 55 0000 0018 ext. 09';
+  assert.equal(await h.sandbox.DemoJourney.saveCurrent(),true);
+  const snapshot=h.Q.snapshot('DEMO-101');
+  assert.equal(snapshot.quote.contactPhone,'+52 55 0000 0018');
+  assert.equal(snapshot.request.contactPhone,'+52 55 0000 0018');
+  assert.equal(snapshot.summary.priceCents,600000);
+  await h.click('stage',{screen:'review'});
+  await h.field('j-review-technical','',{checked:true});
+  await h.field('j-review-commercial','',{checked:true});
+  await h.click('validate');
+  await h.click('stage',{screen:'offer'});await h.click('send');
+  await h.click('stage',{screen:'response'});
+  await h.field('j-evidence','Aceptación ficticia de esta versión.',{type:'input'});
+  await h.field('j-exact-version','',{checked:true});
+  await h.click('register-response');
+  await h.click('stage',{screen:'project'});await h.click('convert');
+  const record=h.inspect().records.find(row=>row.id==='DEMO-101');
+  assert.equal(record.sent.snapshot.quote.contactPhone,'+52 55 0000 0018');
+  assert.equal(record.versions[0].snapshot.request.contactPhone,'+52 55 0000 0018');
+  assert.equal(record.project.baseline.quote.contactPhone,'+52 55 0000 0018');
+  assert.equal(record.acceptedVersion,1);
+  assert.equal(record.project.baseline.summary.priceCents,600000);
 });
 
 test('native synthetic fixtures have accepted V1 prices, complete category coverage and a pending historical amount',async()=>{
@@ -323,11 +432,11 @@ test('capture pending, failed and unknown saves retain distinct guards without c
   assert.equal(h.inspect().state.screen,'kpis');
   await h.click('open',{id:'DEMO-101'});
   await h.field('j-save-outcome','fail',{container:h.footer});
-  await h.click('save');
+  await h.sandbox.DemoJourney.saveCurrent();
   assert.equal(h.Q.summary('DEMO-101').saveState,'failed');
   assert.equal(h.metrics().totalCents,21000000);
   await h.field('j-save-outcome','unknown',{container:h.footer});
-  await h.click('save');
+  await h.sandbox.DemoJourney.saveCurrent();
   assert.equal(h.Q.summary('DEMO-101').saveState,'unknown');
   await h.click('kpis');
   assert.equal(h.inspect().state.guard,'unknown');
@@ -374,7 +483,7 @@ test('historical partial references expose pending evidence and cannot review, s
 test('confirmed acceptance adds exactly the saved price once and conversion is idempotent',async()=>{
   const h=await harness();
   await h.click('open',{id:'DEMO-101'});
-  await h.click('save');
+  await h.sandbox.DemoJourney.saveCurrent();
   await h.click('stage',{screen:'review'});
   await h.field('j-review-technical','',{checked:true});
   await h.field('j-review-commercial','',{checked:true});

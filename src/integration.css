@@ -8,6 +8,20 @@ body{--demo-sidebar-width:237px;margin:0;background:#f6faff;color:#13293d;font-f
 #quote-host [data-action="pdf"],#quote-host [data-action="send-review"],#quote-host [data-action="approve"],#quote-host [data-action="reject"]{display:none}
 #quote-host .editor-context{margin-bottom:14px}
 #quote-host .editor-context h2{font-size:24px}
+#quote-host .editor-context>div{flex-wrap:wrap}
+#quote-host .editor-context strong{white-space:normal;overflow-wrap:anywhere}
+/* Size the embedded editor from its available space, including Astil's sidebar. */
+#quote-host .shell{min-width:0}
+#quote-host .steps{display:flex;flex-wrap:nowrap;gap:8px;max-width:100%;overflow-x:auto;padding:8px;scroll-padding-inline:8px}
+#quote-host .steps button{flex:0 0 auto;min-width:max-content;justify-content:flex-start}
+#quote-host .steps button:focus-visible{outline-offset:-3px}
+#quote-host .panel-actions{flex-wrap:wrap}
+#quote-host .panel-actions>.actions{display:flex;flex-wrap:wrap;gap:10px;margin-inline-start:auto;min-width:0}
+#quote-host .panel-actions button{flex:0 0 auto;max-width:100%}
+/* The country selector fits the editor rather than the full browser width. */
+#quote-host .phone-pieces{grid-template-columns:minmax(155px,1fr) minmax(0,1.4fr)}
+#quote-host .phone-piece select{width:100%;min-width:0}
+#quote-host .phone-pieces.has-custom .phone-number{grid-column:1/-1}
 #quote-host[data-journey-screen="request"] .editor-context,
 #quote-host[data-journey-screen="request"] .steps{display:none}
 #quote-host[data-journey-screen="request"] .shell{grid-template-columns:minmax(0,1fr)}
@@ -16,10 +30,19 @@ body{--demo-sidebar-width:237px;margin:0;background:#f6faff;color:#13293d;font-f
 #quote-host .break-editor-actions>.meta{flex:1 1 200px;min-width:0}
 #quote-host .break-editor-actions>button{flex:0 0 auto;min-width:max-content;overflow-wrap:normal;word-break:normal}
 @media(min-width:1550px){#quote-host{padding-inline:50px}}
+@media(max-width:1150px){
+ #quote-host .shell{grid-template-columns:minmax(0,1fr)}
+ #quote-host .aside .panel{grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr))}
+}
 @media(max-width:1100px){body{--demo-sidebar-width:205px}#quote-host{padding-inline:23px}}
 @media(max-width:750px){body{--demo-sidebar-width:0px}#quote-host{padding-inline:16px}}
 @media(max-width:600px){
  #quote-host{padding:0 16px}
  #quote-host .break-editor-actions>.meta{flex-basis:100%}
  #quote-host .break-editor-actions>button{flex:1 1 90px;min-width:90px}
+}
+@media(max-width:520px){
+ #quote-host .phone-pieces{grid-template-columns:minmax(0,1fr)}
+ #quote-host .phone-pieces.has-custom .phone-number{grid-column:auto}
+ #quote-host .phone-piece select,#quote-host .phone-piece input{font-size:16px}
 }

@@ -12,6 +12,9 @@
 #quote-host .wood-unit-price-reference>span{display:grid;gap:4px;min-width:0}
 #quote-host .wood-unit-price-reference strong{font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 #quote-host .wood-unit-article-cost{margin-top:12px}
+#quote-host .article-panel-record>.wood-piece-inline-editor{grid-column:1/-1;min-width:0;width:100%}
+#quote-host .article-flow-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px;line-height:1.5}
+#quote-host .wood-unit-pricing .wood-material-price-actions>button{max-inline-size:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
 #quote-host .wood-unit-pricing [data-editor-group="technical"]{border-top:1px solid #d4e4f2;padding-top:12px}
 #quote-host .recipe-line-economics{display:block;margin-top:5px;line-height:1.7;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 @media(max-width:950px){#quote-host .wood-unit-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

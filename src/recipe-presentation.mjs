@@ -39,12 +39,60 @@ function installRecipePresentation(recipeSourceSubtotal) {
   const nativeWoodEditor = solidWoodEditorReferenceHtml;
   const nativeWoodRefresh = solidWoodRefresh;
   const nativeWoodSet = solidWoodSet;
+  const nativeWoodCard = solidWoodRecipeCard;
+  const nativeWoodAction = solidWoodAction;
+  const nativeWoodApply = solidWoodApply;
+  const nativeBreakdownAction = breakdownAction;
   const nativeMaterialCard = articlePanelMaterialCard;
   const nativeProcessCard = articlePanelProcessCard;
   const nativeWoodFamily = solidWoodFamilyHtml;
   const nativeSupplyEditor = breakdownSupplyEditor;
   const nativePurchaseFields = breakdownPurchaseFields;
   const nativeBreakdownFooter = breakdownFooter;
+
+  function focusWoodCard(itemId, componentId) {
+    requestAnimationFrame(() => {
+      const active = app.breakdownEditor;
+      if (app.openPartId !== itemId || active && active.solidWoodF?.id !== componentId) return;
+      const selector = '[data-solid-action="edit"][data-article-id="' + CSS.escape(itemId) + '"][data-id="' + CSS.escape(componentId) + '"]';
+      quoteRoot.querySelector(selector)?.focus({preventScroll:true});
+    });
+  }
+  solidWoodRecipeCard = function (item, component) {
+    let html = nativeWoodCard(item, component);
+    const draft = app.breakdownEditor;
+    const expanded = !!(draft?.solidWoodF && draft.itemId === item.id && draft.solidWoodF.id === component.id && partSameContext(draft.context));
+    const panelId = 'wood-piece-editor-' + component.id;
+    const marker = 'aria-label="Editar pieza de madera">Editar</button>';
+    if (html.split(marker).length !== 2 || !html.endsWith('</article>')) throw Error('Wood component row changed');
+    const label = (expanded ? 'Cerrar edición de ' : 'Editar ') + (component.name || 'pieza de madera');
+    const toggle = 'aria-label="' + esc(label) + '" aria-expanded="' + expanded + '" aria-controls="' + esc(panelId) + '">' + (expanded ? 'Cerrar edición' : 'Editar') + '</button>';
+    html = html.replace(marker, toggle);
+    const panel = expanded
+      ? '<div id="' + esc(panelId) + '" class="fab-inline-editor wood-piece-inline-editor" role="region" aria-label="' + esc('Edición de ' + (component.name || 'pieza de madera')) + '">' + solidWoodEditorHtml() + '</div>'
+      : '<div id="' + esc(panelId) + '" hidden></div>';
+    return html.slice(0, -10) + panel + '</article>';
+  };
+  solidWoodAction = function (action, itemId, componentId) {
+    const draft = app.breakdownEditor;
+    if (action === 'edit' && draft?.solidWoodF && draft.itemId === itemId && draft.solidWoodF.id === componentId) {
+      if (!recipeCanEdit() || app.openPartId !== itemId || !partSameContext(draft.context)) return false;
+      const close = () => { editor(); focusWoodCard(itemId, componentId); };
+      if (breakdownGuard(close)) close();
+      return true;
+    }
+    return nativeWoodAction(action, itemId, componentId);
+  };
+  solidWoodApply = function () {
+    const draft = app.breakdownEditor, result = nativeWoodApply();
+    if (result && draft?.solidWoodF) focusWoodCard(draft.itemId, draft.solidWoodF.id);
+    return result;
+  };
+  breakdownAction = async function (button) {
+    const draft = app.breakdownEditor, result = await nativeBreakdownAction(button);
+    if (button.dataset.breakAction === 'cancel-editor' && draft?.solidWoodF && !app.breakdownEditor) focusWoodCard(draft.itemId, draft.solidWoodF.id);
+    return result;
+  };
 
   function metric(label, value, unit = '', notApplicable = false) {
     return '<span><small>' + esc(label) + '</small><strong>' + esc(notApplicable ? 'No aplica' : solidWoodNumber(value)) + (notApplicable || value == null || !unit ? '' : ' ' + esc(unit)) + '</strong></span>';
@@ -54,9 +102,9 @@ function installRecipePresentation(recipeSourceSubtotal) {
     const isReference = component.recipeSource === 'LOCAL_REFERENCE_D91';
     const measurements = (values, wood, waste) => '<div class="wood-unit-metrics">' + metric('Área', values.areaM2, 'm²') + metric('PIES³ — ' + name, wood) + metric('PIES + DESP', waste) + metric('Pintura', values.paintM2, 'm²') + metric('Entablerado', values.jointedM2, 'm²', String(component.jointed) === '0') + '</div>';
     const unitMeasurements = measurements(result.unitMeasurements, result.unitP1WoodRequirement, result.unitP1WoodWithWaste);
-    const unitCost = '<small>Costo madera — ' + esc(name) + '</small><strong>' + solidWoodMoney(result.unitCosts.woodCost) + '</strong><small>Unitario · preview' + (isReference ? ' · moneda sin acreditar' : ' MXN') + ' · ' + esc(price.quality) + '</small>';
-    const unitPriceInfo = '<div class="wood-unit-price-reference"><span><small>' + (isReference ? 'Referencia histórica de material · PREVIEW' : 'Catálogo sintético · PREVIEW') + '</small><strong>' + solidWoodMoney(price.basePrice) + '</strong></span><span><small>Diferencia frente a la referencia</small><strong>' + solidWoodMoney(price.difference) + (price.differencePct == null ? '' : ' · ' + esc(solidWoodNumber(price.differencePct)) + '%') + '</strong></span></div><p class="meta">' + esc(price.quality === 'PENDING' ? 'Precio pendiente' : result.priceAdjustment ? 'Ajuste local · ESTIMATED · motivo obligatorio' : isReference ? 'Precio documental · vigencia, moneda e impuestos sin acreditar · PREVIEW' : 'Precio inventado de catálogo · PREVIEW') + '</p>' + (result.priceAdjustment ? '<p class="solid-wood-f-exception"><strong>Ajustado por Account · ESTIMATED</strong><br>Motivo: ' + esc(result.priceAdjustment.reason) + '<br>Actor de simulación: ' + esc(result.priceAdjustment.actor) + '</p>' : '');
-    const articleTotals = '<p class="meta">' + esc(solidWoodNumber(result.articleQuantity)) + ' unidad(es) comerciales · resultado derivado una sola vez por el motor.</p>' + measurements(result.articleMeasurements, result.articleP1WoodRequirement, result.articleP1WoodWithWaste) + '<div class="wood-editor-cost wood-unit-article-cost"><small>Costo madera — ' + esc(name) + ' · total del Artículo · preview' + (isReference ? ' · moneda sin acreditar' : ' MXN') + '</small><strong>' + solidWoodMoney(result.articleCosts.woodCost) + '</strong><small>' + esc(price.quality) + ' · Los procesos pendientes no forman un costo confirmado.</small></div>';
+    const unitCost = '<small>Costo madera — ' + esc(name) + '</small><strong>' + solidWoodMoney(result.unitCosts.woodCost) + '</strong><small>Estimado unitario</small>';
+    const unitPriceInfo = '<div class="wood-unit-price-reference"><span><small>Precio de referencia</small><strong>' + solidWoodMoney(price.basePrice) + '</strong></span><span><small>Diferencia frente a la referencia</small><strong>' + solidWoodMoney(price.difference) + (price.differencePct == null ? '' : ' · ' + esc(solidWoodNumber(price.differencePct)) + '%') + '</strong></span></div>' + (price.quality === 'PENDING' ? '<p class="meta">Precio pendiente</p>' : '') + (result.priceAdjustment ? '<p class="solid-wood-f-exception"><strong>Precio ajustado</strong><br>Motivo: ' + esc(result.priceAdjustment.reason) + '</p>' : '');
+    const articleTotals = '<p class="meta">Cantidad de artículos: ' + esc(solidWoodNumber(result.articleQuantity)) + '</p><div class="wood-editor-cost wood-unit-article-cost"><small>Costo madera — ' + esc(name) + ' · total del Artículo</small><strong>' + solidWoodMoney(result.articleCosts.woodCost) + '</strong><small>Estimado</small></div>';
     const woodTechnical = solidWoodLayoutBlocks(id, component, result).layoutTechnical + '<p class="meta">' + (isReference ? 'Precarga local de la variante de referencia; precio documental sin vigencia, moneda o impuestos acreditados. ' : 'Precios, recetas y procedencia de esta demo son sintéticos. ') + 'P1 conserva su unidad provisional; no es una tarifa por pie cúbico físico acreditada. CNC sin tarifa, primer y acabado final permanecen pendientes o diferidos.</p>';
     const blocks = { unitMeasurements, unitCost, unitPriceInfo, articleTotals, woodTechnical };
     return isReference ? Object.fromEntries(Object.entries(blocks).map(([key, value]) => [key, referenceText(value)])) : blocks;
@@ -94,25 +142,28 @@ function installRecipePresentation(recipeSourceSubtotal) {
     }
     const expected = ['identity', 'material', 'dimensions', 'exceptions', 'cnc', 'price', 'result', 'pending', 'technical'];
     if (groups.size !== expected.length || expected.some(key => !groups.has(key))) throw Error('Recipe presentation contract changed');
-    const exceptions = groups.get('exceptions'), priceAt = exceptions.indexOf('data-solid-field="adjustment.price"'), gridAt = exceptions.lastIndexOf('<div class="tech-form-grid">', priceAt);
-    if (priceAt < 0 || gridAt < 0) throw Error('Recipe price controls missing');
-    const grid = articleStudyElement(exceptions, gridAt, 'div');
-    if (!grid.html.includes('data-solid-field="adjustment.reason"') || [...grid.html.matchAll(/data-solid-field=/g)].length !== 2) throw Error('Recipe price controls changed');
-    groups.set('exceptions', exceptions.slice(0, gridAt) + exceptions.slice(grid.end));
+    const exceptions = groups.get('exceptions');
+    const priceAction = (action, label) => {
+      const marker = 'data-solid-action="' + action + '"', at = exceptions.indexOf(marker), start = exceptions.lastIndexOf('<button', at);
+      if (exceptions.split(marker).length !== 2 || start < 0) throw Error('Recipe price action changed: ' + action);
+      const button = articleStudyElement(exceptions, start, 'button').html;
+      return button.slice(0, button.indexOf('>') + 1) + esc(label) + '</button>';
+    };
+    const priceActions = '<div class="solid-wood-f-actions wood-material-price-actions">' + priceAction('reset', 'Restablecer precio de referencia') + priceAction('group-price', 'Aplicar este precio a piezas compatibles') + '</div>';
+    // Keep the native field/action identities; this separates their presentation,
+    // not their scope, validation or calculation. No demo preset button is rendered.
+    groups.delete('exceptions');
+    groups.set('waste', group('waste', 'Desperdicio de esta pieza', solidWoodField('wasteRate', 'Desperdicio (%)', component.wasteRate, {number:true})));
     const priceValue = component.adjustment?.price ?? (result.priceResolution.appliedPrice === null ? '' : result.priceResolution.appliedPrice.toFixed(2));
     groups.set('unit', group('unit', 'Unitario', '<p class="meta">Una unidad del Artículo.</p>' + live('unitMeasurements', blocks)));
-    groups.set('price', group('price', 'Precio material', '<div class="tech-form-grid wood-unit-price-grid">' + solidWoodField('adjustment.price', 'Precio material', priceValue, { money: true }) + live('unitCost', blocks, 'wood-unit-cost') + '</div>' + solidWoodField('adjustment.reason', 'Motivo del ajuste · obligatorio si cambia el precio', component.adjustment?.reason ?? '') + live('unitPriceInfo', blocks)));
-    const resultHtml = groups.get('result'), processAt = resultHtml.indexOf('<details ');
-    if (processAt < 0) throw Error('Recipe process consultation missing');
-    const processes = articleStudyElement(resultHtml, processAt, 'details').html;
-    if (!processes.includes('data-solid-live="layoutProcesses"')) throw Error('Recipe process consultation changed');
-    groups.set('result', group('result', 'Total del Artículo', live('articleTotals', blocks) + processes));
+    groups.set('price', group('price', 'Precio del material', '<div class="tech-form-grid wood-unit-price-grid">' + solidWoodField('adjustment.price', 'Precio del material', priceValue, { money: true }) + live('unitCost', blocks, 'wood-unit-cost') + '</div>' + solidWoodField('adjustment.reason', 'Motivo del ajuste · obligatorio si cambia el precio', component.adjustment?.reason ?? '') + live('unitPriceInfo', blocks) + priceActions));
+    groups.set('result', group('result', 'Total del Artículo', live('articleTotals', blocks)));
     const technical = groups.get('technical'), at = technical.indexOf('data-solid-live="layoutTechnical"'), start = technical.lastIndexOf('<div', at);
     if (at < 0 || start < 0) throw Error('Recipe technical consultation missing');
     const region = articleStudyElement(technical, start, 'div');
     groups.set('technical', technical.slice(0, start) + live('woodTechnical', blocks) + technical.slice(region.end));
     const prefix = html.slice(0, regions[0].start).replace('wood-editor-ordered"', 'wood-editor-ordered wood-unit-pricing"');
-    const output = prefix + ['identity', 'material', 'dimensions', 'unit', 'price', 'exceptions', 'cnc', 'result', 'pending', 'technical'].map(key => groups.get(key)).join('') + html.slice(regions.at(-1).end);
+    const output = prefix + ['identity', 'material', 'dimensions', 'waste', 'unit', 'price', 'cnc', 'result', 'pending', 'technical'].map(key => groups.get(key)).join('') + html.slice(regions.at(-1).end);
     return component.recipeSource === 'LOCAL_REFERENCE_D91' ? referenceText(output) : output;
   };
   solidWoodRefresh = function () {
@@ -204,13 +255,14 @@ function installRecipePresentation(recipeSourceSubtotal) {
     const units = {PZA:'pza',L:'L',FRACTIONAL_PZA_CONSUMPTION:'pza · consumo fraccionario',P1_WOOD_UNIT_PENDING_DUCO:'magnitud madera de referencia',ML:'m lineales',DAY:'día',HOUR:'hora',M2:'m²',M2_FINISH:'m² de acabado'};
     const priceUnits = {SOURCE_MONEY_PER_PZA:'pza',SOURCE_MONEY_PER_L:'L',SOURCE_MONEY_PER_PZA_CONSUMPTION:'pza de consumo',SOURCE_MONEY_PER_P1_WOOD_UNIT_PENDING_DUCO:'magnitud madera de referencia',SOURCE_MONEY_PER_MINUTE:'minuto',SOURCE_MONEY_PER_DAY:'día',SOURCE_MONEY_PER_HOUR:'hora',SOURCE_MONEY_PER_M2:'m²',SOURCE_MONEY_PER_M2_FINISH:'m² de acabado'};
     const quantity = value => value === null || value === undefined || value === '' ? 'Pendiente' : String(value);
-    const table = section => '<h6>' + esc(section.title) + '</h6><div class="recipe-economics-table"><table><caption>Referencia de una unidad del Artículo · no es una compra adicional</caption><thead><tr><th>Concepto</th><th>Cantidad</th><th>Unidad</th><th>Precio fuente</th><th>Importe de referencia</th></tr></thead><tbody>' + section.rows.map(row => {
+    const table = section => '<h6>' + esc(section.key === 'consumables' ? 'Otros materiales' : section.key === 'processes' ? 'Procesos y jornadas' : section.title) + '</h6><div class="recipe-economics-table" role="region" tabindex="0" aria-label="' + esc(section.title) + '"><table><caption>Referencia de una unidad del Artículo · no es una compra adicional</caption><thead><tr><th scope="col">Concepto</th><th scope="col">Cantidad</th><th scope="col">Unidad</th><th scope="col">Precio</th><th scope="col">Importe</th></tr></thead><tbody>' + section.rows.map(row => {
       const priced = referenceAmount(row.unitPrice), complete = recipeSourceSubtotal([row]).knownCount === 1;
       return '<tr><th scope="row">' + esc(row.name) + '</th><td>' + esc(quantity(row.quantity)) + '</td><td>' + esc(units[row.quantityUnit] || row.quantityUnit || 'Pendiente') + '</td><td>' + esc(priced + (priced === 'Pendiente' ? '' : ' / ' + (priceUnits[row.priceUnit] || row.priceUnit || 'unidad pendiente'))) + '</td><td>' + esc(complete ? referenceAmount(row.totalSaved) : 'Pendiente') + '</td></tr>';
     }).join('') + '</tbody>' + recipeSourceSubtotalHtml(section.title, section.rows) + '</table></div>';
-    const cnc = documentary.sections.flatMap(section => section.rows).find(row => row.kind === 'CNC');
-    const cncNote = cnc ? 'Referencia CNC: ' + quantity(cnc.quantity) + ' m × ' + quantity(documentary.cncMinutesPerMeter) + ' min/m × ' + referenceAmount(cnc.unitPrice) + ' por minuto. Sin activar esta tarifa. ' : '';
-    return '<details class="recipe-economics-reference"><summary>Costos documentados de la receta</summary><p class="meta">Datos de referencia por una unidad del Artículo, conservados para revisar la precarga. No cambian al editar las medidas: no son consumos actuales recalculados ni nuevos cargos. Vigencia, moneda e impuestos de origen pendientes de acreditación.</p>' + documentary.sections.map(table).join('') + '<p class="meta">' + esc(cncNote) + 'La longitud CNC y su precio por minuto son magnitudes distintas. CNC y procesos sin tarifa validada siguen pendientes; una celda vacía no significa costo cero. Primer y acabado final permanecen diferidos.</p></details>';
+    // Wood and hardware already have their own working sections. Retain their
+    // historical data, but omit the duplicate tables from this supplementary view.
+    const supplementary = documentary.sections.filter(section => !['hardware', 'wood'].includes(section.key));
+    return '<details class="recipe-economics-reference"><summary><span>Costos de referencia</span><small>Por una unidad</small></summary><p class="meta">Referencias históricas; no se suman al costo del artículo.</p>' + supplementary.map(table).join('') + '</details>';
   }
   solidWoodFamilyHtml = function (item, row, fold) {
     const html = nativeWoodFamily(item, row, fold), extra = recipeSourceCostsHtml(item);
@@ -229,6 +281,27 @@ export function extendRecipePresentation(source) {
   const woodApply = '>Aplicar pieza F</button>';
   if (source.split(woodApply).length !== 3) throw new Error('Expected both native wood editor apply labels.');
   source = source.replaceAll(woodApply, '>Aplicar</button>');
+  const cards = "const cards=entries.filter(c=>!active||c.id!==draft.solidWoodF.id).map(c=>solidWoodRecipeCard(item,c)).join('');";
+  if (source.split(cards).length !== 2) throw new Error('Wood card list changed');
+  source = source.replace(cards, "const cards=entries.map(c=>solidWoodRecipeCard(item,c)).join('');\n    const standaloneActive=active&&!entries.some(c=>c.id===draft.solidWoodF.id);");
+  const standalone = "'<div class=\"recipe-piece-list\">'+cards+'</div>'+(active?'<div class=\"fab-inline-editor\">'+solidWoodEditorHtml()+'</div>':'')";
+  if (source.split(standalone).length !== 2) throw new Error('Wood editor placement changed');
+  source = source.replace(standalone, "'<div class=\"recipe-piece-list\">'+cards+'</div>'+(standaloneActive?'<div class=\"fab-inline-editor\">'+solidWoodEditorHtml()+'</div>':'')");
+  const openingFocus = "editor();requestAnimationFrame(()=>quoteRoot.querySelector('[data-solid-field=\"name\"]')?.focus());";
+  if (source.split(openingFocus).length !== 2) throw new Error('Wood editor focus changed');
+  source = source.replace(openingFocus, "editor();requestAnimationFrame(()=>{const trigger=componentId&&quoteRoot.querySelector('[data-solid-action=\"edit\"][data-article-id=\"'+CSS.escape(id)+'\"][data-id=\"'+CSS.escape(componentId)+'\"]');if(trigger)trigger.focus({preventScroll:true});else quoteRoot.querySelector('[data-solid-field=\"name\"]')?.focus();});");
+  // Copy-only adaptation of the native confirmation and the missing-value hint.
+  // The native handlers still select members, validate and wait for confirmation.
+  const copy = [
+    ['Define el desperdicio o solicita explícitamente el parámetro DEMO.', 'Captura un porcentaje de desperdicio válido para esta pieza.'],
+    ['Captura precio y motivo antes de aplicarlo al grupo.', 'Captura un precio y su motivo antes de aplicarlo a otras piezas.'],
+    ['Aplicar esta excepción sólo al grupo de este Artículo: ', 'Aplicar este precio a estas piezas de la misma madera y espesor: '],
+    ['. No cambia otros Artículos ni Administración. ¿Confirmar el impacto?', '. Sólo dentro de este artículo. ¿Confirmar?'],
+  ];
+  for (const [before, after] of copy) {
+    if (source.split(before).length !== 2) throw Error('Recipe price/waste copy changed: ' + before);
+    source = source.replace(before, after);
+  }
   const installation = '/* SYNTHETIC_RECIPE_PRESENTATION */\nconst recipePresentation = (' + installRecipePresentation.toString() + ')((' + recipeSourceSubtotal.toString() + '));\n';
   return source.replace(marker, installation + marker + 'recipeSourceSubtotal:recipePresentation.recipeSourceSubtotal,recipeSourceCostsHtml:recipePresentation.recipeSourceCostsHtml,breakdownSupplyEditor:recipePresentation.breakdownSupplyEditor,breakdownPurchaseFields:recipePresentation.breakdownPurchaseFields,');
 }

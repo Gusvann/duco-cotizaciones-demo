@@ -67,7 +67,7 @@
       const request = selected?.snapshot?.request || record.request || {};
       const clientId = selected?.clientId || record.clientId || null;
       const client = clientId ? clients[clientId] : null;
-      if (!client) issues.push('Cliente sin identidad o historial sintético identificable.');
+      if (!client) issues.push('Cliente sin identidad o historial identificable.');
       const firstSaleAt = calendarDate(client?.firstSaleAt);
       if (!firstSaleAt || acceptedAt && firstSaleAt > acceptedAt) issues.push('Historial de primera venta no acreditado para clasificar al cliente.');
       const requestedAt = calendarDate(record.requestedAt);

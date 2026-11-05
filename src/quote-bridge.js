@@ -5,6 +5,8 @@
   if (!c || !window.QuoteSchema || !window.QuoteManufacturing_) throw new Error('Cotizador no disponible.');
   const recipeCatalog = window.DemoRecipeCatalog;
   if (typeof recipeCatalog?.configure !== 'function') throw new Error('Catálogo sintético no disponible.');
+  const phone = window.DemoPhone;
+  if (typeof phone?.analyze !== 'function') throw new Error('Catálogo de teléfono no disponible.');
   const { app, D } = c, M = window.QuoteManufacturing_, S = window.QuoteSchema;
   function clone(value) {
     if (typeof value === 'function') return null; // DOM continuations belong to the currently open view.
@@ -23,7 +25,7 @@
   const requestKeys = ['title', 'client', 'contact', 'location', 'contactPhone', 'contactEmail', 'need', 'included', 'excluded', 'account', 'designer', 'quoteDue', 'deliveryDate'];
   const user = () => clone(profile === 'designer' ? designer : account);
   const requestDefaults = { location: 'Espacio ficticio', contactPhone: '', contactEmail: 'contacto@example.test' };
-  const normalizeRequest = input => Object.fromEntries(requestKeys.map(key => [key, typeof input?.[key] === 'string' ? input[key] : requestDefaults[key] || '']));
+  const normalizeRequest = input => phone.cleanHolder(Object.fromEntries(requestKeys.map(key => [key, typeof input?.[key] === 'string' ? input[key] : requestDefaults[key] || ''])));
   const initialApp = clone(app);
 
   function scopeConfig() {
@@ -43,7 +45,7 @@
         processes: processes.map(([id, label, type]) => ({ id: 'PROC_' + id, label, type, category: 'Fabricación', allowedScope: ['COMPONENT', 'GROUP', 'PRODUCT'], classification: id === 'OTHER' ? 'UNMAPPED_PROCESS' : 'MAPPED_PROCESS', active: true })),
       },
       seed: { includeIds: ['SCOPE_FABRICATION', 'SCOPE_PACKAGING'], excludeIds: ['SCOPE_CIVIL_WORK'], other: { include: '', exclude: '' },
-        stages: definitions.slice(0, 4).map(([id]) => ({ id: 'STAGE_' + id, scopeId: 'SCOPE_' + id, responsible: id === 'FABRICATION' || id === 'PACKAGING' ? 'Duco' : 'Cliente', agreement: 'Escenario sintético sin instalación ni transporte.' })) },
+        stages: definitions.slice(0, 4).map(([id]) => ({ id: 'STAGE_' + id, scopeId: 'SCOPE_' + id, responsible: id === 'FABRICATION' || id === 'PACKAGING' ? 'Duco' : 'Cliente', agreement: 'Entrega sin instalación ni transporte.' })) },
     };
   }
 
@@ -59,25 +61,25 @@
     Object.assign(q, { id, versionId: id + '-V1', revision: 1, client: { id: 'CLI-' + id, name: '', status: 'Activo', requestId: '', requestName: '', requestReason: '' },
       location: 'Espacio ficticio', contactEmail: 'contacto@example.test', contactPhone: '', costs: [], resources: [], needs: [], coverageLinks: [], workUnits: [] });
     applyRequest(q, request);
-    Object.assign(q.terms, { validDays: '15', leadDays: '20', leadEvent: 'Anticipo', notes: 'Condiciones inventadas para explorar esta demo.' });
+    Object.assign(q.terms, { validDays: '15', leadDays: '20', leadEvent: 'Anticipo', notes: 'Condiciones de entrega y pago.' });
     const item = D.newItem(uid);
-    Object.assign(item, { description: 'Módulo de ejemplo', quantity: '2', unit: 'Pieza', materials: 'Componente comprado sintético', finishes: 'Terminado de fábrica de ejemplo',
-      deliverables: 'Dos módulos de demostración', unitPrice: '3000', discount: '0', tax: '16' });
+    Object.assign(item, { description: 'Consola modular', quantity: '2', unit: 'Pieza', materials: 'Componente comprado', finishes: 'Terminado de fábrica de ejemplo',
+      deliverables: 'Dos módulos', unitPrice: '3000', discount: '0', tax: '16' });
     item.specs.forEach(spec => Object.assign(spec, { value: spec.type === 'Largo' ? '90' : spec.type === 'Ancho' ? '40' : '60', unit: 'cm' }));
     q.items = [item];
     for (const topic of S.generalRubros) q.needs.push(D.newNeed(uid, '', topic));
     for (const topic of [...S.itemRubros, 'Personal']) q.needs.push(D.newNeed(uid, item.id, topic));
-    q.needs.forEach(need => Object.assign(need, { resolution: 'No requerida', reason: 'No forma parte de este alcance sintético.' }));
+    q.needs.forEach(need => Object.assign(need, { resolution: 'No requerida', reason: 'No forma parte de este alcance.' }));
     q.manufacturing = M.blank(q, uid);
-    Object.assign(q.manufacturing, { packagingRate: '2', indirectRate: '10', indirectMethod: 'percent', installation: 'no', installationReason: 'Escenario ficticio entregado sin instalación.', packaging: { method: 'percent', netAmount: '', taxRate: '16', quality: 'confirmed', basis: 'Porcentaje sintético declarado', manualAntecedents: [] } });
+    Object.assign(q.manufacturing, { packagingRate: '2', indirectRate: '10', indirectMethod: 'percent', installation: 'no', installationReason: 'Entrega sin instalación.', packaging: { method: 'percent', netAmount: '', taxRate: '16', quality: 'confirmed', basis: 'Porcentaje declarado', manualAntecedents: [] } });
     const row = q.manufacturing.items[0], groupId = uid('GRP');
     Object.assign(row, { technical: true, mode: 'detailed', groups: [{ id: groupId, type: 'consumable', woodKind: '', unit: 'pieza', lengthUnit: '', woodWasteRate: '', specification: 'Compra ficticia' }],
       materials: [{ id: uid('MAT'), groupId, type: 'consumable', section: 'supplies', name: 'Componente comprado de ejemplo', quantity: '1', unit: 'pieza', measureSource: 'own',
-        length: '', width: '', lengthUnit: '', thickness: '', woodKind: '', category: 'Otros', specification: 'Componente sintético terminado', purchaseQuantity: '2', purchaseUnit: 'pieza', unitPrice: '1000', taxRate: '16',
-        basis: 'Oferta ficticia de dos componentes completos; no representa una tarifa real.', supplier: 'Proveedor de ejemplo', reference: 'REF-DEMO', economicReviewed: true, purchaseQuality: 'confirmed', detail: {} }],
-      processes: [{ id: uid('PRC'), type: 'assembly', name: 'Integración sintética', execution: 'external', providerId: 'PRV-DEMO', quantity: '', quantityScope: 'quote', tariffId: '', tariffRevision: '', tariff: null,
+        length: '', width: '', lengthUnit: '', thickness: '', woodKind: '', category: 'Otros', specification: 'Componente terminado', purchaseQuantity: '2', purchaseUnit: 'pieza', unitPrice: '1000', taxRate: '16',
+        basis: 'Importe declarado para dos componentes completos.', supplier: 'Proveedor de ejemplo', reference: 'REF-DEMO', economicReviewed: true, purchaseQuality: 'confirmed', detail: {} }],
+      processes: [{ id: uid('PRC'), type: 'assembly', name: 'Integración', execution: 'external', providerId: 'PRV-DEMO', quantity: '', quantityScope: 'quote', tariffId: '', tariffRevision: '', tariff: null,
         rope: '', ropeQuantity: '', ropeUnit: '', materialId: '', specification: '', coats: '', target: { kind: 'product', groupId: '', componentIds: [] },
-        source: { kind: 'manual', reviewed: true, netAmount: '500', taxRate: '16', quality: 'confirmed', basis: 'Importe total ficticio para el conjunto; se aplica una vez.', supplier: 'Proveedor de ejemplo', reference: 'REF-DEMO-PROCESO', includedInMaterialId: '' }, consumption: '', consumptionUnit: '' }], finishSystems: [] });
+        source: { kind: 'manual', reviewed: true, netAmount: '500', taxRate: '16', quality: 'confirmed', basis: 'Importe total para el conjunto; se aplica una vez.', supplier: 'Proveedor de ejemplo', reference: 'REF-DEMO-PROCESO', includedInMaterialId: '' }, consumption: '', consumptionUnit: '' }], finishSystems: [] });
     q = M.apply(q);
     q.scopeReview.confirmations = q.needs.map(need => ({ needId: need.id, scopeHash: D.coverageFingerprint(q, need.id) }));
     q = D.prepareCoverage(q, null, { actor: account.email, now: '2026-10-14T12:00:00.000Z' }).quote;
@@ -109,7 +111,17 @@
   }
 
   function get(id) { const entry = entries.get(id); if (!entry) throw new Error('Expediente de demo inexistente.'); return entry; }
-  function capture() { if (active) {const state=clone(app);recipeCatalog.configure(state);get(active).state=state;} }
+  function cleanStatePhone(state) {
+    if (state?.q && typeof state.q.contactPhone === 'string') {
+      const result = phone.analyze(state.q.contactPhone);
+      if (result.removed) { state.q.contactPhone = result.value; state.phoneDraft = null; }
+    }
+    if (state?.baseQuote && typeof state.baseQuote.contactPhone === 'string') {
+      const result = phone.analyze(state.baseQuote.contactPhone);
+      if (result.removed) state.baseQuote.contactPhone = result.value;
+    }
+  }
+  function capture() { if (active) {cleanStatePhone(app);const state=clone(app);recipeCatalog.configure(state);get(active).state=state;} }
   function currentState(entry) { return active === entry.id ? app : entry.state; }
   function woodEntries(state) {
     const rows = [...(state.solidWoodLocal?.articles?.values() || [])].flatMap(local => local.draft ?? local.applied ?? []);
@@ -123,6 +135,7 @@
   }
   function fingerprint(entry) {
     const state = currentState(entry), q = state.q;
+    cleanStatePhone(state);
     if (active === entry.id) {
       Object.assign(entry.request, { title: q.name, client: q.client.name, contact: q.contact });
       for (const key of ['location', 'contactPhone', 'contactEmail', 'need', 'included', 'excluded', 'quoteDue', 'deliveryDate']) entry.request[key] = q[key];
@@ -134,11 +147,13 @@
   function summary(id) {
     const entry = get(id), state = currentState(entry); touch(entry);
     const blockers = [];
+    const phoneNeedsReview = phone.analyze(state.q?.contactPhone).ambiguous;
+    if (phoneNeedsReview) blockers.push('Revisa el teléfono para retirar la posible extensión.');
     let evaluated = null;
     try { evaluated = D.evaluate(state.q, { base: state.baseQuote, preview: true, date: '2026-10-14' }); }
     catch (error) { blockers.push(error.message || 'Revisa los datos capturados.'); }
     if (evaluated) blockers.push(...evaluated.issues.map(issue => issue.message));
-    if (woodEntries(state).length) blockers.push('Madera F es una vista previa pendiente: unidad, procesos y persistencia sin confirmar. No se guarda parcialmente.');
+    if (woodEntries(state).length) blockers.push('Madera: el costo y su guardado siguen pendientes. No se guardará parcialmente.');
     const hasPending = pending(entry);
     if (hasPending) blockers.push('Hay captura sin aplicar en el artículo.');
     if (state.inputErrors?.size) blockers.push('Hay entradas inválidas sin resolver.');
@@ -146,7 +161,7 @@
     const totals = evaluated?.totals;
     return {
       costCents: totals?.cost ?? null, priceCents: totals?.net ?? null, taxCents: totals?.tax ?? null, totalCents: totals?.total ?? null,
-      complete: !!evaluated?.structuralValid && !!evaluated?.calculationsComplete && !evaluated?.issues.length && !woodEntries(state).length && !hasPending && !state.inputErrors?.size,
+      complete: !!evaluated?.structuralValid && !!evaluated?.calculationsComplete && !evaluated?.issues.length && !woodEntries(state).length && !hasPending && !state.inputErrors?.size && !phoneNeedsReview,
       blockers: [...new Set(blockers)], revision: entry.revision, savedRevision: entry.savedRevision,
       hasPending, dirty: fingerprint(entry) !== entry.savedFingerprint, saveState: entry.saveState,
     };
@@ -184,12 +199,19 @@
     state.meta = { state: 'Borrador', current: true, number: 1, folio: id }; state.dirty = true;
     state.versions = []; state.reviews = []; state.step = 0;
     if (scenario === 'wood') seedWood(state);
+    if(options.emptyArticles){
+      state.q.items=[];state.q.manufacturing.items=[];
+      state.q.needs=state.q.needs.filter(need=>!need.itemId);
+      state.q.costs=state.q.costs.filter(cost=>!cost.itemId&&!cost.id?.startsWith('CST_MFG_'));
+      state.q.scopeReview.confirmations=[];
+    }
     const entry = { id, scenario, request: req, state, revision: 1, savedRevision: 0, savedFingerprint: '', saved: null, pendingSave: null, saveState: 'idle', frozen: false, lastFingerprint: '' };
     entries.set(id, entry); entry.lastFingerprint = fingerprint(entry); return summary(id);
   }
   function leave(id) {
     const entry = get(id);
     if (entry.saveState === 'unknown' || entry.saveState === 'pending') return { ok: false, pending: 'save' };
+    if (id === active && !entry.frozen) c.rowAutoFlush?.({onlyScheduled:true});
     if (pending(entry)) return { ok: false, pending: 'capture' };
     capture(); return { ok: true };
   }
@@ -208,6 +230,7 @@
   }
   function hide() { capture(); }
   function showStep(step) {
+    if (active) c.rowAutoFlush?.({onlyScheduled:true});
     if (!active || !Number.isInteger(step) || step < 0 || step > 5 || pending(get(active))) return false;
     app.step = step; render(get(active)); notify(); return true;
   }
@@ -234,9 +257,10 @@
   }
   async function save(id, outcome = 'success') {
     const entry = get(id), state = currentState(entry);
-    if (!['success', 'fail', 'unknown'].includes(outcome)) throw new Error('Resultado simulado inválido.');
+    if (!['success', 'fail', 'unknown'].includes(outcome)) throw new Error('Resultado de guardado inválido.');
     if (entry.frozen || entry.saveState === 'unknown' || entry.saveState === 'pending') return { ok: false, state: entry.saveState, summary: summary(id), snapshot: snapshot(id) };
-    if (pending(entry) || woodEntries(state).length || state.inputErrors?.size) return { ok: false, state: 'blocked', summary: summary(id), snapshot: snapshot(id) };
+    if (id === active) c.rowAutoFlush?.({onlyScheduled:true});
+    if (pending(entry) || woodEntries(state).length || state.inputErrors?.size || phone.analyze(state.q?.contactPhone).ambiguous) return { ok: false, state: 'blocked', summary: summary(id), snapshot: snapshot(id) };
     const operation = { id: uid('SAVE'), snapshot: snapshotCandidate(entry), revision: entry.revision, fingerprint: fingerprint(entry) };
     entry.pendingSave = operation; entry.saveState = 'pending'; if (active === id) paintLock(entry); notify(id);
     await Promise.resolve();
@@ -276,7 +300,7 @@
     if (active) { c.partDiscard?.(); app.user = user(); if (app.solidWoodLocal) app.solidWoodLocal.context = context(app); if (app.syntheticRecipes) app.syntheticRecipes.context = context(app); render(get(active)); notify(); }
     return true;
   }
-  function reset() { entries.clear(); active = ''; serial = 0; profile = 'account'; Object.assign(app, clone(initialApp)); configure(app); if (HOST()) { HOST().inert = false; const workspace = document.getElementById('workspace'); if (workspace) workspace.replaceChildren(); } }
+  function reset() { c.rowAutoCancel?.(); entries.clear(); active = ''; serial = 0; profile = 'account'; Object.assign(app, clone(initialApp)); configure(app); if (HOST()) { HOST().inert = false; const workspace = document.getElementById('workspace'); if (workspace) workspace.replaceChildren(); } }
 
   window.DemoLocalApi = async function (action, input = {}) {
     if (action === 'search' && ['clients', 'users'].includes(input.kind)) {
@@ -286,9 +310,9 @@
     }
     if (action === 'clientContact') { const entry = [...entries.values()].find(row => row.state.q.client.id === input.clientId); return entry ? { clientId: input.clientId, contact: entry.request.contact, contactPhone: entry.request.contactPhone, contactEmail: entry.request.contactEmail } : null; }
     if (action === 'processTariffs') return { items: [], next: null, total: 0, fixture: 'SYNTHETIC_DEMO' };
-    const error = new Error('Acción no disponible en esta simulación sin servicios.'); error.code = 'DEMO_ONLY'; throw error;
+    const error = new Error('Acción no disponible. No hay conexión con este servicio.'); error.code = 'DEMO_ONLY'; throw error;
   };
-  window.DemoQuote = { create, open, hide, showStep, summary, save, resolveSave, snapshot, leave, applyPending, discardPending, freeze, revise, reset, setProfile, canEdit,
+  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, leave, applyPending, discardPending, freeze, revise, reset, setProfile, canEdit,
     onChange(callback) { listeners.add(callback); return () => listeners.delete(callback); } };
   for (const eventName of ['input', 'change', 'click']) document.addEventListener(eventName, event => { if (HOST()?.contains(event.target)) scheduleNotify(); });
   // Native navigation may finish after an awaited handler. Observe its committed

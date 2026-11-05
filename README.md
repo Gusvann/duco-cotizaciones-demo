@@ -1,62 +1,65 @@
-# Astil · Cotizaciones · demo estática
+# Astil · Cotizador
 
-Abre `index.html` directamente en Chrome o Edge. No necesita servidor, instalación ni cuenta. Mesa de cotizaciones y Flujo de oportunidades muestran los mismos expedientes ficticios.
+Interfaz oficial del cotizador seleccionada por el propietario el **5 de noviembre de 2026**. La propuesta antes denominada «B» pasa a ser la base de trabajo del cotizador y sustituye la portada de este repositorio. Las menciones a B en nombres internos o pruebas identifican su origen histórico; no son otra versión vigente.
 
-## Recorrer la demo
+- [Abrir cotizador](https://gusvann.github.io/duco-cotizaciones-demo/)
+- [Repositorio](https://github.com/Gusvann/duco-cotizaciones-demo)
 
-- **Recorrido completo:** abre la solicitud, trabaja en el cotizador, aplica los cambios, guarda en la simulación, registra revisión y envío, acepta la versión enviada y conviértela en un proyecto simulado.
-- **Madera y CNC pendientes:** explora Panel de trabajo y el editor de madera. Aplicar CNC confirma sus condiciones en el subeditor; Aplicar pieza conserva el conjunto local. No hay tarifa CNC activa y su costo permanece pendiente. Los faltantes conservan sus bloqueos.
-- **Productos con receta:** en Artículos, abre **Agregar producto → Producto de línea**, elige una variante y pulsa **Usar este producto**. Consultar el catálogo no añade artículos; cada producto requiere esa selección explícita. La petición posterior del 15-oct-2026 amplía la precarga a las cinco recetas de la vista D91 `duco-editor-costos-subtotales-20261015.html`: Mesa Florencia en Tzalam/Encino rojo y Cubierta de madera en Tzalam/Encino blanco/Encino rojo. Se conservan sus medidas, componentes, cantidades y herrajes de referencia. Las tablas de costos documentados y sus subtotales corresponden a UNA unidad; no se escalan ni se añaden como cargos. Cambiar la variante cambia su imagen ilustrativa generada con IA; no es una fotografía de fabricación ni valida la ingeniería de la receta. Los precios de esas cinco recetas son referencias históricas con moneda, impuestos y vigencia sin acreditar; la precarga no confirma costos, tarifas CNC ni persistencia de madera F. Primer y acabado final permanecen diferidos.
-- **Portafolio → KPIs:** explora Resumen, Ventas y clientes y Tiempos. Las donas desglosan ventas, cotizaciones recibidas y aceptadas, y clientes nuevos/recurrentes; las barras mensuales se apilan por cliente. Las tarjetas muestran tickets por categoría y cierre de línea/proyecto. Los filtros de período, categoría y fecha de ventas comparten una sola proyección de los mismos expedientes. Cada indicador abre su detalle y las fichas permiten regresar conservando filtros y pestaña.
-- **Reiniciar demo** restaura los ejemplos. Recargar o cerrar pierde todos los cambios, incluidos los guardados y proyectos simulados.
+## Alcance
 
-Los dos escenarios originales se conservan y se añaden diez expedientes sintéticos de referencia. Sus importes completos se calculan con el mismo motor; `DEMO-201` conserva una aceptación V1 aunque tenga un borrador V2. `DEMO-209` es una referencia histórica parcial explícita, con importe ausente: no representa un guardado confirmado ni permite revisar, enviar o convertir. Se puede consultar para comprender la cobertura de los indicadores.
+Mesa y Flujo comparten expedientes con Solicitud, Cotizador, Revisión, Envío, Respuesta y Proyecto. Portafolio incorpora KPIs. El seguimiento de proyectos, planificación, abastecimiento, producción y entrega conserva los ejemplos y contratos locales existentes; esta elección del cotizador no oficializa políticas operativas del ERP.
 
-Los KPIs muestran las siete familias de referencia: ventas, tickets, preparación, cierre, cotizaciones por cliente, cotizaciones por mes y nuevos/recurrentes. Se conservan seis categorías históricas y se añade **Logística y envíos**. Ventas y tickets usan el precio de la versión aceptada en centavos MXN sin IVA; las ausencias no se convierten en cero. Actividad usa la fecha de solicitud y los tiempos usan la cohorte aceptada, con denominadores propios de intervalos válidos.
+La aplicación funciona **sólo en memoria durante la sesión**. Recargar o usar Reiniciar sesión descarta la captura. No hay backend, autenticación real, almacenamiento persistente, telemetría ni conexiones con Google, Asana, Astil o bases de datos. No captures información empresarial o personal adicional. La publicación del frontend no acredita integración productiva.
 
-El corte y el reloj son deterministas: **15 de octubre de 2026**. La fecha de aceptación es la base de ventas inicial; el selector anticipo/PO compara un hito ficticio y no registra cobros. La primera venta del cliente es un historial sintético declarado; sin historial, el cliente queda sin clasificar. Las definiciones, exclusiones y decisiones productivas pendientes se consultan dentro de la vista. La equivalencia con los relojes históricos de Asana no está acreditada.
+## Captura y recetas
 
-La oferta, las bandejas y el proyecto usan el resultado del mismo cotizador, no importes comerciales independientes. Los perfiles de ejemplo sólo permiten explorar la interfaz: no prueban autenticación ni permisos reales. Revisión, envío, evidencia y conversión son ilustrativos; no definen políticas productivas.
+- Las solicitudes nuevas empiezan sin artículos. Producto de línea permite elegir explícitamente entre Mesa Florencia, Cubierta de madera y Bolonia, con seis variantes de referencia.
+- El editor utiliza tablas continuas, controles compactos, cantidad comercial en el encabezado y unidades visibles. Pieza y Juego admiten enteros positivos; los consumos conservan sus unidades y decimales.
+- En madera, **Confirmar cambios** valida y aplica la pieza; **Descartar** recupera la captura anterior. Cambiar de pieza o expediente exige resolver cambios pendientes. No hay autoguardado de las piezas de madera. Los demás renglones conservan su captura automática en sesión.
+- Confirmar una pieza no reemplaza el snapshot de **Guardar borrador**. El guardado debe tener resultado confirmado; errores y resultados desconocidos conservan sus protecciones.
+- La cubierta de Florencia conserva CNC de 244 cm × 1. Sus patas y travesaños no llevan entablerado ni CNC. Tableros incluye composición, cantidad, medidas/superficie, cantos, caras, recorrido CNC y costo base.
+- Bolonia · Encino rojo incluye sus herrajes, madera, bajo cubierta Lisapol de 12 mm y componentes metálicos. Tuerca inserto utiliza PZA por corrección directa del propietario. El selector contiene los 13 materiales incorporados a esta versión.
+- El costo base de tablero deriva de área × precio por hoja ÷ área de hoja × (1 + desperdicio). La cantidad comercial escala una sola vez antes del redondeo. Base calculada y compra confirmada siguen siendo conceptos distintos.
+- Las seis recetas e importes históricos normalizados están incluidos en la publicación autorizada. No se incluyen libros originales, extracciones privadas, contactos, identificadores operativos ni otros registros empresariales. Los precios históricos no acreditan moneda, impuestos o vigencia actuales.
+- Los campos ausentes o inválidos siguen siendo distintos de cero. Las referencias de procesos y CNC no activan tarifas financieras ni completan un costo pendiente por mostrarse en pantalla. Primer y acabado final productivos conservan su alcance diferido.
+- Las imágenes del catálogo son ilustraciones; no fotografías verificadas del producto.
 
-**Expedientes de prueba y cinco recetas de referencia local. No captures información empresarial o personal adicional.** La demo no tiene base de datos, almacenamiento persistente, telemetría ni conexiones a Google, Asana o Astil. No envía mensajes, consulta catálogos empresariales, guarda archivos en servicios externos ni genera PDF operativo. La oferta se consulta dentro de la página.
+## KPIs, versiones y proyectos
 
-## Referencias anteriores
+Los expedientes y los KPIs usan datos ficticios compartidos. Ventas toma el precio neto de la versión aceptada correspondiente; un borrador posterior no cambia esa base. Preparación y cierre utilizan hitos estructurados y fechas de calendario. Filtros, denominadores y exclusiones permanecen visibles.
 
-- [Cotizador clásico · 29-sep-2026](cotizador-clasico/index.html).
-- [Fabricación · 08-oct-2026](fabricacion/index.html).
-
-Ambas conservan su comportamiento anterior y tienen una indicación visible de referencia histórica. El historial Git permanece disponible. La portada conserva intacta la fuente del cotizador D85 del 14-oct-2026 y aplica al construir una extensión local del catálogo y la presentación de D91 del 15-oct (referencia SHA-256 `eba78928ecd8d19f0b4836ac7e7a7306aa7772eef837c2da10ea80a69f337ba5`), con las ilustraciones IA de D89. Las cinco recetas se normalizan en `src/recipe-reference.js`, sin archivos originales, celdas, SKU reales, contactos o identificadores privados. Se mantienen identificadores internos de demo para no cambiar contratos. El build usa sólo las fuentes locales revisadas; no lee libros, catálogos cloud ni los proyectos operativos. La decisión posterior del 15-oct-2026 autoriza publicar esta versión completa en Gusvann/duco-cotizaciones-demo, incluidas las cinco recetas y sus importes históricos. Los expedientes y KPIs son sintéticos; las recetas de referencia no acreditan moneda, impuestos, vigencia o costos confirmados. Esto no acredita promoción a fuentes canónicas, integración de servidor o despliegue productivo.
+Cada envío conserva su versión. La aceptación y la conversión se vinculan con ella; un reintento devuelve el mismo proyecto. Planeación y seguimiento no reescriben el presupuesto aceptado ni representan compras, cobros, inventario o entrega física.
 
 ## Construir y comprobar
 
-Con Node.js, sin instalar dependencias para generar el HTML:
+Requiere Node.js; el build y las pruebas de dominio no instalan dependencias.
 
 ```text
 node tools/build.mjs
 node tools/build.mjs --check
 node tools/verify.mjs
-node --test tests/domain.mjs
-node --test tests/kpis.mjs tests/kpis-handlers.mjs
-node --test tests/recipes.mjs tests/recipe-reference.mjs
+node --test --test-concurrency=1 --test-reporter=spec tests/domain.mjs tests/kpis.mjs tests/kpis-handlers.mjs tests/recipes.mjs tests/recipe-reference.mjs tests/recipe-workshop.mjs tests/wood-pieces.mjs tests/wood-presentation.mjs tests/row-layout.mjs tests/boards.mjs tests/project-operations.mjs tests/project-handlers.mjs
 ```
 
-El HTML autónomo se genera desde `src/`, con fuentes, estilos y scripts incrustados. `--check` no escribe y rechaza un HTML desactualizado. La política de contenido bloquea conexiones externas, frames y formularios. Esta copia local contiene el recorrido de prueba y las cinco recetas de referencia solicitadas. No incluye módulos de servidor privilegiados, archivos empresariales originales, credenciales, contactos ni historial del producto privado.
+El build genera un único `index.html` con fuentes, imágenes, estilos y scripts incrustados. `--check` no escribe y rechaza una salida distinta. La fuente histórica D85 permanece congelada; las adaptaciones viven en módulos de extensión. La política de contenido bloquea conexiones externas, frames y envíos de formularios. Las pruebas de VM no prueban autorización, persistencia real ni presentación visual.
 
-Las pruebas de navegador abren el archivo local, con solicitudes externas bloqueadas y auditoría de almacenamiento:
+La corrida de esta publicación aprobó **209/209 pruebas Node**, sin fallos ni omisiones, y los verificadores de construcción reproducible y seguridad estática. HTML SHA-256: `9e66748008689c16ae92ce752886a1ac50f792d9e44e8e68c7955c4e2b013365`. Los resultados de cada ejecución se conservan localmente en `artifacts/`, excluido de Git. La aceptación visual de la nueva versión no se atribuye a pruebas de checkpoints anteriores.
 
-```text
-node tests/acceptance.mjs
-```
+`tests/acceptance.mjs` contiene la aceptación de navegador y necesita un entorno autorizado con Playwright y Chromium ya disponibles. No forma parte del build ni de los comandos anteriores. La inspección automática del archivo local está pendiente por una restricción del navegador; no se ha eludido esa restricción.
 
-Requieren un entorno que ya tenga Playwright y Chromium. `DEMO_NODE_MODULES` permite señalar su directorio de módulos sin añadir dependencias al producto. Los artefactos de prueba quedan en `artifacts/`, ignorado por Git. Las comprobaciones estáticas y la simulación no validan backend, aislamiento empresarial, Google real o producción.
+## Publicación y recuperación
 
-Las pruebas nuevas de KPIs y handlers usan Node VM con DOM mínimo, sin navegador ni servidor. Comprueban el dominio y los controladores reales de esta demo; no acreditan su presentación visual. La aceptación de navegador descrita abajo corresponde a la entrega anterior y debe repetirse para acreditar un nuevo checkpoint visual.
+Destino autorizado: `Gusvann/duco-cotizaciones-demo`, rama `main`, con la configuración existente de GitHub Pages. Se conserva el historial mediante un commit descendiente y comprobación del SHA esperado, sin force push. El checkpoint público anterior es `4990b1cc6d7218f93425269d5eb70497310c2558`.
 
-También pueden usar Chrome ya instalado. La aceptación local de la entrega anterior se ejecutó así, desde PowerShell:
+La publicación de esta interfaz no modifica el cotizador operativo, Astil, sus documentos canónicos ni servicios conectados. Ante una regresión crítica de publicación, la recuperación consiste en un nuevo commit que restaure el árbol anterior; no se reescribe el historial.
 
-```powershell
-$env:DEMO_BROWSER_CHANNEL='chrome'
-node tests/acceptance.mjs
-```
+Las rutas [Cotizador clásico](cotizador-clasico/) y [Fabricación](fabricacion/) permanecen como referencias anteriores.
 
-Este README explica únicamente el uso de la demo. Las especificaciones del cotizador y de Astil permanecen en sus proyectos; no se sustituyen aquí. No se ha definido una licencia de reutilización del código. Preparar una rama no publica la demo: incorporar cambios a la rama configurada en Pages puede actualizar su URL pública.
+## Catálogo telefónico y atribuciones
+
+245 regiones geográficas offline: territorio, nombre en español y lada; México (+52) por defecto. La lada sola no se guarda como teléfono. Los códigos compartidos no identifican automáticamente un país.
+
+- [libphonenumber v9.0.42, corte 8593ab70](https://github.com/google/libphonenumber/blob/8593ab70fa4fadffc042b2714034f4c52bef7daf/resources/PhoneNumberMetadata.xml), © 2009 The Libphonenumber Authors, [Apache 2.0](licenses/libphonenumber-Apache-2.0.txt).
+- [Unicode CLDR, corte d2f155b4](https://github.com/unicode-org/cldr-json/blob/d2f155b4b2fd98b0b2453e2e09ce76794b5749c2/cldr-json/cldr-localenames-full/main/es/territories.json), © 2015–2024 Unicode, Inc., [licencia Unicode](licenses/unicode-cldr.txt).
+
+Este README describe el uso, construcción y límites del frontend. No reemplaza las especificaciones del cotizador ni de Astil. No se ha definido una licencia de reutilización para el código propio.

@@ -12,10 +12,10 @@ vm.runInContext(source,context,{filename:'recipe-reference.js'});
 const R=context.DemoRecipeReference;
 const plain=value=>JSON.parse(JSON.stringify(value));
 
-test('the curated D91 reference has five immutable variants and excludes private source locators',()=>{
+test('the five D91 references plus the selected Bolonia recipe are immutable and exclude private source locators',()=>{
   assert.equal(R.source,'LOCAL_REFERENCE_D91');
-  assert.equal(R.recipes.length,5);
-  assert.deepEqual(plain(R.recipes.map(row=>row.id)),['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-O','SYN-PRISMA-G']);
+  assert.equal(R.recipes.length,6);
+  assert.deepEqual(plain(R.recipes.map(row=>row.id)),['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-O','SYN-PRISMA-G','SYN-BOLONIA-R']);
   assert.equal(Object.isFrozen(R),true);
   for(const recipe of R.recipes){
     assert.equal(R.recipe(recipe.id),recipe);assert.equal(Object.isFrozen(recipe),true);
@@ -58,7 +58,7 @@ test('D91 section subtotals match independently checked saved amounts and keep i
     'SYN-PRISMA-O':{hardware:[null,0,0],wood:['278908',1,0],consumables:['31430',4,0],processes:['64270',3,8]},
     'SYN-PRISMA-G':{hardware:[null,0,0],wood:['129560',1,0],consumables:['31430',4,0],processes:['64270',3,8]},
   };
-  for(const recipe of R.recipes){
+  for(const recipe of R.recipes.filter(recipe=>Object.hasOwn(expected,recipe.id))){
     const sections={hardware:recipe.economics.hardware,wood:recipe.economics.wood,consumables:recipe.economics.consumables,processes:[...recipe.economics.processes,...recipe.economics.dayLabor]};
     for(const [key,rows] of Object.entries(sections)){
       const subtotal=recipeSourceSubtotal(rows),[cents,known,pending]=expected[recipe.id][key];

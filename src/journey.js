@@ -6,7 +6,10 @@
   const host = document.getElementById('quote-host');
   const api = window.DemoQuote;
   const portfolio = window.DemoPortfolio;
-  if (!root || !footer || !host || !api || !portfolio) throw new Error('No se pudo iniciar la simulación integrada.');
+  const phone = window.DemoPhone;
+  const operations = window.DemoOperations;
+  const projectViews = window.DemoProjectViews;
+  if (!root || !footer || !host || !api || !portfolio || !phone || !operations || !projectViews) throw new Error('No se pudo iniciar la simulación integrada.');
 
   const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
   const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -37,6 +40,47 @@
   let suppressChanges = false;
   let sequence = 102;
   let pendingTransition = null;
+  const globalScreens = new Set(['list','kpis','projects','production','deliveries','workflow']);
+  const operationDrafts = new Map();
+  let taskSequence = 0;
+
+  function projectOperations(record) {
+    if (!record?.project || record.historicalPartial) return null;
+    const project=record.project;
+    if (!project.operations) {
+      // Explicit authored examples, not inference from a name, price or commercial category.
+      const fixtureRoutes={'DEMO-202':'new','DEMO-203':'line'};
+      project.operations=operations.create(project,{route:Object.hasOwn(fixtureRoutes,record.id)?fixtureRoutes[record.id]:'undetermined'});
+    }
+    if (project.operations.projectId!==project.id || project.operations.sourceId!==record.id || project.operations.version!==project.version) throw new Error('El seguimiento no corresponde a la versión de este proyecto.');
+    return project.operations;
+  }
+
+  function projectDraft(record) {
+    const op=projectOperations(record);if(!op)return null;
+    if(!operationDrafts.has(op.projectId))operationDrafts.set(op.projectId,{
+      plan:{owner:op.owner,dueDate:op.dueDate,route:op.route,installation:op.installation},
+      task:{title:'',stage:'plan',owner:'',dueDate:''},
+      delivery:op.delivery?clone(op.delivery):{date:'',recipient:'',evidence:''}
+    });
+    return operationDrafts.get(op.projectId);
+  }
+
+  function projectAction(target,type,payload) {
+    const record=current();
+    if(state.busy||state.guard||state.screen!=='project'||!record?.project||target.dataset.id!==record.id||target.dataset.project!==record.project.id){notify('Abre el proyecto correspondiente antes de cambiar su seguimiento.','error');return false;}
+    const op=projectOperations(record),revision=target.dataset.revision;
+    if(!/^(0|[1-9]\d*)$/.test(revision||'')||!Number.isSafeInteger(Number(revision))||Number(revision)!==op.revision){notify('El proyecto cambió. Consulta su estado actual antes de reintentar.','error');return false;}
+    const at=new Date(Date.UTC(2026,9,15,12,0,clockTick)).toISOString();
+    const result=operations.apply(op,{projectId:op.projectId,expectedRevision:Number(revision),type,payload,at,actor:profiles[state.profile]});
+    if(!result.ok){notify(result.message,'error');return false;}
+    record.project.operations=result.state;
+    if(result.code==='APPLIED')clockTick++;
+    if(type==='plan')projectDraft(record).plan={owner:result.state.owner,dueDate:result.state.dueDate,route:result.state.route,installation:result.state.installation};
+    if(type==='task-add')projectDraft(record).task={title:'',stage:state.opTab||'plan',owner:'',dueDate:''};
+    if(type==='delivery')projectDraft(record).delivery=clone(result.state.delivery);
+    render();notify(result.message,'success');return true;
+  }
 
   const current = () => records.find(record => record.id === state.id);
   const summary = record => api.summary(record.id);
@@ -56,9 +100,9 @@
   const pill = (label, tone = '') => `<span class="j-pill ${tone}">${escape(label)}</span>`;
   const row = (label, value) => `<div class="j-row"><span>${escape(label)}</span><strong>${escape(value)}</strong></div>`;
 
-  // Vector wordmark from Astil's local brand component, without external assets.
+  // Vector wordmark from AstilBrand, including the uniform lowercase s correction.
   function brandMarkup(className = '') {
-    return `<span class="j-brand ${className}" aria-label="Astil"><svg class="j-sidebar-logo" viewBox="0 0 272 100" aria-hidden="true" focusable="false"><g class="j-wordmark-ink"><path d="M4 92 37 12h16L27 92Z"/><path d="m42 12 15-1 34 81H68Z"/><path d="M156 32h-34c-8 0-13 4-13 9s5 8 13 8h17c15 0 24 8 24 21s-10 22-27 22H98V77h38c7 0 11-3 11-8s-4-7-11-7h-17c-16 0-25-8-25-22 0-13 11-22 28-22h34Z"/><path d="m169 24 16-16v24h14v14h-14v22c0 7 4 10 11 10h5v14h-8c-16 0-24-8-24-23Z"/><path d="M211 32h16v60h-16Z"/><path d="m237 24 16-16v60c0 7 4 10 11 10h3v14h-7c-15 0-23-8-23-23Z"/></g><path class="j-wordmark-accent" d="m35 92 11-27 12 27z"/><rect class="j-wordmark-accent" x="211" y="8" width="16" height="16"/></svg></span>`;
+    return `<span class="j-brand ${className}" aria-label="Astil"><svg class="j-sidebar-logo" viewBox="0 0 272 100" aria-hidden="true" focusable="false"><g class="j-wordmark-ink"><path d="M4 92 37 12h16L27 92Z"/><path d="m42 12 15-1 34 81H68Z"/><path d="M156 32h-34c-8 0-13 4-13 9s5 8 13 8h17c15 0 24 8 24 21s-10 22-27 22H98V77h38c7 0 11-3 11-8s-4-7-11-7h-17c-16 0-25-8-25-22 0-13 11-22 28-22h34Z" transform="translate(128.5 92) scale(0.8108108108108109) translate(-128.5 -92)"/><path d="m169 24 16-16v24h14v14h-14v22c0 7 4 10 11 10h5v14h-8c-16 0-24-8-24-23Z"/><path d="M211 32h16v60h-16Z"/><path d="m237 24 16-16v60c0 7 4 10 11 10h3v14h-7c-15 0-23-8-23-23Z"/></g><path class="j-wordmark-accent" d="m35 92 11-27 12 27z"/><rect class="j-wordmark-accent" x="211" y="8" width="16" height="16"/></svg></span>`;
   }
 
   function navIcon(name) {
@@ -75,10 +119,10 @@
   }
 
   function sidebarMarkup() {
-    const inactive = (name, label) => `<div class="j-module j-nav-disabled" aria-disabled="true" title="Fuera del alcance de esta demo">${navIcon(name)}<span>${label}</span></div>`;
+    const inactive = (name, label) => `<div class="j-module j-nav-disabled" aria-disabled="true" title="No disponible">${navIcon(name)}<span>${label}</span></div>`;
     const modal = state.menu && window.matchMedia('(max-width:750px)').matches ? ' role="dialog" aria-modal="true"' : '';
     const navEntry = (label,action,active) => `<button type="button" class="${active ? 'j-nav-current' : 'j-nav-link'}" data-action="${action}" ${active ? 'aria-current="page"' : ''}>${label}${active ? '<span class="j-active-dot" aria-hidden="true"></span>' : ''}</button>`;
-    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}<details class="j-nav-group" open><summary class="j-module">${navIcon('portfolio')}<span>Portafolio</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${navEntry('KPIs','kpis',state.screen === 'kpis')}${navEntry('Cotizador','list',state.screen !== 'kpis')}<span class="j-nav-disabled" aria-disabled="true" title="Fuera del alcance de esta demo">Proyectos</span></div></details>${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, KPIs y conversión.<br>Los otros módulos están fuera de esta demo.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(profiles[state.profile])}</strong><small>Perfil ficticio · sin sesión real</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
+    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}<details class="j-nav-group" open><summary class="j-module">${navIcon('portfolio')}<span>Operación</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${navEntry('Producción','production',state.screen === 'production')}${navEntry('Entregas','deliveries',state.screen === 'deliveries')}</div></details><details class="j-nav-group" open><summary class="j-module">${navIcon('portfolio')}<span>Portafolio</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${navEntry('KPIs','kpis',state.screen === 'kpis')}${navEntry('Cotizador','list',state.screen === 'list'||!globalScreens.has(state.screen)&&state.screen !== 'project')}${navEntry('Proyectos','projects',['projects','project'].includes(state.screen))}${navEntry('Mapa del proceso','workflow',state.screen === 'workflow')}</div></details>${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(profiles[state.profile])}</strong><small>Sin sesión iniciada</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
   }
 
   function closeMenu() {
@@ -88,7 +132,7 @@
   }
 
   function makeRecord(id, scenario, request) {
-    return {id, scenario, request, clientId:'CL-DEMO-G',category:'retail',commercialType:'project',requestedAt:portfolio.CUTOFF,firstSentAt:null,acceptedAt:null,poAt:null,acceptedVersion:null,source:'SYNTHETIC_DEMO',version:1, requestRevision:0, requestDirty:false, quoteStep:1, started:false, review:null, sent:null, versions:[], lastResponse:null, project:null, history:[{at:stamp(), text:'Solicitud sintética abierta.'}], reviewChecks:{technical:false, commercial:false}, responseDraft:{choice:'accepted', evidence:'', exact:false, channel:'Correo de ejemplo'}};
+    return {id, scenario, request:phone.cleanHolder(request), clientId:'CL-DEMO-G',category:'retail',commercialType:'project',requestedAt:portfolio.CUTOFF,firstSentAt:null,acceptedAt:null,poAt:null,acceptedVersion:null,source:'SYNTHETIC_DEMO',version:1, requestRevision:0, requestDirty:false, quoteStep:1, started:false, review:null, sent:null, versions:[], lastResponse:null, project:null, history:[{at:stamp(), text:'Solicitud abierta.'}], reviewChecks:{technical:false, commercial:false}, responseDraft:{choice:'accepted', evidence:'', exact:false, channel:'Correo de ejemplo'}};
   }
 
   async function seed() {
@@ -103,7 +147,7 @@
       for (const record of records) api.create(record.id, record.scenario, clone(record.request), {scopePreset:'fabrication-packaging',clientId:record.clientId});
       const fixtures = [
         ['201','Recepción de ejemplo','A','horeca','project','2026-01-01','2026-01-05','2026-01-10','2026-01-20',1000000,'draft'],
-        ['202','Mobiliario de prueba','B','offices','project','2026-02-01','2026-02-10','2026-02-15','2026-03-01',2000000,'project'],
+        ['202','Mobiliario','B','offices','project','2026-02-01','2026-02-10','2026-02-15','2026-03-01',2000000,'project'],
         ['203','Lote de piezas de muestra','C','brands','line','2026-03-01','2026-03-08','2026-03-20','2026-03-25',3000000,'project'],
         ['204','Prototipo inventado','D','lab','project','2026-04-20','2026-04-25','2026-05-10','2026-05-15',4000000,'project'],
         ['205','Comedor de demostración','E','residential','project','2026-07-10','2026-07-20','2026-08-05','2026-08-10',5000000,'project'],
@@ -115,7 +159,7 @@
       ];
       for (const [suffix,title,clientKey,category,type,requestedAt,firstSentAt,acceptedAt,poAt,netCents,stage] of fixtures) {
         const clientId = 'CL-DEMO-'+clientKey;
-        const request = {title,client:clients[clientId].name,contact:'Contacto inventado '+clientKey,need:'Alcance completamente sintético para explorar los indicadores.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:requestedAt,deliveryDate:'2026-11-30'};
+        const request = {title,client:clients[clientId].name,contact:'Contacto inventado '+clientKey,need:'Alcance de mobiliario para el proyecto.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:requestedAt,deliveryDate:'2026-11-30'};
         const record = makeRecord('DEMO-'+suffix,'complete',request);
         Object.assign(record,{clientId,category,commercialType:type,requestedAt,firstSentAt,acceptedAt,poAt,started:stage !== 'open'});
         api.create(record.id,'complete',clone(request),{scopePreset:'fabrication-packaging',clientId,...(netCents !== null ? {unitPriceCents:netCents/2} : {})});
@@ -138,6 +182,8 @@
         if (stage === 'draft') { api.revise(record.id); record.version=2; record.sent=null; record.requestDirty=true; }
       }
       api.hide();
+      // User approved removing explicit extensions even from synthetic history.
+      records = records.map(phone.cleanRecord);
     }
     finally { suppressChanges = false; }
   }
@@ -168,12 +214,12 @@
     const controls = `<div class="j-toolbar"><label class="j-field j-search"><span>Buscar solicitudes</span><input id="j-search" class="j-input" type="search" placeholder="Nombre, cliente o folio" value="${escape(state.search)}"></label><label class="j-field"><span>Estado</span><select id="j-status-filter" class="j-input">${options}</select></label><p class="j-muted j-record-count" role="status">${visible.length} de ${records.length} expedientes</p></div>`;
     let body;
     if (state.view === 'mesa') {
-      body = `<div class="j-table-wrap"><table class="j-table"><caption class="j-sr">Solicitudes sintéticas de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${record.id}"><td>${button(record.request.title,'open',`data-id="${record.id}"`)}<div class="j-sub">${record.id} · ${escape(record.request.client)}</div></td><td>${pill(statuses[status(record)], status(record) === 'project' || accepted(record) ? 'good' : record.scenario === 'wood' ? 'warn' : '')}<div class="j-sub">Versión ${record.version}</div></td><td>${escape(record.request.account)}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',`data-id="${record.id}"`)}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
+      body = `<div class="j-table-wrap"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${record.id}"><td>${button(record.request.title,'open',`data-id="${record.id}"`)}<div class="j-sub">${record.id} · ${escape(record.request.client)}</div></td><td>${pill(statuses[status(record)], status(record) === 'project' || accepted(record) ? 'good' : record.scenario === 'wood' ? 'warn' : '')}<div class="j-sub">Versión ${record.version}</div></td><td>${escape(record.request.account)}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',`data-id="${record.id}"`)}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
     } else {
       const columns = [{label:'Por cotizar', keys:['request']}, {label:'En preparación', keys:['draft','review','changes']}, {label:'Con el cliente', keys:['sent','rejected']}, {label:'Aceptadas', keys:['accepted']}, {label:'Convertidas', keys:['project']}];
       body = `<div class="j-board">${columns.map(column => { const items = visible.filter(record => column.keys.includes(status(record))); return `<section class="j-lane" aria-label="${column.label}"><div class="j-lane-head"><h2>${column.label}</h2><span>${items.length}</span></div>${items.map(record => `<article class="j-card" data-record-id="${record.id}"><span class="j-sub">${record.id} · V${record.version}</span><h3>${button(record.request.title,'open',`data-id="${record.id}"`)}</h3><p class="j-muted">${escape(record.request.client)}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${pill(statuses[status(record)], accepted(record) ? 'good' : '')}<p class="j-next">${escape(nextLabel(record))}</p></article>`).join('') || '<p class="j-empty">Sin expedientes</p>'}</section>`; }).join('')}</div>`;
     }
-    return `<div class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Portafolio comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus cotizaciones.</span> <span class="j-heading-emphasis">De la solicitud al proyecto.</span></h1><p class="j-muted">Una solicitud, su cotización y el proyecto que resulta de ella.</p></div>${button('Nueva solicitud de ejemplo','new-request','',true)}</div><div class="j-list-switch">${switcher}<span class="j-muted">Dos vistas · los mismos expedientes</span></div>${controls}${body}<aside class="j-notice"><strong>Dos escenarios para explorar.</strong> El recorrido completo usa componentes manuales sintéticos. Madera y CNC conserva sus pendientes y bloqueos; sus cálculos preview no se convierten en costos confirmados.</aside>`;
+    return `<div class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Portafolio comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus cotizaciones.</span> <span class="j-heading-emphasis">De la solicitud al proyecto.</span></h1><p class="j-muted">Una solicitud, su cotización y el proyecto que resulta de ella.</p></div>${button('Nueva solicitud','new-request','',true)}</div><div class="j-list-switch">${switcher}<span class="j-muted">Dos vistas · los mismos expedientes</span></div>${controls}${body}`;
   }
 
   const decimal = value => value === null ? '—' : new Intl.NumberFormat('es-MX',{maximumFractionDigits:2}).format(value);
@@ -240,7 +286,7 @@
     const activity='<div class="j-kpi-panels">'+kpiDonut({id:'received-client',title:'Cotizaciones recibidas por cliente',caption:'Cohorte por fecha de solicitud',groups:activityGroups(false),total:metrics.activity.received,count:metrics.activity.received,kind:'received-client',amount:false,totalKind:'requests'})+kpiDonut({id:'accepted-client',title:'Cotizaciones aceptadas por cliente',caption:'Aceptadas de la misma cohorte de solicitudes',groups:activityGroups(true),total:metrics.activity.accepted,count:metrics.activity.accepted,kind:'accepted-client',amount:false,totalKind:'won'})+'</div>';
     const recurrence=metrics.segments.filter(group=>group.key!=='unknown'||group.count>0).map(group=>kpiDonut({id:'segment-'+group.key,title:({new:'Ventas de clientes nuevos',recurring:'Ventas de clientes recurrentes',unknown:'Ventas sin historial clasificado'})[group.key],caption:'Por cliente · primera venta frente al período',groups:group.clients||[],total:group.totalCents,count:group.count,pricedCount:group.pricedCount,pendingCount:group.pendingCount,kind:'segment-client',totalKind:'segment',totalKey:group.key,keyFor:client=>chartKey({segment:group.key,client:client.key})})).join('');
     const unknown=metrics.segments.find(group=>group.key==='unknown');
-    return activity+kpiTicketCards(metrics)+'<section class="j-kpi-recurrence j-spaced"><div class="j-panel-head"><div><h2>Nuevos y recurrentes por cliente</h2><p class="j-muted">Historial sintético de primera venta; sin historial permanece sin clasificar.</p></div>'+kpiLink('Ver clientes sin clasificar','segment','unknown')+'</div><div class="j-kpi-panels">'+recurrence+'</div>'+(!unknown?.count?'<p class="j-sub j-spaced">Sin ventas con historial desconocido en este corte; no se ha dibujado una dona sin observaciones.</p>':'')+'</section><div class="j-spaced">'+kpiMonthly(metrics,true)+'</div>';
+    return activity+kpiTicketCards(metrics)+'<section class="j-kpi-recurrence j-spaced"><div class="j-panel-head"><div><h2>Nuevos y recurrentes por cliente</h2><p class="j-muted">Historial de primera venta; sin historial permanece sin clasificar.</p></div>'+kpiLink('Ver clientes sin clasificar','segment','unknown')+'</div><div class="j-kpi-panels">'+recurrence+'</div>'+(!unknown?.count?'<p class="j-sub j-spaced">Sin ventas con historial desconocido en este corte; no se ha dibujado una dona sin observaciones.</p>':'')+'</section><div class="j-spaced">'+kpiMonthly(metrics,true)+'</div>';
   }
   function kpiTimingPanels(metrics) {
     const cards='<div class="j-type-timing-cards">'+metrics.byType.map(group=>'<button type="button" class="j-panel j-type-timing-card" data-kpi-timing="'+group.key+'" '+chartData('type',group.key)+'><span>Cierre · '+escape(group.label)+'</span><strong>'+decimal(group.closeDays)+(group.n?' días':'')+'</strong><small>Primer envío → aceptación · n='+group.n+' de '+group.count+' · días naturales</small></button>').join('')+'</div>';
@@ -250,8 +296,8 @@
     if (!state.kpis.detail) return '';
     const {kind,key} = state.kpis.detail;
     let rows = metrics.eligible, title = 'Ventas del período', definition = 'Versión aceptada · fecha elegida · MXN sin IVA', timing = false;
-    if (kind === 'definitions') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Definiciones y decisiones pendientes</h2>${button('Cerrar detalle','kpi-close')}</div><div class="j-table-wrap j-kpi-table"><table class="j-table"><thead><tr><th>Familia</th><th>Regla de esta demo</th></tr></thead><tbody><tr><td>Ventas</td><td>Total, cliente, categoría y mes. Precio sin IVA de la versión aceptada; aceptación por defecto. PO es un hito comparativo, nunca un cobro.</td></tr><tr><td>Tickets</td><td>General y por categoría: importe conocido / número de ventas con importe. Las ausencias no valen cero. Se conservan seis categorías históricas y se añade Logística.</td></tr><tr><td>Preparación</td><td>Solicitud → primer envío, días naturales. Cohorte aceptada del período; denominador propio de intervalos válidos.</td></tr><tr><td>Cierre</td><td>Primer envío → aceptación, general / línea / proyecto, días naturales. No se modelan pausas.</td></tr><tr><td>Cotizaciones por cliente</td><td>Recibidas y aceptadas de la misma cohorte por fecha de solicitud. Un expediente agrupa sus versiones.</td></tr><tr><td>Cotizaciones por mes</td><td>Expedientes únicos por mes de solicitud.</td></tr><tr><td>Nuevos / recurrentes</td><td>Primera venta sintética dentro / antes del período. Historial desconocido conserva su propio grupo.</td></tr></tbody></table></div><p class="j-notice">Pendientes productivos: validación de la fecha comercial, clasificación histórica y reglas de anticipo/PO; equivalencia de los tiempos con Asana no acreditada. Estos KPIs no aprueban roles, cobros, tarifas ni cambios en Astil o el cotizador operativo.</p><p class="j-muted">Corte y reloj deterministas: 15 oct 2026. Moneda: MXN, centavos enteros. Las relaciones ambiguas se reportan y no se sustituyen por el borrador más reciente.</p></section>`;
-    if (kind === 'quality') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Cobertura de los datos sintéticos</h2>${button('Cerrar detalle','kpi-close')}</div>${row('Ventas con importe válido',metrics.priced.length+' de '+metrics.eligible.length)}${row('Importes pendientes de las ventas elegibles',metrics.pending.length)}${row('Aceptadas del período sin anticipo / PO',metrics.noPo.length)}${row('Ventas con cliente sin historial',metrics.unknown.length)}${row('Expedientes ambiguos excluidos del universo',metrics.quality.ambiguous.length)}<h3 class="j-spaced">Observaciones del universo completo</h3><ul class="j-kpi-quality-list">${metrics.quality.issues.map(issue => `<li>${button(issue.id,'kpi-open',`data-id="${escape(issue.id)}"`)} ${escape(issue.message)}</li>`).join('') || '<li>Sin observaciones en los controles ejecutados sobre estos fixtures.</li>'}</ul>${metrics.pending.length ? kpiTable(metrics.pending) : ''}</section>`;
+    if (kind === 'definitions') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Definiciones y decisiones pendientes</h2>${button('Cerrar detalle','kpi-close')}</div><div class="j-table-wrap j-kpi-table"><table class="j-table"><thead><tr><th>Familia</th><th>Criterio</th></tr></thead><tbody><tr><td>Ventas</td><td>Total, cliente, categoría y mes. Precio sin IVA de la versión aceptada; aceptación por defecto. PO es un hito comparativo, nunca un cobro.</td></tr><tr><td>Tickets</td><td>General y por categoría: importe conocido / número de ventas con importe. Las ausencias no valen cero. Se conservan seis categorías históricas y se añade Logística.</td></tr><tr><td>Preparación</td><td>Solicitud → primer envío, días naturales. Cohorte aceptada del período; denominador propio de intervalos válidos.</td></tr><tr><td>Cierre</td><td>Primer envío → aceptación, general / línea / proyecto, días naturales. No se modelan pausas.</td></tr><tr><td>Cotizaciones por cliente</td><td>Recibidas y aceptadas de la misma cohorte por fecha de solicitud. Un expediente agrupa sus versiones.</td></tr><tr><td>Cotizaciones por mes</td><td>Expedientes únicos por mes de solicitud.</td></tr><tr><td>Nuevos / recurrentes</td><td>Primera venta dentro / antes del período. Historial desconocido conserva su propio grupo.</td></tr></tbody></table></div><p class="j-notice">Pendientes productivos: validación de la fecha comercial, clasificación histórica y reglas de anticipo/PO; equivalencia de los tiempos con Asana no acreditada. Estos KPIs no aprueban roles, cobros, tarifas ni cambios en Astil o el cotizador operativo.</p><p class="j-muted">Corte y reloj deterministas: 15 oct 2026. Moneda: MXN, centavos enteros. Las relaciones ambiguas se reportan y no se sustituyen por el borrador más reciente.</p></section>`;
+    if (kind === 'quality') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Cobertura de datos</h2>${button('Cerrar detalle','kpi-close')}</div>${row('Ventas con importe válido',metrics.priced.length+' de '+metrics.eligible.length)}${row('Importes pendientes de las ventas elegibles',metrics.pending.length)}${row('Aceptadas del período sin anticipo / PO',metrics.noPo.length)}${row('Ventas con cliente sin historial',metrics.unknown.length)}${row('Expedientes ambiguos excluidos del universo',metrics.quality.ambiguous.length)}<h3 class="j-spaced">Observaciones del universo completo</h3><ul class="j-kpi-quality-list">${metrics.quality.issues.map(issue => `<li>${button(issue.id,'kpi-open',`data-id="${escape(issue.id)}"`)} ${escape(issue.message)}</li>`).join('') || '<li>Sin observaciones en los controles ejecutados sobre estos datos.</li>'}</ul>${metrics.pending.length ? kpiTable(metrics.pending) : ''}</section>`;
     if (kind === 'ticket') {title='Ticket promedio';definition='Suma de importes válidos / número de ventas con importe; n='+metrics.priced.length+'. Pendientes: '+metrics.pending.length+'.';}
     if (kind === 'prep' || kind === 'close') { rows=metrics.times;timing=true;title=kind === 'prep' ? 'Tiempo de preparación' : 'Tiempo de cierre';definition='Aceptadas del período · días naturales · n='+ (kind === 'prep' ? metrics.prepN : metrics.closeN)+' de '+metrics.times.length+'. Los intervalos ausentes o negativos quedan excluidos.'; }
     if (kind === 'month') {rows=metrics.eligible.filter(item => item[state.kpis.basis]?.startsWith(key));title='Ventas · '+key;}
@@ -270,17 +316,17 @@
       title=selection?(kind==='segment-client'?({new:'Clientes nuevos',recurring:'Clientes recurrentes',unknown:'Sin historial clasificado'})[selection.segment]:selection.month)+' · '+(client?.label || selection.client):'Detalle sin selección válida';
       definition=!selection?'La clave de detalle es inválida. No se ha consultado otro conjunto de expedientes.':'Identidad: '+selection.client+' · '+(kind==='request-month-client'?'Solicitudes del mes recibido; expedientes únicos.':kind==='segment-client'?'Ventas de este cliente y segmento; misma fecha comercial seleccionada.':'Ventas de este cliente y mes; misma fecha comercial seleccionada.')+(client&&kind!=='request-month-client'?' '+client.pricedCount+' importes válidos · '+client.pendingCount+' pendientes.':!client?' Sin observaciones con los filtros actuales.':'');
     }
-    return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><div><h2>${escape(title)}</h2><p class="j-muted">${rows.length} expedientes sintéticos</p></div>${button('Cerrar detalle','kpi-close')}</div><p class="j-muted">${escape(definition)}</p>${kpiTable(rows,timing)}<p class="j-sub">Abre una ficha para consultar el mismo expediente. Al regresar se conservan pestaña, filtros y detalle.</p></section>`;
+    return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><div><h2>${escape(title)}</h2><p class="j-muted">${rows.length} expedientes</p></div>${button('Cerrar detalle','kpi-close')}</div><p class="j-muted">${escape(definition)}</p>${kpiTable(rows,timing)}<p class="j-sub">Abre una ficha para consultar el mismo expediente. Al regresar se conservan pestaña, filtros y detalle.</p></section>`;
   }
   function kpisMarkup() {
     const metrics = kpiMetrics();
     const stat = (kind,label,value,context) => `<button type="button" class="j-kpi-stat" data-action="kpi-detail" data-kind="${kind}"><span>${label}</span><strong>${value}</strong><small>${context}</small></button>`;
     const currentTotal = amountValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,totalCents:metrics.totalCents});
-    return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial · datos sintéticos</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">Cotizaciones, clientes y tiempos en una misma vista.</p></div></header><div class="j-kpi-toolbar"><label class="j-field"><span>Período</span><select id="j-kpi-period" class="j-input"><option value="year" ${state.kpis.period === 'year' ? 'selected' : ''}>2026 · al 15 de octubre</option><option value="q3" ${state.kpis.period === 'q3' ? 'selected' : ''}>Julio – septiembre 2026</option><option value="october" ${state.kpis.period === 'october' ? 'selected' : ''}>Octubre · al día 15</option></select></label><label class="j-field"><span>Categoría</span><select id="j-kpi-category" class="j-input"><option value="all">Todas las categorías</option>${Object.entries(portfolio.CATEGORIES).map(([key,label]) => `<option value="${key}" ${state.kpis.category === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="j-field"><span>Fecha de ventas · criterio de la demo</span><select id="j-kpi-basis" class="j-input"><option value="acceptedAt" ${state.kpis.basis === 'acceptedAt' ? 'selected' : ''}>Aceptación</option><option value="poAt" ${state.kpis.basis === 'poAt' ? 'selected' : ''}>Anticipo / PO · sólo hito</option></select></label></div><p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${stat('close','Cierre',decimal(metrics.closeDays)+(metrics.closeN ? ' días' : ''),'Primer envío → aceptación · n='+metrics.closeN+' de '+metrics.times.length)}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','A proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · corte: 15 oct 2026</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">Siete familias de indicadores de referencia. Los datos y el reloj de esta demo son inventados; la equivalencia histórica con Asana no está acreditada.</p>`;
+    return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">Cotizaciones, clientes y tiempos en una misma vista.</p></div></header><div class="j-kpi-toolbar"><label class="j-field"><span>Período</span><select id="j-kpi-period" class="j-input"><option value="year" ${state.kpis.period === 'year' ? 'selected' : ''}>2026 · al 15 de octubre</option><option value="q3" ${state.kpis.period === 'q3' ? 'selected' : ''}>Julio – septiembre 2026</option><option value="october" ${state.kpis.period === 'october' ? 'selected' : ''}>Octubre · al día 15</option></select></label><label class="j-field"><span>Categoría</span><select id="j-kpi-category" class="j-input"><option value="all">Todas las categorías</option>${Object.entries(portfolio.CATEGORIES).map(([key,label]) => `<option value="${key}" ${state.kpis.category === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="j-field"><span>Fecha de ventas</span><select id="j-kpi-basis" class="j-input"><option value="acceptedAt" ${state.kpis.basis === 'acceptedAt' ? 'selected' : ''}>Aceptación</option><option value="poAt" ${state.kpis.basis === 'poAt' ? 'selected' : ''}>Anticipo / PO · sólo hito</option></select></label></div><p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${stat('close','Cierre',decimal(metrics.closeDays)+(metrics.closeN ? ' días' : ''),'Primer envío → aceptación · n='+metrics.closeN+' de '+metrics.times.length)}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','A proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · corte: 15 oct 2026</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">Los indicadores muestran los expedientes de esta sesión; la equivalencia histórica con Asana no está acreditada.</p>`;
   }
   function recordMarkup(record) {
     const projected = portfolio.project([record],clients)[0];
-    return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia sintética histórica parcial. No es un snapshot confirmado por el motor. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito ficticio',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Origen: ${escape(record.source)}. Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${!record.historicalPartial ? button('Abrir recorrido de este expediente','stage','data-screen="request"',true) : button('Consultar referencia histórica','stage','data-screen="offer"')}${button('Regresar a KPIs','return-kpis')}</div>${versionsMarkup(record)}</section>`;
+    return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia histórica parcial. No tiene un guardado confirmado. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${!record.historicalPartial ? button('Abrir recorrido de este expediente','stage','data-screen="request"',true) : button('Consultar referencia histórica','stage','data-screen="offer"')}${button('Regresar a KPIs','return-kpis')}</div>${versionsMarkup(record)}</section>`;
   }
   function canStage(record, key) {
     if (key === 'record') return true;
@@ -297,35 +343,39 @@
     const s = summary(record);
     const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${record.id} · Versión ${record.version}</p><h1>${escape(record.request.title)}</h1><p class="j-muted">${escape(record.request.client)} · ${escape(record.request.account)} · ${escape(record.request.designer)}</p></div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
     const back = state.returnToKpis ? `<div class="j-kpi-return">${button('Regresar a KPIs','return-kpis')}<span class="j-muted">Se conservarán los filtros y el detalle.</span></div>` : '';
-    if (state.screen === 'record') return crumbs+back+recordMarkup(record);
-    const nav = `<nav class="j-stages" aria-label="Etapas del expediente">${stages.map((stage, index) => button(`${index + 1}. ${stage.label}`,'stage',`data-screen="${stage.key}" aria-pressed="${state.screen === stage.key}" ${canStage(record,stage.key) ? '' : 'disabled'}`)).join('')}</nav>`;
+    const phoneNotice = phone.recordNeedsAttention(record) ? '<p class="j-notice" role="status">Un teléfono de este expediente requiere revisión para retirar una posible extensión.</p>' : '';
+    if (state.screen === 'record') return crumbs+back+phoneNotice+recordMarkup(record);
+    const nav = state.screen === 'quote' ? '' : `<nav class="j-stages" aria-label="Etapas del expediente">${stages.map(stage => button(stage.label,'stage',`data-screen="${stage.key}" aria-pressed="${state.screen === stage.key}" ${canStage(record,stage.key) ? '' : 'disabled'}`)).join('')}</nav>`;
     let body = '';
     if (state.screen === 'request' || state.screen === 'quote') body = nativeFormMarkup(record);
     if (state.screen === 'review') body = reviewMarkup(record);
     if (state.screen === 'offer') body = offerMarkup(record);
     if (state.screen === 'response') body = responseMarkup(record);
     if (state.screen === 'project') body = projectMarkup(record);
-    return `${crumbs}${back}${nav}${body}`;
+    return `${crumbs}${back}${nav}${phoneNotice}${body}`;
   }
 
   function saveStatus(record) {
     const s = summary(record);
-    return saved(record) ? 'Guardado en esta simulación' : s.hasPending ? 'Captura sin aplicar' : s.saveState === 'unknown' ? 'Resultado de guardado desconocido' : '';
+    return saved(record) ? 'Guardado durante esta sesión' : s.hasPending ? 'Captura sin aplicar' : s.saveState === 'unknown' ? 'Resultado de guardado desconocido' : '';
   }
 
   function nativeFormMarkup(record) {
     const s = summary(record), text = saveStatus(record);
-    return (locked(record) ? '<p class="j-confirm">Versión enviada en consulta. Los cambios requieren una nueva versión.</p>' : '')+
-      '<div class="j-save-strip"><strong class="j-save-status" role="status"'+(text ? '' : ' hidden')+'>'+escape(text)+'</strong><div class="j-actions">'+(s.saveState === 'unknown' ? button('Consultar resultado del guardado','resolve-save','id="j-resolve-save"',true) : button('Guardar borrador','save','id="j-save" '+(locked(record)||state.busy ? 'disabled' : ''),true))+button(state.screen === 'request' ? 'Abrir cotizador' : 'Ir a revisión','stage','data-screen="'+(state.screen === 'request' ? 'quote' : 'review')+'" '+(state.screen === 'quote'&&!canStage(record,'review') ? 'disabled' : ''))+'</div></div>';
+    const notice = locked(record) ? '<p class="j-confirm">Versión enviada en consulta. Los cambios requieren una nueva versión.</p>' : '';
+    const status = '<strong class="j-save-status" role="status"'+(text ? '' : ' hidden')+'>'+escape(text)+'</strong>';
+    // The native form owns save/continue. Unknown-result recovery must stay outside its inert host.
+    const recovery = state.screen === 'request' && s.saveState === 'unknown' ? button('Consultar resultado del guardado','resolve-save','id="j-resolve-save"',true) : '';
+    return notice+status+recovery;
   }
 
   function internalTotals(s) {
-    return row('Costo interno',money(s?.costCents)) + row('Precio antes de IVA',money(s?.priceCents)) + row('IVA del escenario',money(s?.taxCents)) + row('Total de oferta',money(s?.totalCents));
+    return row('Costo interno',money(s?.costCents)) + row('Precio antes de IVA',money(s?.priceCents)) + row('IVA',money(s?.taxCents)) + row('Total de oferta',money(s?.totalCents));
   }
 
   function reviewMarkup(record) {
     const s = snapshot(record)?.summary;
-    return `<div class="j-two-columns"><section class="j-panel"><p class="j-eyebrow">Compuertas ilustrativas</p><h2>Revisión interna de V${record.version}</h2><p class="j-muted">Estas revisiones son parte del escenario. No definen permisos ni políticas productivas.</p><label class="j-check"><input id="j-review-technical" type="checkbox" ${record.reviewChecks.technical ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión técnica simulada: artículos, medidas, procesos y alcance.</span></label><label class="j-check"><input id="j-review-commercial" type="checkbox" ${record.reviewChecks.commercial ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión comercial simulada: precio, fechas y condiciones del borrador guardado.</span></label><p class="j-notice">Primer y acabado final permanecen diferidos. Madera o CNC sin tarifa confirmada no pueden aprobarse como costo completo.</p><div class="j-actions">${button(reviewCurrent(record) ? 'Revisión simulada confirmada' : 'Confirmar revisión simulada','validate',`${locked(record) || !record.reviewChecks.technical || !record.reviewChecks.commercial || !saved(record) || !complete(record) ? 'disabled' : ''}`,true)}${button('Preparar oferta','stage',`data-screen="offer" ${canStage(record,'offer') ? '' : 'disabled'}`)}</div></section><aside class="j-panel"><h2>Resumen interno</h2>${internalTotals(s)}<p class="j-sub">Cálculos del snapshot guardado · V${record.version}. El cliente verá precio y condiciones.</p></aside></div>`;
+    return `<div class="j-two-columns"><section class="j-panel"><p class="j-eyebrow">Revisión</p><h2>Revisión interna de V${record.version}</h2><p class="j-muted">La revisión se conserva durante esta sesión.</p><label class="j-check"><input id="j-review-technical" type="checkbox" ${record.reviewChecks.technical ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión técnica: artículos, medidas, procesos y alcance.</span></label><label class="j-check"><input id="j-review-commercial" type="checkbox" ${record.reviewChecks.commercial ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión comercial: precio, fechas y condiciones del borrador guardado.</span></label><p class="j-notice">Primer y acabado final permanecen diferidos. Madera o CNC sin tarifa confirmada no pueden aprobarse como costo completo.</p><div class="j-actions">${button(reviewCurrent(record) ? 'Revisión confirmada' : 'Confirmar revisión','validate',`${locked(record) || !record.reviewChecks.technical || !record.reviewChecks.commercial || !saved(record) || !complete(record) ? 'disabled' : ''}`,true)}${button('Preparar oferta','stage',`data-screen="offer" ${canStage(record,'offer') ? '' : 'disabled'}`)}</div></section><aside class="j-panel"><h2>Resumen interno</h2>${internalTotals(s)}<p class="j-sub">Cálculos de la versión guardada · V${record.version}. El cliente verá precio y condiciones.</p></aside></div>`;
   }
 
   function termsMarkup(quote) {
@@ -342,7 +392,7 @@
     const frozen = record.sent?.snapshot || snapshot(record);
     const r = frozen?.request || record.request;
     const s = frozen?.summary;
-    return `<div class="j-offer-toolbar"><div><h2>Oferta comercial · V${record.sent?.version || record.version}</h2><p class="j-muted">${record.historicalPartial ? 'Referencia histórica sintética parcial: importes y condiciones sin acreditar.' : record.sent ? 'Copia de la versión enviada en esta simulación.' : 'Vista del borrador guardado y revisado.'}</p></div><div class="j-actions">${record.historicalPartial ? pill('Referencia parcial · sólo consulta','warn') : record.sent ? button('Registrar respuesta','stage','data-screen="response"',true) : button('Registrar envío simulado','send',`${reviewCurrent(record) && !state.busy ? '' : 'disabled'}`,true)}${record.sent && !record.project && !record.historicalPartial ? button('Abrir nueva versión','new-version') : ''}</div></div><article id="j-commercial-offer" class="j-offer"><header class="j-offer-head"><div class="j-wordmark">${brandMarkup()}<span>· DUCO</span></div><div><p>OFERTA DE EJEMPLO</p><strong>${record.id} · V${record.sent?.version || record.version}</strong></div></header><p class="j-eyebrow">Para ${escape(r.client)}</p><h2>${escape(r.title)}</h2><p>${escape(r.need)}</p><div class="j-offer-scope"><div><h3>Incluye</h3><p>${escape(r.included || 'Según descripción de los artículos.')}</p></div><div><h3>Excluye</h3><p>${escape(r.excluded || 'Sin exclusiones adicionales del ejemplo.')}</p></div></div>${row('Fecha de cotización',date(r.quoteDue))}${row('Entrega estimada',date(r.deliveryDate))}${row('Precio antes de IVA',money(s?.priceCents))}${row('IVA del escenario',money(s?.taxCents))}${row('Total',money(s?.totalCents))}<h3 class="j-spaced">Condiciones del escenario</h3>${termsMarkup(frozen?.quote)}<p class="j-offer-disclaimer">Documento simulado con datos inventados. No se envía al cliente ni constituye una oferta real. ${record.historicalPartial ? 'Esta referencia no acredita un guardado del motor.' : 'Las condiciones proceden del cotizador de este expediente.'}</p></article>${record.historicalPartial ? '<p class="j-notice">Referencia incompleta de ejemplo: no permite revisión, envío ni conversión.</p>' : record.sent ? `<p class="j-confirm">Envío registrado en la simulación para V${record.sent.version}. La copia permanece congelada aunque se abra otra versión.</p>` : '<p class="j-muted j-spaced">Registrar envío conserva una copia inmutable; no genera correos ni llamadas externas.</p>'}`;
+    return `<div class="j-offer-toolbar"><div><h2>Oferta comercial · V${record.sent?.version || record.version}</h2><p class="j-muted">${record.historicalPartial ? 'Referencia histórica parcial: importes y condiciones sin acreditar.' : record.sent ? 'Copia de la versión registrada en esta sesión.' : 'Vista del borrador guardado y revisado.'}</p></div><div class="j-actions">${record.historicalPartial ? pill('Referencia parcial · sólo consulta','warn') : record.sent ? button('Registrar respuesta','stage','data-screen="response"',true) : button('Registrar envío','send',`${reviewCurrent(record) && !state.busy ? '' : 'disabled'}`,true)}${record.sent && !record.project && !record.historicalPartial ? button('Abrir nueva versión','new-version') : ''}</div></div><article id="j-commercial-offer" class="j-offer"><header class="j-offer-head"><div class="j-wordmark">${brandMarkup()}<span>· DUCO</span></div><div><p>OFERTA</p><strong>${record.id} · V${record.sent?.version || record.version}</strong></div></header><p class="j-eyebrow">Para ${escape(r.client)}</p><h2>${escape(r.title)}</h2><p>${escape(r.need)}</p><div class="j-offer-scope"><div><h3>Incluye</h3><p>${escape(r.included || 'Según descripción de los artículos.')}</p></div><div><h3>Excluye</h3><p>${escape(r.excluded || 'Sin exclusiones adicionales.')}</p></div></div>${row('Fecha de cotización',date(r.quoteDue))}${row('Entrega estimada',date(r.deliveryDate))}${row('Precio antes de IVA',money(s?.priceCents))}${row('IVA',money(s?.taxCents))}${row('Total',money(s?.totalCents))}<h3 class="j-spaced">Condiciones</h3>${termsMarkup(frozen?.quote)}<p class="j-offer-disclaimer">Este documento no se envía al cliente ni constituye una oferta real. ${record.historicalPartial ? 'Esta referencia no acredita un guardado del motor.' : 'Las condiciones proceden del cotizador de este expediente.'}</p></article>${record.historicalPartial ? '<p class="j-notice">Referencia incompleta de ejemplo: no permite revisión, envío ni conversión.</p>' : record.sent ? `<p class="j-confirm">Envío registrado en esta sesión para V${record.sent.version}. La copia permanece congelada aunque se abra otra versión.</p>` : '<p class="j-muted j-spaced">Registrar envío conserva una copia inmutable; no genera correos ni llamadas externas.</p>'}`;
   }
 
   function versionsMarkup(record) {
@@ -352,28 +402,48 @@
 
   function responseMarkup(record) {
     const sent = record.sent;
-    if (!sent) return '<p class="j-notice">Primero registra un envío simulado.</p>';
+    if (!sent) return '<p class="j-notice">Primero registra un envío.</p>';
     const existing = sent.response;
     const draft = record.responseDraft;
-    return `<div class="j-two-columns"><section class="j-panel"><h2>Respuesta a la versión ${sent.version}</h2><p class="j-muted">La respuesta identifica exactamente la oferta enviada y conserva una evidencia inventada.</p>${existing ? `<p class="j-confirm">Respuesta registrada: ${({accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada'})[existing.result]} · V${existing.version}</p><p>${escape(existing.evidence)}</p><div class="j-actions j-spaced">${existing.result === 'accepted' ? button(record.project ? 'Consultar proyecto' : 'Preparar conversión','stage','data-screen="project"',true) : ''}${!record.project ? button('Abrir nueva versión','new-version') : ''}</div>` : `<div class="j-grid j-spaced"><label class="j-field"><span>Respuesta simulada</span><select id="j-response-choice" class="j-input"><option value="accepted" ${draft.choice === 'accepted' ? 'selected' : ''}>Aceptada</option><option value="changes" ${draft.choice === 'changes' ? 'selected' : ''}>Solicita cambios</option><option value="rejected" ${draft.choice === 'rejected' ? 'selected' : ''}>Rechazada</option></select></label><label class="j-field"><span>Canal del ejemplo</span><select id="j-response-channel" class="j-input"><option>Correo de ejemplo</option><option>Reunión de ejemplo</option><option>Mensaje de ejemplo</option></select></label><label class="j-field j-wide"><span>Evidencia sintética de la respuesta</span><textarea id="j-evidence" class="j-input" rows="3" placeholder="Ejemplo: El contacto ficticio acepta la oferta V${sent.version}.">${escape(draft.evidence)}</textarea></label></div><label class="j-check"><input id="j-exact-version" type="checkbox" ${draft.exact ? 'checked' : ''}><span>La respuesta corresponde a <strong>${record.id} · V${sent.version}</strong>, total ${money(sent.snapshot?.summary?.totalCents)}.</span></label>${button('Registrar respuesta simulada','register-response','',true)}`}</section><aside class="j-panel"><p class="j-eyebrow">Versión enviada</p><h2>${escape(sent.snapshot?.request?.title)}</h2>${row('Versión',`V${sent.version}`)}${row('Total enviado',money(sent.snapshot?.summary?.totalCents))}${row('Entrega',date(sent.snapshot?.request?.deliveryDate))}${button('Consultar oferta enviada','stage','data-screen="offer"')}<p class="j-sub j-spaced">La evidencia se conserva en memoria. No se carga un archivo ni se comunica con un servicio.</p></aside></div>${versionsMarkup(record)}`;
+    return `<div class="j-two-columns"><section class="j-panel"><h2>Respuesta a la versión ${sent.version}</h2><p class="j-muted">La respuesta identifica exactamente la oferta registrada y conserva su evidencia.</p>${existing ? `<p class="j-confirm">Respuesta registrada: ${({accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada'})[existing.result]} · V${existing.version}</p><p>${escape(existing.evidence)}</p><div class="j-actions j-spaced">${existing.result === 'accepted' ? button(record.project ? 'Consultar proyecto' : 'Preparar conversión','stage','data-screen="project"',true) : ''}${!record.project ? button('Abrir nueva versión','new-version') : ''}</div>` : `<div class="j-grid j-spaced"><label class="j-field"><span>Respuesta</span><select id="j-response-choice" class="j-input"><option value="accepted" ${draft.choice === 'accepted' ? 'selected' : ''}>Aceptada</option><option value="changes" ${draft.choice === 'changes' ? 'selected' : ''}>Solicita cambios</option><option value="rejected" ${draft.choice === 'rejected' ? 'selected' : ''}>Rechazada</option></select></label><label class="j-field"><span>Canal del ejemplo</span><select id="j-response-channel" class="j-input"><option>Correo de ejemplo</option><option>Reunión de ejemplo</option><option>Mensaje de ejemplo</option></select></label><label class="j-field j-wide"><span>Evidencia de la respuesta</span><textarea id="j-evidence" class="j-input" rows="3" placeholder="Ejemplo: El contacto ficticio acepta la oferta V${sent.version}.">${escape(draft.evidence)}</textarea></label></div><label class="j-check"><input id="j-exact-version" type="checkbox" ${draft.exact ? 'checked' : ''}><span>La respuesta corresponde a <strong>${record.id} · V${sent.version}</strong>, total ${money(sent.snapshot?.summary?.totalCents)}.</span></label>${button('Registrar respuesta','register-response','',true)}`}</section><aside class="j-panel"><p class="j-eyebrow">Versión enviada</p><h2>${escape(sent.snapshot?.request?.title)}</h2>${row('Versión',`V${sent.version}`)}${row('Total enviado',money(sent.snapshot?.summary?.totalCents))}${row('Entrega',date(sent.snapshot?.request?.deliveryDate))}${button('Consultar oferta enviada','stage','data-screen="offer"')}<p class="j-sub j-spaced">La evidencia se conserva en memoria. No se carga un archivo ni se comunica con un servicio.</p></aside></div>${versionsMarkup(record)}`;
   }
 
   function projectMarkup(record) {
     const project = record.project;
-    if (project) return `<section class="j-panel j-project"><p class="j-eyebrow">Proyecto simulado</p><h2>${escape(project.title)}</h2><p class="j-confirm">Conversión confirmada en esta simulación · ${project.id}</p><div class="j-grid"><div>${row('Solicitud de origen',record.id)}${row('Versión aceptada',`V${project.version}`)}${row('Cliente',project.baseline.request.client)}${row('Account',project.baseline.request.account)}</div><div>${row('Presupuesto base interno',money(project.baseline.summary.costCents))}${row('Total comercial aceptado',money(project.baseline.summary.totalCents))}${row('Entrega estimada',date(project.baseline.request.deliveryDate))}${row('Responsable de diseño',project.baseline.request.designer)}</div></div><p class="j-muted j-spaced">Proyecto único vinculado con la versión aceptada. No crea cobros, cuentas por cobrar, compras ni tareas operativas.</p><div class="j-actions j-spaced">${button('Consultar versión aceptada','stage','data-screen="offer"')}${button('Volver a cotizaciones','list','',true)}</div></section>${versionsMarkup(record)}`;
-    return `<section class="j-panel"><p class="j-eyebrow">Conversión ilustrativa</p><h2>De cotización aceptada a proyecto</h2><p>Se conservarán la solicitud, la versión aceptada, su alcance y el presupuesto base.</p><div class="j-grid j-spaced"><div>${row('Solicitud',record.id)}${row('Versión aceptada',`V${record.sent?.version}`)}${row('Cliente',record.sent?.snapshot?.request?.client || record.request.client)}</div><div>${row('Total aceptado',money(record.sent?.snapshot?.summary?.totalCents))}${row('Entrega',date(record.sent?.snapshot?.request?.deliveryDate))}</div></div><p class="j-notice">Este escenario no exige ni registra un anticipo real. Los permisos, pagos y compuertas productivas se decidirán en Astil y el cotizador.</p>${button('Convertir en proyecto simulado','convert',`${accepted(record) && !state.busy ? '' : 'disabled'}`,true)}</section>`;
+    if (project) {
+      projectOperations(record);
+      return `<section class="j-panel j-project"><p class="j-eyebrow">Proyecto</p><h2>${escape(project.title)}</h2><p class="j-confirm">Conversión registrada en esta sesión · ${project.id}</p><div class="j-grid"><div>${row('Solicitud de origen',record.id)}${row('Versión aceptada',`V${project.version}`)}${row('Cliente',project.baseline.request.client)}${row('Account',project.baseline.request.account)}</div><div>${row('Presupuesto base interno',money(project.baseline.summary.costCents))}${row('Total comercial aceptado',money(project.baseline.summary.totalCents))}${row('Entrega estimada',date(project.baseline.request.deliveryDate))}${row('Responsable de diseño',project.baseline.request.designer)}</div></div><p class="j-muted j-spaced">Proyecto único vinculado con la versión aceptada. El seguimiento no modifica esta base ni crea cobros, cuentas por cobrar o compras reales.</p><div class="j-actions j-spaced">${button('Consultar versión aceptada','stage','data-screen="offer"')}${button('Todos los proyectos','projects')}</div></section>${projectViews.detail(record,state.opTab||'plan',projectDraft(record))}${versionsMarkup(record)}`;
+    }
+    return `<section class="j-panel"><p class="j-eyebrow">Conversión ilustrativa</p><h2>De cotización aceptada a proyecto</h2><p>Se conservarán la solicitud, la versión aceptada, su alcance y el presupuesto base.</p><div class="j-grid j-spaced"><div>${row('Solicitud',record.id)}${row('Versión aceptada',`V${record.sent?.version}`)}${row('Cliente',record.sent?.snapshot?.request?.client || record.request.client)}</div><div>${row('Total aceptado',money(record.sent?.snapshot?.summary?.totalCents))}${row('Entrega',date(record.sent?.snapshot?.request?.deliveryDate))}</div></div><p class="j-notice">No se registra ningún anticipo. Las condiciones de pagos y permisos siguen pendientes.</p>${button('Convertir en proyecto','convert',`${accepted(record) && !state.busy ? '' : 'disabled'}`,true)}</section>`;
+  }
+
+  function revealActiveSteps() {
+    // Reveal only horizontally: editing deep in the form must not jump the page.
+    for (const [container,selector,currentSelector] of [[root,'.j-stages','[aria-pressed="true"]'],[host,'.steps','.current']]) {
+      const navigation = container.querySelector(selector);
+      const currentStep = navigation?.querySelector(currentSelector);
+      if (!currentStep) continue;
+      const viewport = navigation.getBoundingClientRect(), target = currentStep.getBoundingClientRect();
+      if (target.left < viewport.left) navigation.scrollLeft -= viewport.left-target.left;
+      else if (target.right > viewport.right) navigation.scrollLeft += target.right-viewport.right;
+    }
   }
 
   function render() {
     const active = current();
     const atKpis = state.screen === 'kpis';
-    const atList = !atKpis && (state.screen === 'list' || !active);
+    const atOperations = globalScreens.has(state.screen)&&!['list','kpis'].includes(state.screen);
+    const atList = !atKpis && !atOperations && (state.screen === 'list' || !active);
+    if(atOperations)for(const record of records)if(record.project)projectOperations(record);
+    const operationsTitle={projects:'Proyectos',production:'Producción',deliveries:'Entregas',workflow:'Mapa del proceso'}[state.screen];
+    const operationsBody=atOperations?(state.screen==='workflow'?projectViews.workflow():projectViews.list(records,state.screen)):'';
     const activeElement = document.activeElement;
     const restoreSearch = activeElement?.id === 'j-search';
     const selection = restoreSearch ? activeElement.selectionStart : null;
-    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions"><span class="j-demo">DEMO LOCAL</span>${button('Reiniciar demo','reset')}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(active.id)}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
-    host.hidden = atList || atKpis || !['request','quote'].includes(state.screen);
+    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions"><span class="j-demo">SÓLO EN ESTA SESIÓN</span>${button('Reiniciar sesión','reset')}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(active.id)}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
+    host.hidden = atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
     host.dataset.journeyScreen = state.screen;
+    revealActiveSteps();
     if (restoreSearch) { const input = document.getElementById('j-search'); input?.focus(); if (selection != null) input?.setSelectionRange(selection,selection); }
     renderFooter();
   }
@@ -381,21 +451,22 @@
   function guardMarkup() {
     if (!state.guard) return '';
     const type = state.guard;
-    const heading = type === 'reset' ? '¿Reiniciar esta simulación?' : type === 'pending' ? 'Hay captura sin aplicar' : type === 'unknown' ? 'Falta confirmar el guardado' : 'El borrador tiene cambios sin guardar';
-    const copy = type === 'reset' ? 'Se eliminarán los expedientes, versiones y proyectos de esta sesión. Se volverá a los dos escenarios del recorrido y los diez expedientes sintéticos de referencia.' : type === 'pending' ? 'Antes de cambiar de etapa o expediente, aplica o descarta únicamente la captura pendiente. El borrador aplicado se conserva en memoria.' : type === 'unknown' ? 'Consulta el resultado de la operación antes de continuar. No se puede tratar un resultado desconocido como éxito.' : 'Puedes guardarlo o conservarlo en memoria para seguir después. Recargar la página elimina los cambios de esta simulación.';
-    const controls = type === 'reset' ? button('Sí, reiniciar demo','confirm-reset','',true) + button('Conservar la sesión','stay') : type === 'pending' ? button('Aplicar y continuar','apply-and-leave','',true) + button('Descartar captura y continuar','discard-and-leave') + button('Continuar editando','stay') : type === 'unknown' ? button('Consultar resultado y continuar','resolve-and-leave','',true) + button('Volver al expediente','stay') : button('Guardar y continuar','save-and-leave',complete(current()) ? '' : 'disabled',true) + button('Conservar borrador y continuar','keep-and-leave') + button('Continuar editando','stay');
+    const heading = type === 'reset' ? '¿Reiniciar esta sesión?' : type === 'pending' ? (api.automaticCapture?'Hay datos por corregir':'Hay captura sin aplicar') : type === 'unknown' ? 'Falta confirmar el guardado' : 'El borrador tiene cambios sin guardar';
+    const copy = type === 'reset' ? 'Se eliminarán los expedientes, versiones y proyectos de esta sesión. Se restaurarán los datos iniciales.' : type === 'pending' ? (api.automaticCapture?'Corrige o descarta los datos pendientes antes de continuar. Los cambios válidos de la sesión se conservan.':'Antes de cambiar de etapa o expediente, aplica o descarta únicamente la captura pendiente. El borrador aplicado se conserva en memoria.') : type === 'unknown' ? 'Consulta el resultado de la operación antes de continuar. No se puede tratar un resultado desconocido como éxito.' : 'Puedes guardarlo o conservarlo en memoria para seguir después. Recargar la página elimina los cambios de la sesión.';
+    const controls = type === 'reset' ? button('Sí, reiniciar','confirm-reset','',true) + button('Conservar la sesión','stay') : type === 'pending' ? (api.automaticCapture?'':button('Aplicar y continuar','apply-and-leave','',true)) + button('Descartar captura y continuar','discard-and-leave') + button('Continuar editando','stay') : type === 'unknown' ? button('Consultar resultado y continuar','resolve-and-leave','',true) + button('Volver al expediente','stay') : button('Guardar y continuar','save-and-leave',complete(current()) ? '' : 'disabled',true) + button('Conservar borrador y continuar','keep-and-leave') + button('Continuar editando','stay');
     return `<div class="j-modal-backdrop"><section class="j-dialog" role="alertdialog" aria-modal="true" aria-labelledby="j-guard-title" aria-describedby="j-guard-copy"><h2 id="j-guard-title">${heading}</h2><p id="j-guard-copy">${copy}</p><div class="j-actions j-spaced">${controls}</div></section></div>`;
   }
 
   function renderFooter() {
     const active = current();
     const s = active ? summary(active) : null;
-    const quoteControls = active && state.screen === 'quote' ? `<div class="j-quote-footer"><div class="j-actions">${button('Aplicar captura pendiente','apply-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}${button('Descartar captura pendiente','discard-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}</div><div class="j-actions">${button('Volver a cotizaciones','list')}${button('Ir a revisión','stage',`data-screen="review" ${canStage(active,'review') ? '' : 'disabled'}`)}</div></div>` : '';
-    footer.innerHTML = `<div class="j-footer-inner">${quoteControls}${state.feedback ? `<p id="j-feedback" class="j-feedback ${state.tone}" role="${state.tone === 'error' ? 'alert' : 'status'}">${escape(state.feedback)}</p>` : '<p id="j-feedback" class="j-sr" role="status"></p>'}${active && state.screen === 'quote' && s?.blockers?.length ? `<div class="j-notice" id="j-blockers"><strong>Faltantes del cotizador</strong><ul>${s.blockers.map(blocker => `<li>${escape(blocker)}</li>`).join('')}</ul></div>` : ''}<details class="j-demo-tools"><summary>Herramientas de la simulación</summary><div class="j-tools-grid"><label class="j-field"><span>Resultado del próximo guardado</span><select id="j-save-outcome" class="j-input"><option value="success" ${state.saveOutcome === 'success' ? 'selected' : ''}>Éxito confirmado</option><option value="fail" ${state.saveOutcome === 'fail' ? 'selected' : ''}>Fallo confirmado</option><option value="unknown" ${state.saveOutcome === 'unknown' ? 'selected' : ''}>Resultado desconocido</option></select></label><label class="j-field"><span>Perfil ficticio para explorar</span><select id="j-profile" class="j-input">${Object.entries(profiles).map(([value,label]) => `<option value="${value}" ${state.profile === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><p class="j-muted">Los perfiles son etiquetas de ejemplo, sin autenticación ni permisos reales. Todos los datos desaparecen al recargar.</p></div></details><div class="j-reference-links"><span>Referencias anteriores:</span><a href="cotizador-clasico/index.html" target="_blank" rel="noopener">Cotizador clásico · versión anterior</a><a href="fabricacion/index.html" target="_blank" rel="noopener">Fabricación · versión anterior</a><span>Sin conexiones externas · sin almacenamiento persistente</span></div></div>${guardMarkup()}`;
+    const quoteControls = active && state.screen === 'quote' ? `<div class="j-quote-footer"><div class="j-actions">${api.automaticCapture?'':button('Aplicar captura pendiente','apply-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}${button('Descartar captura pendiente','discard-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}</div><div class="j-actions">${s?.saveState === 'unknown' ? button('Consultar resultado del guardado','resolve-save','id="j-resolve-save"',true) : ''}${button('Volver a cotizaciones','list')}${button('Ir a revisión','stage',`data-screen="review" ${canStage(active,'review') ? '' : 'disabled'}`,true)}</div></div>` : '';
+    footer.innerHTML = `<div class="j-footer-inner">${quoteControls}${state.feedback ? `<p id="j-feedback" class="j-feedback ${state.tone}" role="${state.tone === 'error' ? 'alert' : 'status'}">${escape(state.feedback)}</p>` : '<p id="j-feedback" class="j-sr" role="status"></p>'}${active && state.screen === 'quote' && s?.blockers?.length ? `<div class="j-notice" id="j-blockers"><strong>Faltantes del cotizador</strong><ul>${s.blockers.map(blocker => `<li>${escape(blocker)}</li>`).join('')}</ul></div>` : ''}<details class="j-demo-tools"><summary>Opciones de sesión</summary><div class="j-tools-grid"><label class="j-field"><span>Resultado del próximo guardado</span><select id="j-save-outcome" class="j-input"><option value="success" ${state.saveOutcome === 'success' ? 'selected' : ''}>Éxito confirmado</option><option value="fail" ${state.saveOutcome === 'fail' ? 'selected' : ''}>Fallo confirmado</option><option value="unknown" ${state.saveOutcome === 'unknown' ? 'selected' : ''}>Resultado desconocido</option></select></label><label class="j-field"><span>Perfil de trabajo</span><select id="j-profile" class="j-input">${Object.entries(profiles).map(([value,label]) => `<option value="${value}" ${state.profile === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><p class="j-muted">Sin inicio de sesión; los datos desaparecen al recargar.</p></div></details><div class="j-reference-links"><span>Referencias anteriores:</span><a href="cotizador-clasico/index.html" target="_blank" rel="noopener">Cotizador clásico · versión anterior</a><a href="fabricacion/index.html" target="_blank" rel="noopener">Fabricación · versión anterior</a><span>Los cambios se conservan sólo durante esta sesión.</span></div></div>${guardMarkup()}`;
     if (state.guard) footer.querySelector('.j-dialog button')?.focus();
   }
 
   function refreshQuoteChrome(record) {
+    revealActiveSteps();
     const s = summary(record);
     const heading = root.querySelector('.j-case-head h1');
     if (heading) heading.textContent = record.request.title;
@@ -403,14 +474,6 @@
     if (statusElement) statusElement.innerHTML = pill(statuses[status(record)],accepted(record) || record.project ? 'good' : '');
     const saveText = root.querySelector('.j-save-status');
     if (saveText) { saveText.textContent = saveStatus(record); saveText.hidden = !saveText.textContent; }
-    const saveButton = root.querySelector('#j-save, #j-resolve-save');
-    if (saveButton) {
-      const unknown = s.saveState === 'unknown';
-      saveButton.id = unknown ? 'j-resolve-save' : 'j-save';
-      saveButton.dataset.action = unknown ? 'resolve-save' : 'save';
-      saveButton.textContent = unknown ? 'Consultar resultado del guardado' : 'Guardar borrador';
-      saveButton.disabled = Boolean(locked(record) || state.busy);
-    }
     for (const container of [root,footer]) for (const stageButton of container.querySelectorAll('[data-action="stage"][data-screen]')) stageButton.disabled = !canStage(record,stageButton.dataset.screen);
     for (const actionButton of footer.querySelectorAll('[data-action="apply-pending"], [data-action="discard-pending"]')) actionButton.disabled = !s.hasPending || locked(record);
     let blockers = footer.querySelector('#j-blockers');
@@ -422,13 +485,14 @@
 
   function transition(screen, id = state.id, bypass = false) {
     const record = current();
-    if (!bypass && record && !['list','kpis','record'].includes(state.screen) && (screen !== state.screen || id !== state.id) && !(screen === 'quote' && id === state.id)) {
-      const s = summary(record);
+    if (!bypass && record && !globalScreens.has(state.screen) && state.screen!=='record' && (screen !== state.screen || id !== state.id)) {
       const leaving = api.leave(record.id);
-      const type = s?.saveState === 'unknown' ? 'unknown' : leaving?.ok === false || s?.hasPending ? 'pending' : !locked(record) && (s?.dirty || record.requestDirty) ? 'dirty' : null;
+      const s = summary(record);
+      const continuingQuote = (screen === 'quote' || api.automaticCapture && screen === 'request') && id === state.id;
+      const type = s?.saveState === 'unknown' ? 'unknown' : leaving?.ok === false || s?.hasPending ? 'pending' : !continuingQuote && !locked(record) && (s?.dirty || record.requestDirty) ? 'dirty' : null;
       if (type) { pendingTransition = {screen,id}; state.guard = type; renderFooter(); return; }
     }
-    if (!['list','kpis'].includes(screen)) {
+    if (!globalScreens.has(screen)) {
       const nextRecord = records.find(item => item.id === id);
       if (!nextRecord) return;
       if (!canStage(nextRecord,screen)) { notify('Completa y guarda el borrador requerido antes de abrir esta etapa.','error'); return; }
@@ -439,6 +503,7 @@
     } else api.hide();
     state.id = id;
     state.screen = screen;
+    if(screen==='project')state.opTab='plan';
     state.menu = false;
     state.guard = null;
     state.feedback = '';
@@ -457,7 +522,7 @@
   async function saveRecord(record, resolve = false) {
     if (!record || locked(record) || state.busy) return false;
     state.busy = true;
-    notify(resolve ? 'Consultando el resultado del guardado simulado…' : 'Guardando únicamente en esta simulación…');
+    notify(resolve ? 'Consultando el resultado del guardado…' : 'Guardando durante esta sesión…');
     try {
       const result = await (resolve ? api.resolveSave(record.id) : api.save(record.id,state.saveOutcome));
       if (result?.ok) {
@@ -465,12 +530,12 @@
         record.review = null;
         record.reviewChecks = {technical:false,commercial:false};
         log(record,'Borrador guardado y confirmado en memoria.');
-        notify('Guardado en esta simulación. No hay persistencia externa.','success');
+        notify('Guardado durante esta sesión.','success');
       } else if (result?.state === 'unknown' || summary(record)?.saveState === 'unknown') notify('Resultado de guardado desconocido. Consulta el resultado antes de continuar.','error');
-      else notify('El guardado no se confirmó. Revisa los faltantes o cambia el resultado simulado e inténtalo de nuevo.','error');
+      else notify('El guardado no se confirmó. Revisa los faltantes antes de intentarlo de nuevo.','error');
       return Boolean(result?.ok);
     } catch {
-      notify('No fue posible confirmar el guardado de esta simulación. El borrador se conserva en memoria.','error');
+      notify('No fue posible confirmar el guardado. El borrador se conserva durante esta sesión.','error');
       return false;
     } finally { state.busy = false; render(); }
   }
@@ -502,10 +567,11 @@
     clockTick = 0;
     for (const id of Object.keys(clients)) if (!initialClientIds.has(id)) delete clients[id];
     pendingTransition = null;
+    operationDrafts.clear();taskSequence=0;state.opTab='plan';
     await seed();
     state.busy = false;
     render();
-    notify('Demo reiniciada con los escenarios y expedientes sintéticos iniciales.','success');
+    notify('Se restauraron los datos iniciales de la sesión.','success');
   }
 
   async function handleAction(target) {
@@ -520,6 +586,27 @@
     else if (action === 'view') { state.view = target.dataset.view; render(); }
     else if (action === 'open') { const item = records.find(entry => entry.id === target.dataset.id); transition(item?.historicalPartial ? 'record' : item?.project ? 'project' : 'request',target.dataset.id); }
     else if (action === 'list') { if (state.menu) closeMenu(); state.returnToKpis=false; transition('list'); }
+    else if (['projects','production','deliveries','workflow'].includes(action)) { if(state.menu)closeMenu();state.returnToKpis=false;transition(action); }
+    else if (action === 'project-open') {
+      const item=records.find(entry=>entry.id===target.dataset.id&&entry.project&&!entry.historicalPartial);
+      if(!item)return;
+      transition('project',item.id);
+      if(!state.guard&&state.screen==='project'&&state.id===item.id){
+        state.opTab=operations.stages.some(stage=>stage.id===target.dataset.tab)?target.dataset.tab:'plan';
+        if(!projectDraft(item).task.title)projectDraft(item).task.stage=state.opTab;
+        render();
+      }
+    }
+    else if (action === 'op-tab') {
+      if(state.guard||state.screen!=='project'||!record?.project||target.dataset.id!==record.id||target.dataset.project!==record.project.id||!operations.stages.some(stage=>stage.id===target.dataset.tab))return;
+      state.opTab=target.dataset.tab;
+      if(!projectDraft(record).task.title)projectDraft(record).task.stage=state.opTab;
+      render();root.querySelector('[data-action="op-tab"][data-tab="'+state.opTab+'"]')?.focus();
+    }
+    else if (action === 'op-plan-save') { if(record?.project)projectAction(target,'plan',{...projectDraft(record).plan}); }
+    else if (action === 'op-task-add') { if(record?.project)projectAction(target,'task-add',{id:'OP-'+record.project.id+'-'+(++taskSequence),...projectDraft(record).task}); }
+    else if (action === 'op-delivery-save') { if(record?.project)projectAction(target,'delivery',{...projectDraft(record).delivery}); }
+    else if (action === 'op-close') { if(record?.project)projectAction(target,'close',{}); }
     else if (action === 'kpis' || action === 'return-kpis') {if(state.menu) closeMenu();transition('kpis');}
     else if (action === 'kpi-tab') { if (!['summary','sales','times'].includes(target.dataset.tab)) return; state.kpis.tab=target.dataset.tab;state.kpis.detail=null;render();root.querySelector('#j-kpi-tab-'+state.kpis.tab)?.focus(); }
     else if (action === 'kpi-ranking') { if (!['client','category'].includes(target.dataset.ranking)) return;state.kpis.ranking=target.dataset.ranking;render(); }
@@ -529,13 +616,13 @@
     else if (action === 'stage') transition(target.dataset.screen);
     else if (action === 'save') await saveRecord(record);
     else if (action === 'resolve-save') await saveRecord(record,true);
-    else if (action === 'apply-pending') { const ok = api.applyPending(record.id); render(); notify(ok ? 'Captura aplicada al borrador en memoria. Guarda para confirmar la simulación.' : 'Revisa los campos pendientes antes de aplicar.',ok ? 'success' : 'error'); }
+    else if (action === 'apply-pending') { const ok = api.applyPending(record.id); render(); notify(ok ? 'Captura aplicada al borrador. Guarda para conservarla durante esta sesión.' : 'Revisa los campos pendientes antes de aplicar.',ok ? 'success' : 'error'); }
     else if (action === 'discard-pending') { api.discardPending(record.id); render(); notify('Se descartó la captura sin aplicar; el borrador aplicado se conserva.'); }
     else if (action === 'validate') {
       if (!saved(record) || !complete(record) || !record.reviewChecks.technical || !record.reviewChecks.commercial) { notify('Falta un borrador completo, guardado y revisado.','error'); return; }
       record.review = {revision:summary(record).revision,requestRevision:record.requestRevision,at:stamp(),profile:state.profile};
       log(record,`Revisión ilustrativa confirmada para V${record.version}.`);
-      render(); notify('Revisión simulada confirmada. Puedes preparar la oferta.','success');
+      render(); notify('Revisión confirmada. Puedes preparar la oferta.','success');
     } else if (action === 'send') {
       if (record.sent || !reviewCurrent(record)) { notify('El envío requiere la versión actual guardada y revisada.','error'); return; }
       const frozen = api.freeze(record.id);
@@ -543,33 +630,34 @@
       record.sent = {version:record.version,quoteVersionId:frozen.quote.versionId,snapshot:clone(frozen),sentAt:stamp(),clientId:record.clientId,category:record.category,commercialType:record.commercialType,source:'SYNTHETIC_NATIVE_SNAPSHOT',response:null};
       if (!record.firstSentAt) record.firstSentAt=portfolio.calendarDate(record.sent.sentAt);
       record.versions.push(record.sent);
-      log(record,`Envío simulado V${record.version}; copia congelada.`);
-      render(); notify(`Envío simulado registrado para V${record.version}. No se envió ningún mensaje.`, 'success');
+      log(record,`Envío registrado en esta sesión V${record.version}; copia congelada.`);
+      render(); notify(`Envío registrado en esta sesión para V${record.version}. No se envió ningún mensaje.`, 'success');
     } else if (action === 'register-response') {
       const draft = record.responseDraft;
       if (!record.sent || record.sent.response) { notify('Esta versión no admite otra respuesta.','error'); return; }
-      if (!draft.exact || draft.evidence.trim().length < 8) { notify('Confirma la versión exacta y escribe una evidencia sintética de al menos ocho caracteres.','error'); return; }
+      if (!draft.exact || draft.evidence.trim().length < 8) { notify('Confirma la versión exacta y escribe una evidencia de al menos ocho caracteres.','error'); return; }
       record.sent.response = {result:draft.choice,version:record.sent.version,evidence:draft.evidence.trim(),channel:draft.channel,at:stamp(),profile:state.profile};
       if (draft.choice === 'accepted') {record.acceptedVersion=record.sent.version;record.acceptedAt=portfolio.calendarDate(record.sent.response.at);}
       record.lastResponse = draft.choice;
       log(record,`Respuesta ${draft.choice === 'accepted' ? 'aceptada' : draft.choice === 'changes' ? 'con cambios' : 'rechazada'} para V${record.sent.version}.`);
       if (draft.choice === 'changes') startNewVersion(record);
-      else { render(); notify('Respuesta simulada vinculada a la versión enviada.','success'); }
+      else { render(); notify('Respuesta registrada para la versión enviada.','success'); }
     } else if (action === 'new-version') startNewVersion(record);
     else if (action === 'convert') {
       if (record.project) { render(); return; }
-      if (!accepted(record) || record.historicalPartial || !portfolio.hasPrice({netCents:record.sent?.snapshot?.summary?.priceCents})) { notify('La conversión requiere aceptación de la versión enviada exacta y un snapshot completo.','error'); return; }
+      if (!accepted(record) || record.historicalPartial || !portfolio.hasPrice({netCents:record.sent?.snapshot?.summary?.priceCents})) { notify('La conversión requiere aceptación de la versión enviada exacta y un guardado completo.','error'); return; }
       record.project = {id:`PR-${record.id}`,title:record.sent.snapshot.request.title,version:record.sent.version,baseline:clone(record.sent.snapshot),sourceId:record.id,conversionKey:`${record.id}:V${record.sent.version}`,createdAt:stamp()};
-      log(record,`Proyecto simulado ${record.project.id} creado desde V${record.project.version}.`);
+      projectOperations(record);
+      log(record,`Proyecto registrado en esta sesión ${record.project.id} creado desde V${record.project.version}.`);
       state.screen = 'project'; render(); notify('Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
     } else if (action === 'new-request') {
       let id;
       do {id=`DEMO-${++sequence}`;} while (records.some(item => item.id === id));
-      const item = makeRecord(id,'complete',{title:'Nueva solicitud de ejemplo',client:'Cliente ficticio nuevo',contact:'Contacto inventado',need:'Describe aquí una necesidad sintética.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-28',deliveryDate:'2026-11-26'});
+      const item = makeRecord(id,'complete',{title:'Nueva solicitud de ejemplo',client:'Cliente ficticio nuevo',contact:'Contacto inventado',need:'Describe aquí la necesidad del cliente.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-28',deliveryDate:'2026-11-26'});
       item.clientId='CL-'+id;
       clients[item.clientId]={name:item.request.client,firstSaleAt:null};
       suppressChanges = true;
-      try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId}); }
+      try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true}); }
       finally { suppressChanges = false; }
       records.push(item); transition('request',id,true);
     } else if (action === 'reset') { state.guard = 'reset'; renderFooter(); }
@@ -584,10 +672,11 @@
   for (const container of [root,footer]) container.addEventListener('click',event => {
     const target = event.target.closest('[data-action]');
     if (!target || !container.contains(target)) return;
-    handleAction(target).catch(() => notify('No se completó esta acción de la simulación. El expediente se conserva.','error'));
+    handleAction(target).catch(() => notify('No se completó la acción. El expediente se conserva durante esta sesión.','error'));
   });
 
   root.addEventListener('input',event => {
+    if(captureOperationField(event.target))return;
     if (event.target.id === 'j-search') { state.search = event.target.value; render(); }
     if (event.target.id === 'j-evidence') current().responseDraft.evidence = event.target.value;
   });
@@ -595,6 +684,11 @@
   root.addEventListener('change',event => {
     const target = event.target;
     const record = current();
+    if(target.dataset?.opTask){
+      if(!record?.project)return;
+      projectAction({dataset:{id:record.id,project:target.dataset.opProject,revision:target.dataset.opRevision}},'task-status',{id:target.dataset.opTask,status:target.value});return;
+    }
+    if(captureOperationField(target))return;
     const filterKey = {'j-kpi-period':'period','j-kpi-category':'category','j-kpi-basis':'basis'}[target.id];
     if (filterKey) {state.kpis[filterKey]=target.value;render();return;}
     if (target.id === 'j-status-filter') { state.filter = target.value; render(); return; }
@@ -606,9 +700,19 @@
     if (target.id === 'j-exact-version') record.responseDraft.exact = target.checked;
   });
 
+  function captureOperationField(target) {
+    const form=target.dataset?.opForm;
+    if(!form)return false;
+    const record=current();
+    if(state.busy||state.guard||state.screen!=='project'||!record?.project||target.dataset.opProject!==record.project.id||projectOperations(record).closed||target.isConnected===false)return true;
+    const allowed={plan:['owner','dueDate','route','installation'],task:['title','stage','owner','dueDate'],delivery:['date','recipient','evidence']};
+    if(Object.hasOwn(allowed,form)&&allowed[form].includes(target.dataset.opField))projectDraft(record)[form][target.dataset.opField]=target.value;
+    return true;
+  }
+
   footer.addEventListener('change',event => {
     if (event.target.id === 'j-save-outcome') state.saveOutcome = event.target.value;
-    if (event.target.id === 'j-profile') { const nextProfile = event.target.value; if (api.setProfile(nextProfile)) { state.profile = nextProfile; const profileLabel = root.querySelector('.j-sidebar-bottom strong'); if (profileLabel) profileLabel.textContent = profiles[state.profile]; notify(`Perfil ficticio seleccionado: ${profiles[state.profile]}. No representa autorización real.`); } else { renderFooter(); notify('Aplica o descarta la captura pendiente y confirma el guardado antes de cambiar de perfil.','error'); } }
+    if (event.target.id === 'j-profile') { const nextProfile = event.target.value; if (api.setProfile(nextProfile)) { state.profile = nextProfile; const profileLabel = root.querySelector('.j-sidebar-bottom strong'); if (profileLabel) profileLabel.textContent = profiles[state.profile]; notify(`Perfil seleccionado: ${profiles[state.profile]}. Sin sesión iniciada.`); } else { renderFooter(); notify('Aplica o descarta la captura pendiente y confirma el guardado antes de cambiar de perfil.','error'); } }
   });
 
   document.addEventListener('keydown',event => {

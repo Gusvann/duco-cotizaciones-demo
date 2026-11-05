@@ -1,5 +1,6 @@
 /* Shell Astil de la demostración. Sin estilos globales del cotizador. */
-#journey-root,#journey-footer{--j-canvas:#f6faff;--j-paper:#fff;--j-ink:#13293d;--j-muted:#526779;--j-line:#d4e4f2;--j-blue:#0f74d9;--j-soft:#edf6ff;--j-brand-gradient:linear-gradient(135deg,#073b72 0%,#0f74d9 58%,#47b5ff 100%);--j-panel-shadow:0 14px 40px #073b7212;--j-good:#23684c;--j-good-bg:#edf8f2;--j-warn:#815300;--j-warn-bg:#fff6e0;--j-error:#a43232;background:var(--j-canvas);color:var(--j-ink);font:14px/1.55 AstilPreviewPublic,"Public Sans",Arial,sans-serif;overflow-wrap:anywhere;box-sizing:border-box;width:calc(100% - var(--demo-sidebar-width,237px));margin-left:var(--demo-sidebar-width,237px)}
+#journey-root,#journey-footer,#quote-host{--j-canvas:#f6faff;--j-paper:#fff;--j-ink:#13293d;--j-muted:#526779;--j-line:#d4e4f2;--j-blue:#0f74d9;--j-soft:#edf6ff;--j-brand-gradient:linear-gradient(135deg,#073b72 0%,#0f74d9 58%,#47b5ff 100%);--j-panel-shadow:0 14px 40px #073b7212;--j-good:#23684c;--j-good-bg:#edf8f2;--j-warn:#815300;--j-warn-bg:#fff6e0;--j-error:#a43232}
+#journey-root,#journey-footer{background:var(--j-canvas);color:var(--j-ink);font:14px/1.55 AstilPreviewPublic,"Public Sans",Arial,sans-serif;overflow-wrap:anywhere;box-sizing:border-box;width:calc(100% - var(--demo-sidebar-width,237px));margin-left:var(--demo-sidebar-width,237px)}
 #journey-root *,#journey-footer *{box-sizing:border-box}
 #journey-root h1,#journey-root h2,#journey-root h3,#journey-footer h2{font-family:AstilPreviewSora,Sora,Arial,sans-serif;font-weight:600}
 #journey-root h1{font-size:clamp(26px,3vw,39px);line-height:1.2;letter-spacing:-1.3px;margin:7px 0 12px;font-weight:700}
@@ -67,11 +68,15 @@
 #journey-root .j-eyebrow{font-size:10px;letter-spacing:1.8px;font-weight:650;text-transform:uppercase;color:var(--j-muted)}
 #journey-root .j-muted,#journey-footer .j-muted{color:var(--j-muted);font-size:12px}
 #journey-root .j-actions,#journey-footer .j-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-#journey-root .j-btn,#journey-footer .j-btn{border:1px solid var(--j-line);border-radius:6px;background:var(--j-paper);color:var(--j-ink);padding:9px 13px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-weight:550;text-decoration:none;line-height:1.4;text-align:left;min-height:39px;box-shadow:0 4px 12px #073b720a}
-#journey-root .j-btn:hover:not(:disabled),#journey-footer .j-btn:hover:not(:disabled){border-color:#8cbce6;background:#f1f7fd}
-#journey-root .j-primary,#journey-footer .j-primary{background:var(--j-brand-gradient);border-color:transparent;color:#fff;box-shadow:0 8px 20px #0f74d933}
-#journey-root .j-primary:hover:not(:disabled),#journey-footer .j-primary:hover:not(:disabled){background:var(--j-brand-gradient);filter:saturate(1.08) brightness(.96);color:#fff}
-#journey-root .j-btn:disabled,#journey-footer .j-btn:disabled{opacity:.48}
+/* One Astil action treatment for the journey, footer and embedded action groups.
+   Accordion triggers, tabs and selectors keep their own structural/selected styles. */
+#journey-root .j-btn,#journey-footer .j-btn,#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button{border:1px solid var(--j-line);border-radius:6px;background:var(--j-paper);color:var(--j-ink);padding:9px 13px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font:550 14px/1.4 AstilPreviewPublic,"Public Sans",Arial,sans-serif;text-decoration:none;text-align:left;min-height:39px;box-shadow:0 4px 12px #073b720a;overflow-wrap:normal;word-break:normal}
+#journey-root .j-btn:hover:not(:disabled),#journey-footer .j-btn:hover:not(:disabled),#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button:hover:not(:disabled){border-color:#8cbce6;background:#f1f7fd}
+#journey-root .j-primary,#journey-footer .j-primary,#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button.primary{background:var(--j-brand-gradient);border-color:transparent;color:#fff;box-shadow:0 8px 20px #0f74d933}
+#journey-root .j-primary:hover:not(:disabled),#journey-footer .j-primary:hover:not(:disabled),#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button.primary:hover:not(:disabled){background:var(--j-brand-gradient);filter:saturate(1.08) brightness(.96);color:#fff}
+#journey-root .j-btn:disabled,#journey-footer .j-btn:disabled,#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button:disabled{opacity:.48}
+#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button.danger{color:var(--j-error)}
+#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button:focus-visible{outline:2px solid var(--j-blue);outline-offset:4px}
 #journey-root .j-list-switch{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
 #journey-root .j-switch{display:inline-flex;gap:7px}
 #journey-root .j-switch .j-btn{border:1px solid var(--j-line);border-radius:5px;background:var(--j-paper);color:var(--j-muted);font-size:12px;font-weight:500;box-shadow:none}
@@ -113,11 +118,15 @@
 #journey-root .j-card .j-pill{margin-top:12px}
 #journey-root .j-next{font-size:12px;border-top:1px solid var(--j-line);padding-top:11px;margin-top:13px}
 #journey-root .j-empty{padding:18px;font-size:12px;color:var(--j-muted)}
-#journey-root .j-stages{display:flex;gap:5px;flex-wrap:wrap;border-block:1px solid var(--j-line);padding:12px 0;margin:0 0 24px}
-#journey-root .j-stages .j-btn{border:0;background:transparent;color:var(--j-muted);font-size:12px;min-height:37px;box-shadow:none}
-#journey-root .j-stages [aria-pressed=true]{background:var(--j-soft);color:var(--j-blue)}
+#journey-root .j-stages{display:flex;gap:6px;flex-wrap:nowrap;max-width:100%;overflow-x:auto;scrollbar-width:thin;scroll-padding-inline:4px;border:0;border-bottom:1px solid var(--j-line);padding:0;margin:0 0 24px}
+#journey-root .j-stages .j-btn{flex:0 0 auto;white-space:nowrap;border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 14px;background:transparent;color:var(--j-muted);font:500 .82rem Sora,Arial,sans-serif;min-height:44px;box-shadow:none}
+#journey-root .j-stages .j-btn:focus-visible{outline:2px solid var(--j-blue);outline-offset:-3px}
+#journey-root .j-stages .j-btn:hover:not(:disabled){background:var(--j-soft);color:var(--j-blue)}
+#journey-root .j-stages .j-btn[aria-pressed=true]{border-bottom-color:var(--j-blue);background:transparent;color:var(--j-blue);font-weight:600}
 #journey-root .j-save-strip{display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap;padding:15px 18px;border:1px solid var(--j-line);border-radius:8px;background:var(--j-paper)}
 #journey-root .j-save-strip>.j-actions{margin-inline-start:auto}
+#journey-root .j-stages~.j-save-status:not([hidden]){display:block;font-size:12px;color:var(--j-muted);margin-bottom:16px}
+#journey-root #j-resolve-save{margin-bottom:16px}
 #journey-root .j-two-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,.48fr);gap:22px;align-items:start}
 #journey-root .j-row{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:13px 0;border-bottom:1px solid var(--j-line);font-size:13px}
 #journey-root .j-row strong{font-size:14px;font-variant-numeric:tabular-nums;text-align:right}
@@ -142,6 +151,8 @@
 #journey-root .j-version-list li>span{display:block;color:var(--j-muted);font-size:12px;margin-top:5px}
 #journey-footer .j-footer-inner{max-width:1700px;margin:auto;padding:0 38px 26px}
 #journey-footer .j-quote-footer{display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap;padding:20px 0;border-top:1px solid var(--j-line)}
+#journey-footer .j-quote-footer>.j-actions{flex:1 1 250px;min-width:0}
+#journey-footer .j-quote-footer>.j-actions:last-child{justify-content:flex-end}
 #journey-footer .j-demo-tools{border-top:1px solid var(--j-line);padding-top:16px;margin-top:10px;font-size:12px}
 #journey-footer .j-demo-tools summary{cursor:pointer;color:var(--j-muted)}
 #journey-footer .j-tools-grid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:20px;align-items:center;padding:15px 0}
@@ -161,7 +172,7 @@
 @media(max-width:1100px){#journey-root .j-sidebar{padding:25px 13px}#journey-root .j-main{padding:26px 23px}#journey-root .j-top,#journey-root .j-breadcrumb{padding-inline:23px}#journey-footer .j-footer-inner{padding-inline:23px}#journey-root .j-board{grid-template-columns:repeat(3,minmax(0,1fr))}#journey-root .j-two-columns{grid-template-columns:1fr}#journey-root .j-top-identity,#journey-root .j-top-actions{gap:10px}}
 @media(max-width:750px){#journey-root .j-sidebar{width:237px;visibility:hidden;pointer-events:none;transform:translateX(-100%);transition:transform .2s ease}#journey-root .j-sidebar-open{visibility:visible;pointer-events:auto;transform:translateX(0)}#journey-root .j-sidebar-backdrop{display:block;position:fixed;inset:0;z-index:30;background:#0008;border:0;padding:0}#journey-root .j-top{height:57px;padding:0 16px;gap:12px;color:#fff;border-bottom-color:#ffffff2e;background:var(--j-brand-gradient);box-shadow:0 8px 24px #073b7233;backdrop-filter:none}#journey-root .j-top-identity,#journey-root .j-top-actions{gap:8px}#journey-root .j-mobile-menu{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:#fff;padding:6px;min-width:32px;min-height:36px}#journey-root .j-mobile-menu svg{width:20px;height:20px}#journey-root .j-mobile-brand{display:inline-flex;color:#fff}#journey-root .j-mobile-brand svg{width:69px;height:auto}#journey-root .j-mobile-brand .j-wordmark-ink{fill:currentColor}#journey-root .j-mobile-brand .j-wordmark-accent{fill:#75d4ff}#journey-root .j-top-name{font-size:11px;color:#fff}#journey-root .j-top-caption,#journey-root .j-top-divider{display:none}#journey-root .j-top .j-demo{font-size:8px;background:#ffffff1f;border-color:#ffffff40;color:#fff;padding:4px 6px;letter-spacing:.03em}#journey-root .j-top .j-btn{color:#fff;background:#ffffff12;border-color:#ffffff66;font-size:10px;padding:6px 8px;min-height:32px}#journey-root .j-main{padding:25px 16px}#journey-root .j-breadcrumb{padding:10px 16px}#journey-root .j-head{align-items:flex-start;gap:18px;margin-bottom:23px}#journey-root .j-board{grid-template-columns:repeat(2,minmax(0,1fr))}#journey-footer .j-tools-grid{grid-template-columns:1fr 1fr}#journey-footer .j-tools-grid>p{grid-column:1/-1}#journey-footer .j-footer-inner{padding:0 16px 22px}}
 @media(max-width:520px){#journey-root h1{font-size:23px}#journey-root .j-grid,#journey-root .j-board,#journey-root .j-offer-scope,#journey-footer .j-tools-grid{grid-template-columns:1fr}#journey-root .j-panel,#journey-root .j-offer{padding:19px}#journey-root .j-terms div{grid-template-columns:1fr;gap:3px}#journey-root .j-offer-head{flex-direction:column;gap:14px}#journey-root .j-input,#journey-footer .j-input{font-size:16px}#journey-root .j-switch{width:100%}#journey-root .j-switch .j-btn{flex:1;font-size:12px}#journey-root .j-toolbar{align-items:stretch}#journey-root .j-toolbar .j-field{width:100%;max-width:none;min-width:0}#journey-root .j-record-count{padding:0;margin-left:0}#journey-root .j-row{align-items:start}#journey-root .j-row strong{max-width:60%}#journey-footer .j-dialog{padding:22px}#journey-footer .j-dialog .j-btn{width:100%}}
-@media(pointer:coarse){#journey-root .j-btn,#journey-footer .j-btn{min-height:44px}}
+@media(pointer:coarse){#journey-root .j-btn,#journey-footer .j-btn,#quote-host :is(.panel-actions,.inline-editor-actions,.break-editor-actions,.line-card-actions,.product-add,.general-card-actions,.solid-wood-f-actions,.solid-cnc-mini-actions) button{min-height:44px}}
 @media(max-width:750px){#journey-root{padding-top:57px}#journey-root .j-main{scroll-margin-top:57px}#journey-root .j-top :focus-visible{outline-color:#fff}}
 @media(max-width:520px){#journey-root .j-top-identity,#journey-root .j-top-actions{gap:6px}#journey-root .j-top .j-demo{max-width:90px;white-space:normal;font-size:7px;line-height:1.3;padding:3px 5px}#journey-root .j-top .j-btn{font-size:9px;padding:6px}#journey-root .j-top-name{font-size:10px}}
 @media(max-width:380px){#journey-root .j-top .j-demo{display:none}}

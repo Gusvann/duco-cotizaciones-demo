@@ -69,7 +69,10 @@ async function fillRequest(key, value) {
 }
 const stageControl = name => action('stage', `[data-screen="${name}"]`).first();
 async function stage(name) {
-  await stageControl(name).click();
+  // Inside the editor, Cliente is the remaining route to Solicitud; there is
+  // deliberately no second commercial stage bar above the section tabs.
+  if(name==='request'&&!await stageControl(name).count())await quote('.steps [data-action="step"][data-step="0"]').click();
+  else await stageControl(name).click();
   if (await action('keep-and-leave').isVisible()) await action('keep-and-leave').click();
 }
 async function list() {
@@ -89,7 +92,8 @@ const record = async id => (await inspect()).records.find(value => value.id === 
 async function save(outcome = 'success') {
   if (!await page.locator('.j-demo-tools').evaluate(element => element.open)) await page.locator('.j-demo-tools > summary').click();
   await page.locator('#j-save-outcome').selectOption(outcome);
-  await action('save').click();
+  // The upper duplicate strip was removed; Request and Quote share the native save.
+  await quote('.panel-actions [data-action="save"]').click();
 }
 async function approveAndSend() {
   await stage('review');
@@ -169,6 +173,9 @@ try {
     assert.deepEqual(await logo.locator('path').evaluateAll(paths=>paths.map(path=>path.getAttribute('d'))),[
       'M4 92 37 12h16L27 92Z','m42 12 15-1 34 81H68Z','M156 32h-34c-8 0-13 4-13 9s5 8 13 8h17c15 0 24 8 24 21s-10 22-27 22H98V77h38c7 0 11-3 11-8s-4-7-11-7h-17c-16 0-25-8-25-22 0-13 11-22 28-22h34Z','m169 24 16-16v24h14v14h-14v22c0 7 4 10 11 10h5v14h-8c-16 0-24-8-24-23Z','M211 32h16v60h-16Z','m237 24 16-16v60c0 7 4 10 11 10h3v14h-7c-15 0-23-8-23-23Z','m35 92 11-27 12 27z'
     ],'Wordmark geometry must match the established Astil brand');
+    const brandTransforms=[null,null,'translate(128.5 92) scale(0.8108108108108109) translate(-128.5 -92)',null,null,null,null];
+    for(const instance of [logo,page.locator('.j-mobile-brand svg.j-sidebar-logo')])
+      assert.deepEqual(await instance.locator('path').evaluateAll(paths=>paths.map(path=>path.getAttribute('transform'))),brandTransforms,'Only the lowercase s is scaled uniformly; desktop and mobile share the canonical drawing');
     assert.equal(await logo.locator('rect[x="211"][y="8"][width="16"][height="16"]').count(),1);
     assert.equal(await page.locator('#j-main h1').count(),1);
     const heading=page.locator('#j-main h1.j-split-heading');
@@ -249,6 +256,9 @@ try {
     assert.equal(await page.getByRole('heading',{name:'Solicitud y alcance',exact:true}).count(),1);
     assert.equal(await quote('[data-path="need"]').count(),1);
     assert.equal(await quote('[data-path="need"]').getAttribute('maxlength'),'1800');
+    assert.equal(await page.locator('#j-main .j-save-strip').count(),0,'Request omits the duplicate upper strip');
+    assert.equal(await quote('.panel-actions [data-action="save"]').isVisible(),true);
+    assert.match(await quote('.panel-actions [data-action="step"][data-step="1"]').innerText(),/Continuar sin guardar/);
     assert.equal(await quote('label[for="f-need"]').innerText(),'Descripción del encargo');
     assert.equal(await page.locator('#f-need-help').innerText(),'Describe la solicitud general. Usa Incluye y No incluye para delimitar la oferta; los detalles del producto se capturan en Artículos');
     assert.match(await quote('[data-path="need"]').getAttribute('aria-describedby'),/f-need-help/);
@@ -268,7 +278,11 @@ try {
     await fillRequest('title','Solicitud nativa compartida');
     await fillRequest('location','Ubicación ficticia preservada');
     await fillRequest('contactEmail','ejemplo@example.test');
-    await quote('[data-phone-part="country"]').fill('+52');
+    assert.equal(await quote('[data-phone-part="country"]').inputValue(),'MX');
+    assert.equal(await quote('[data-phone-part="country"] option[value="MX"]').innerText(),'México (+52)');
+    assert.equal(await quote('[data-phone-part="country"] option[value]').count(),247,'245 territories plus placeholder and manual code');
+    assert.equal(await quote('[data-phone-part="extension"], [data-phone-part="extensionEnabled"]').count(),0);
+    await quote('[data-phone-part="country"]').selectOption('MX');
     await quote('[data-phone-part="number"]').fill('5550102030');
     await quote('.panel-actions [data-action="step"][data-step="1"]').click();
     if (await action('keep-and-leave').isVisible()) await action('keep-and-leave').click();
@@ -279,7 +293,7 @@ try {
     assert.equal(await requestedField('title').inputValue(),'Solicitud nativa compartida');
     assert.equal(await requestedField('location').inputValue(),'Ubicación ficticia preservada');
     assert.equal(await requestedField('contactEmail').inputValue(),'ejemplo@example.test');
-    assert.equal(await quote('[data-phone-part="country"]').inputValue(),'+52');
+    assert.equal(await quote('[data-phone-part="country"]').inputValue(),'MX');
     assert.equal(await quote('[data-phone-part="number"]').inputValue(),'5550102030');
     assert.deepEqual(await page.evaluate(()=>{const q=window.__client.app.q;return {id:q.id,included:q.included,excluded:q.excluded,need:q.need,client:q.client.id};}),original);
   });
@@ -381,7 +395,7 @@ try {
     await fillRequest('quoteDue','2026-11-03');
     await stage('quote');
     await save();
-    assert.match(await page.locator('#j-feedback').innerText(), /guardado en esta simulación/i);
+    assert.match(await page.locator('#j-feedback').innerText(), /guardado durante esta sesión/i);
     await stage('review');
     await capture({path:path.join(artifacts,'review-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:1000});
@@ -397,6 +411,7 @@ try {
     const offerLogo=page.locator('#j-commercial-offer svg.j-sidebar-logo');
     assert.equal(await offerLogo.getAttribute('viewBox'),'0 0 272 100');
     assert.deepEqual(await offerLogo.locator('path').evaluateAll(paths=>paths.map(path=>path.getAttribute('d'))),await page.locator('#j-sidebar svg.j-sidebar-logo path').evaluateAll(paths=>paths.map(path=>path.getAttribute('d'))),'Commercial offer must reuse the established Astil wordmark');
+    assert.deepEqual(await offerLogo.locator('path').evaluateAll(paths=>paths.map(path=>path.getAttribute('transform'))),await page.locator('#j-sidebar svg.j-sidebar-logo path').evaluateAll(paths=>paths.map(path=>path.getAttribute('transform'))),'Commercial offer must retain the corrected lowercase s');
     await capture({path:path.join(artifacts,'offer-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:1000});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'Commercial offer must fit the mobile shell');
@@ -541,12 +556,12 @@ try {
     assert.match(await page.locator('[data-record-id="DEMO-101"]').innerText(), /10,440\.00/);
   });
 
-  await test('Cancelar, aplicar y cambiar de expediente mantienen buffers aislados', async () => {
+  await test('Captura automática, corrección y cambio de expediente mantienen buffers aislados', async () => {
     await open('DEMO-101');
     await stage('quote');
     const originalName = await page.evaluate(() => window.__client.app.q.items[0].description);
     await article();
-    await quote('[data-path="items.0.description"]').fill('Artículo descartado de prueba');
+    await quote('[data-path="items.0.quantity"]').fill('1.2345');
     assert.equal((await quoteSummary('DEMO-101')).hasPending, true);
     await quote('[data-action="part-discard"]').click();
     assert.equal((await quoteSummary('DEMO-101')).hasPending, false);
@@ -554,7 +569,12 @@ try {
     await article();
     await quote('[data-path="items.0.description"]').fill('Artículo aplicado de prueba');
     await stage('request');
-    assert.equal(await action('apply-and-leave').isVisible(), true, 'Unapplied capture must trigger a navigation choice');
+    assert.equal((await quoteSummary('DEMO-101')).hasPending, false, 'Valid capture is retained automatically before navigation');
+    assert.equal(await action('apply-and-leave').count(), 0);
+    await stage('quote');
+    await quote('[data-path="items.0.quantity"]').fill('1.2345');
+    await stage('request');
+    assert.equal(await action('discard-and-leave').isVisible(), true, 'Invalid numeric input requires correction or explicit discard');
     await page.setViewportSize({ width: 390, height: 900 });
     const dialog = page.locator('#journey-footer .j-dialog');
     const bounds = await dialog.boundingBox();
@@ -567,13 +587,14 @@ try {
     await action('stay').click();
     await page.setViewportSize({ width: 1440, height: 1000 });
     assert.equal((await quoteSummary('DEMO-101')).hasPending, true);
+    await quote('[data-path="items.0.quantity"]').fill('2');
     await stage('request');
-    await action('apply-and-leave').click();
+    assert.equal(await action('apply-and-leave').count(), 0);
     if (await action('keep-and-leave').isVisible()) await action('keep-and-leave').click();
     assert.equal((await quoteSummary('DEMO-101')).hasPending, false);
     await stage('quote');
     assert.equal(await page.evaluate(() => window.__client.app.q.items[0].description), 'Artículo aplicado de prueba');
-    assert.equal((await quoteSummary('DEMO-101')).saveState, 'idle');
+    assert.equal((await quoteSummary('DEMO-101')).dirty, true, 'Automatic local capture is not a confirmed quote snapshot');
     await save();
     await stage('request');
     await list();
@@ -592,7 +613,7 @@ try {
     await stage('quote');
     const before = await quoteSummary('DEMO-102');
     assert.equal(before.complete, false);
-    assert.match(before.blockers.join(' '), /Madera F.*pendiente/);
+    assert.match(before.blockers.join(' '), /Madera:.*pendientes/);
     await save();
     assert.notEqual((await quoteSummary('DEMO-102')).saveState, 'success');
     await article('wood');
@@ -663,7 +684,7 @@ try {
   });
 
   await test('Mesa, Flujo y cotizador se usan en móvil y por teclado', async () => {
-    for (const width of [390, 768, 1440]) {
+    for (const width of [390, 538, 768, 783, 1100, 1280, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await action('view', '[data-view="mesa"]').click();
       const flow = action('view', '[data-view="flujo"]');
@@ -674,7 +695,35 @@ try {
       await open('DEMO-101');
       await stage('quote');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `Overflow in quote at ${width}px`);
+      assert.equal(await page.locator('#j-main .j-save-strip').count(),0,'Quote does not render the duplicate action strip');
+      assert.equal(await page.locator('#j-main .j-stages').count(),0,'Quote has no duplicate commercial stage bar');
+      assert.equal(await quote('.editor-context').count(),0,'The editor does not repeat the record heading');
+      for (const navigation of ['#quote-host .steps']) {
+        const bounds = await page.locator(navigation).evaluate(element=>({
+          rect:element.getBoundingClientRect().toJSON(),
+          buttons:[...element.querySelectorAll('button')].map(button=>button.getBoundingClientRect().toJSON())
+        }));
+        assert.ok(bounds.rect.width<=width,`Navigation remains within the viewport at ${width}px`);
+        for (let i=1;i<bounds.buttons.length;i++) {
+          assert.ok(bounds.buttons[i].left>=bounds.buttons[i-1].right-1,`Adjacent menu targets do not overlap at ${width}px`);
+          assert.ok(Math.abs(bounds.buttons[i].top-bounds.buttons[0].top)<1,`Steps stay in one scrollable row at ${width}px`);
+        }
+      }
+      if(width<=1150) {
+        const sizes=await quote('.shell').evaluate(element=>({shell:element.clientWidth,form:element.querySelector('.mainform').clientWidth}));
+        assert.ok(sizes.form>=sizes.shell-1,`Form uses the available width rather than an empty second column at ${width}px`);
+      }
+      const buttonStyles=await quote('.panel-actions [data-action="save"]').evaluate(button=>{
+        const embedded=getComputedStyle(button),footer=getComputedStyle(document.querySelector('#journey-footer [data-action="list"]'));
+        return ['borderRadius','fontFamily','fontSize','padding','backgroundColor','borderColor'].map(key=>[key,embedded[key],footer[key]]);
+      });
+      for(const [key,embedded,footer] of buttonStyles)assert.equal(embedded,footer,`Astil ${key} matches in editor and footer at ${width}px`);
       await capture({ path: path.join(artifacts, `quote-${width}.png`), fullPage: true });
+      for (const next of [2,3,4]) await quote(`.panel-actions [data-action="step"][data-step="${next}"]`).click();
+      const activeStep=await quote('.steps').evaluate(navigation=>({
+        viewport:navigation.getBoundingClientRect().toJSON(),active:navigation.querySelector('.current').getBoundingClientRect().toJSON()
+      }));
+      assert.ok(activeStep.active.left>=activeStep.viewport.left-1&&activeStep.active.right<=activeStep.viewport.right+1,`Next keeps the active step visible at ${width}px`);
       await fresh();
     }
     await page.setViewportSize({ width: 1440, height: 1000 });

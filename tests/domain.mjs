@@ -9,6 +9,8 @@ const template = readFileSync(new URL('../src/cotizador.html', import.meta.url),
 const bridge = readFileSync(new URL('../src/quote-bridge.js', import.meta.url), 'utf8');
 const recipeCatalog = readFileSync(new URL('../src/recipe-catalog.js', import.meta.url), 'utf8');
 const recipeReference = readFileSync(new URL('../src/recipe-reference.js', import.meta.url), 'utf8');
+const countrySource = readFileSync(new URL('../src/country-codes.js', import.meta.url), 'utf8');
+const phoneSource = readFileSync(new URL('../src/demo-phone.js', import.meta.url), 'utf8');
 const domain = [...template.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1])
   .find(source => source.includes('var QuoteSchema') && source.includes('var QuoteManufacturing_'));
 if (!domain) throw new Error('The public template must contain its shared pure domain.');
@@ -31,6 +33,8 @@ function harness() {
   `, sandbox);
   vm.runInContext(recipeReference, sandbox, { filename: 'recipe-reference.js' });
   vm.runInContext(recipeCatalog, sandbox, { filename: 'recipe-catalog.js' });
+  vm.runInContext(countrySource, sandbox, { filename: 'country-codes.js' });
+  vm.runInContext(phoneSource, sandbox, { filename: 'demo-phone.js' });
   vm.runInContext(bridge, sandbox, { filename: 'quote-bridge.js' });
   return { Q: sandbox.DemoQuote, app: sandbox.__client.app, M: sandbox.QuoteManufacturing_, host: sandbox.__host };
 }
@@ -50,14 +54,14 @@ test('independent money oracle; purchase and provider total each enter once', ()
   assert.equal(s.blockers.length, 0);
   const generated = M.evaluate(app.q).costs;
   assert.equal(generated.find(cost => cost.description === 'Componente comprado de ejemplo').netCents, 200000);
-  assert.equal(generated.find(cost => cost.description === 'Integración sintética').netCents, 50000);
+  assert.equal(generated.find(cost => cost.description === 'Integración').netCents, 50000);
 });
 
 test('F/CNC preview is separate and cannot become a confirmed quote', async () => {
   const { Q } = harness();
   const s = Q.create('DEMO-102', 'wood', request());
   assert.equal(s.complete, false);
-  assert.match(s.blockers.join(' '), /Madera F/);
+  assert.match(s.blockers.join(' '), /Madera:/);
   assert.equal((await Q.save('DEMO-102')).state, 'blocked');
   assert.equal(Q.snapshot('DEMO-102'), null);
   assert.equal(Q.freeze('DEMO-102'), null);
@@ -177,14 +181,16 @@ test('reopening stale shell metadata preserves native form edits and their saved
   Q.open('DEMO-101', stale);
   const native = { location: 'Sala sintética B', contactPhone: '+52 55 0000 0018 ext. 09', contactEmail: 'persona+nueva@example.test',
     need: 'Necesidad editada en el formulario nativo', included: 'Alcance nativo conservado', excluded: 'Exclusión nativa conservada' };
+  // The later explicit decision removes extensions even from synthetic history.
+  const expectedNative = { ...native, contactPhone: '+52 55 0000 0018' };
   Object.assign(app.q, native);
   Q.hide();
   Q.open('DEMO-102', request());
   Q.open('DEMO-101', stale);
-  for (const [key, value] of Object.entries(native)) assert.equal(app.q[key], value, `Native ${key} must win over stale metadata`);
+  for (const [key, value] of Object.entries(expectedNative)) assert.equal(app.q[key], value, `Native ${key} must win over stale metadata`);
   const saved = await Q.save('DEMO-101');
   assert.equal(saved.ok, true);
-  for (const [key, value] of Object.entries(native)) {
+  for (const [key, value] of Object.entries(expectedNative)) {
     assert.equal(saved.snapshot.quote[key], value, `The quote snapshot preserves ${key}`);
     assert.equal(saved.snapshot.request[key], value, `The shell snapshot projects ${key} from the quote`);
   }

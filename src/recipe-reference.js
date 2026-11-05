@@ -1384,6 +1384,40 @@
     }
   }
 ];
+  // Additional selected local recipe, read-only source review on 5 Nov 2026.
+  // Preserve historical source units, including the unresolved hardware HOJA.
+  recipes.push({
+    id:'SYN-BOLONIA-R',description:'Estructura metálica con base tubular de 3/4 de pulgada y pintura electrostática negra RAL 7021. Cubierta en madera maciza de Encino rojo con acabado Sayer retardante de flama.',
+    finishDescription:'Sayer retardante de flama; estructura negra RAL 7021',
+    workshopDefaults:{domino:{quantity:'1',lengthCm:'71',unions:'4'}},
+    finishedSpecs:{Largo:'70.4',Ancho:'70.4',Alto:'50',unit:'cm'},woodWastePercent:'30',
+    wood:[{name:'CUBIERTA',quantityPerProduct:'1',width:'76',length:'76',lengthUnit:'cm',woodKind:'Encino rojo',thickness:'1.5',finishFaces:'2',jointed:'1',cnc:{decision:'yes',length:'223',unit:'cm',repetitions:'1'}}],
+    hardware:[{name:'NIVELADOR ESTRIADO',specification:'NIVELADOR ESTRIADO',quantityPerProduct:'4',unit:'PZA',unitPrice:'5'},
+      {name:'TUERCA INSERTO',specification:'TUERCA INSERTO',quantityPerProduct:'4',unit:'HOJA',unitPrice:'0.5'}],
+    boards:[{name:'Bajo cubierta',quantityPerProduct:'1',width:'71',length:'71',lengthUnit:'cm',substrate:'Lisapol',coating:'',thickness:'12',supplier:'PLACOVE',
+      unitPrice:'868.62',sheetAreaM2:'2.88',wasteRate:'15',detail:{edgeWidthCount:'',edgeLengthCount:'',paintFaces:'',gluedFaces:'',linearCentimeters:'284',laserCount:'1'}}],
+    metal:[{name:'Bajo cubierta',section:'metal-sheet',quantity:'1',width:'66',length:'66',lengthUnit:'cm',gauge:'16',unitPrice:'55',detail:{kgPerM2:'12.5',paintPrice:'170',laborPrice:'65'}},
+      {name:'Patas',section:'metal-tube',quantity:'4',width:'',length:'50',lengthUnit:'cm',gauge:'',unitPrice:'50',detail:{sideACm:'1.905',sideBCm:'1.905',kgPerMl:'2.23',paintPrice:'55',laborPrice:'65'}},
+      {name:'Cruceta',section:'metal-tube',quantity:'1',width:'',length:'132',lengthUnit:'cm',gauge:'',unitPrice:'50',detail:{sideACm:'1.905',sideBCm:'1.905',kgPerMl:'2.23',paintPrice:'55',laborPrice:'65'}}],
+    observations:[{name:'TUERCA INSERTO',quantity:'4',unit:'HOJA',status:'Unidad original pendiente de aclaración; no se convierte a pieza.'}],
+    economics:{
+      hardware:[{name:'NIVELADOR ESTRIADO',kind:'HARDWARE',quantity:'4',quantityUnit:'PZA',unitPrice:'5',priceUnit:'SOURCE_MONEY_PER_PZA',totalSaved:'20'},
+        {name:'TUERCA INSERTO',kind:'HARDWARE',quantity:'4',quantityUnit:'HOJA',unitPrice:'0.5',priceUnit:'SOURCE_MONEY_PER_HOJA',totalSaved:'2'}],
+      wood:[{name:'CUBIERTA',kind:'WOOD',quantity:'14.81284417114289',quantityUnit:'P1_WOOD_UNIT_PENDING_DUCO',unitPrice:'80',priceUnit:'SOURCE_MONEY_PER_P1_WOOD_UNIT_PENDING_DUCO',totalSaved:'1185.0275336914312'}],
+      consumables:[{name:'ACABADO SAYER RETARDANTE FUEGO',kind:'FINISH',quantity:'0.33005714285714288',quantityUnit:'L',unitPrice:'403',priceUnit:'SOURCE_MONEY_PER_L',totalSaved:'133.01302857142858'},
+        {name:'FONDO SAYER RETARDANTE FUEGO',kind:'FINISH_PRIMER',quantity:'0.16502857142857144',quantityUnit:'L',unitPrice:'226',priceUnit:'SOURCE_MONEY_PER_L',totalSaved:'37.296457142857143'},
+        {name:'DOMINOS',kind:'DOMINO_CONSUMPTION',quantity:'11.36',quantityUnit:'FRACTIONAL_PZA_CONSUMPTION',unitPrice:'5',priceUnit:'SOURCE_MONEY_PER_PZA_CONSUMPTION',totalSaved:'56.8'},
+        {name:'PEGAMENTO ENTABLERADO',kind:'GLUE',quantity:'0.34656',quantityUnit:'L',unitPrice:'183',priceUnit:'SOURCE_MONEY_PER_L',totalSaved:'63.42048'}],
+      processes:[{name:'MO ARMADO',kind:'ASSEMBLY',quantity:'0.5776',quantityUnit:'M2',unitPrice:null,priceUnit:'SOURCE_MONEY_PER_M2',totalSaved:'0'},
+        {name:'MO ENTABLERADO',kind:'JOINTING',quantity:'0.5776',quantityUnit:'M2',unitPrice:'200',priceUnit:'SOURCE_MONEY_PER_M2',totalSaved:'115.52'},
+        {name:'MO ENSAMBLES',kind:'JOINERY',quantity:'11.36',quantityUnit:'FRACTIONAL_PZA_CONSUMPTION',unitPrice:'10',priceUnit:'SOURCE_MONEY_PER_PZA_CONSUMPTION',totalSaved:'113.6'},
+        {name:'MO BARNIZ',kind:'VARNISH_LABOR',quantity:'1.1552',quantityUnit:'M2_FINISH',unitPrice:'180',priceUnit:'SOURCE_MONEY_PER_M2_FINISH',totalSaved:'207.936'},
+        {name:'CNC / LASER',kind:'CNC',quantity:'2.23',quantityUnit:'ML',unitPrice:'10',priceUnit:'SOURCE_MONEY_PER_MINUTE',totalSaved:'111.5'}],
+      dayLabor:[{name:'MO Carpintería',kind:'LABOR_DAYS',quantity:'0.1',quantityUnit:'DAY',unitPrice:'867.5',priceUnit:'SOURCE_MONEY_PER_DAY',totalSaved:'86.75'},
+        ...[['Instalación','1200'],['CNC /Láser','507.5'],['Acabados','697.5'],['Tejido','840'],['Integración','502.5']].map(([name,price])=>({name:'MO '+name,kind:'LABOR_DAYS',quantity:null,quantityUnit:'DAY',unitPrice:price,priceUnit:'SOURCE_MONEY_PER_DAY',totalSaved:'0'}))],
+      parameters:{cncMinutesPerMeter:{value:'5',unit:'min/m'}}
+    }
+  });
   function recipe(id) { return recipes.find(value => value.id === id) || null; }
   globalThis.DemoRecipeReference = freeze({ source: 'LOCAL_REFERENCE_D91', recipes, recipe });
 }());
