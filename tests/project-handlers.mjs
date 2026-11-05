@@ -67,6 +67,20 @@ test('Projects is a usable global navigation entry before a quote is opened',asy
   assert.equal(h.sandbox.__nodes.get('quote-host').hidden,true);
 });
 
+// Owner correction, 2026-11-05: the process map must not be offered in navigation.
+test('navigation omits the process map on desktop and in the mobile menu',async()=>{
+  const h=await harness();
+  for(const mobile of [false,true]){
+    h.sandbox.matchMedia=()=>({matches:mobile});
+    if(mobile)await h.click('toggle-menu');
+    const sidebar=h.root.innerHTML.match(/<aside\b[\s\S]*?<\/aside>/)?.[0];
+    assert.ok(sidebar);
+    assert.doesNotMatch(sidebar,/Mapa del proceso|data-action="workflow"/);
+    for(const action of ['kpis','list','projects'])assert.ok(sidebar.includes(`data-action="${action}"`));
+    if(mobile)assert.match(sidebar,/role="dialog"/);
+  }
+});
+
 const opIdentity=(h,id)=>{
   const record=h.record(id);
   return {id,project:record.project.id,revision:String(record.project.operations.revision)};
