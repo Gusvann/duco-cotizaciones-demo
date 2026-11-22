@@ -4,7 +4,7 @@
   "purpose": "Ilustraciones IA de los productos de referencia D89; no fotografías verificadas de fabricación ni recetas reales.",
   "referencePreview": "duco-catalogo-productos-imagenes-20261015.html",
   "referenceSha256": "badaf65e755f5f0a1cc078bd68ab467827220bdbdc315a3a1a117bfeb1fb6b78",
-  "visualInspection": "5 reference assets inspected locally",
+  "visualInspection": "Cinco ilustraciones originales y una imagen de Bent Legs revisadas en el catálogo local.",
   "assets": [
     {
       "id": "SYN-NUBE-C",
@@ -55,6 +55,16 @@
       "height": 1254,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
       "referenceIllustration": "cubierta-encino-rojo.png"
+    },
+    {
+      "id": "SYN-BENT-LEGS-R",
+      "file": "SYN-BENT-LEGS-R.png",
+      "sha256": "bce7c5df8a85890a58f675b35317d83599fbead33580b8db2906e75c17c983ad",
+      "bytes": 689950,
+      "width": 768,
+      "height": 768,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "Bent Legs · Encino rojo"
     }
   ]
 }

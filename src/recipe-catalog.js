@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const reference = globalThis.DemoRecipeReference;
-  if (reference?.source !== 'LOCAL_REFERENCE_D91' || reference.recipes?.length !== 6 || typeof reference.recipe !== 'function') throw Error('Referencia local de recetas no disponible.');
+  if (reference?.source !== 'LOCAL_REFERENCE_D91' || reference.recipes?.length !== 7 || typeof reference.recipe !== 'function') throw Error('Referencia local de recetas no disponible.');
   const SOURCE = reference.source;
   const UNIT = 'P1_WOOD_UNIT_PENDING_DUCO';
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -14,6 +14,7 @@
     {id:'SYN-PRISMA-C',family:'Cubiertas',productId:'SYN-PRISMA',name:'Tzalam',label:'Cubierta de madera · Tzalam'},
     {id:'SYN-PRISMA-O',family:'Cubiertas',productId:'SYN-PRISMA',name:'Encino blanco',label:'Cubierta de madera · Encino blanco'},
     {id:'SYN-PRISMA-G',family:'Cubiertas',productId:'SYN-PRISMA',name:'Encino rojo',label:'Cubierta de madera · Encino rojo'},
+    {id:'SYN-BENT-LEGS-R',family:'Mesas',productId:'SYN-BENT-LEGS',name:'Encino rojo',label:'Bent Legs · Encino rojo'},
     {id:'SYN-BOLONIA-R',family:'Mesas',productId:'SYN-BOLONIA',name:'Encino rojo',label:'Bolonia · Encino rojo'}
   ].map(definition=>{
     const selected=reference.recipe(definition.id);
@@ -42,7 +43,7 @@
     const source=d.reference,economics=source.economics;
     return {id:'R-'+d.id,variantId:d.id,productId:d.productId,source:SOURCE,accredited:false,quality:'LOCAL_REFERENCE_NOT_PRODUCTION_VALIDATED',
       description:source.description,finishDescription:source.finishDescription,finishedDimensions:d.size.join(' × ')+' cm',woodKind:d.species,
-      previewUnitPrice:d.price,wasteRate:source.woodWastePercent,wood:d.wood,boards:source.boards||[],metal:source.metal||[],workshopDefaults:source.workshopDefaults||null,hardware:d.hardware,processes:[],observations:d.id==='SYN-BOLONIA-R'?[{name:'TUERCA INSERTO',quantity:'4',unit:'PZA',status:'Unidad corregida por indicación del usuario; referencia original conservada.'}]:source.observations,
+      previewUnitPrice:d.price,wasteRate:source.woodWastePercent,wood:d.wood,boards:source.boards||[],metal:source.metal||[],workshopDefaults:source.workshopDefaults||null,fabrication:source.fabrication||null,hardware:d.hardware,processes:[],observations:d.id==='SYN-BOLONIA-R'?[{name:'TUERCA INSERTO',quantity:'4',unit:'PZA',status:'Unidad corregida por indicación del usuario; referencia original conservada.'}]:source.observations,
       documentary:{basis:'ONE_ARTICLE',currency:'UNVERIFIED',financialConfirmed:false,cncMinutesPerMeter:economics.parameters?.cncMinutesPerMeter?.value??null,
         sections:[{key:'hardware',title:'Insumos / herrajes',rows:economics.hardware},{key:'wood',title:'Madera · magnitud observada en Excel',rows:economics.wood},
           {key:'consumables',title:'Otros materiales · consumo, no cantidad de compra',rows:economics.consumables},
@@ -50,7 +51,8 @@
       limits:'Referencia local D91; moneda, impuestos y vigencia de los importes históricos sin acreditar. Madera y CNC siguen pendientes. Primer y acabado final diferidos.'};
   });
   descriptions['SYN-BOLONIA']='Mesa Bolonia con cubierta de Encino rojo, bajo cubierta de tablero y estructura metálica.';
-  const products=[['SYN-NUBE','Mesa Florencia','Mesas'],['SYN-PRISMA','Cubierta redonda de madera','Cubiertas'],['SYN-BOLONIA','Bolonia','Mesas']].map(([id,name,family])=>({id,name,family,description:descriptions[id],unit:'Pieza',imageId:definitions.find(d=>d.productId===id).id,clientId:'SYNTHETIC_ANY_CLIENT',variants:definitions.filter(d=>d.productId===id).map(d=>({id:d.id,name:d.name,articleLabel:d.label,description:recipes.find(r=>r.variantId===d.id).description,unit:'Pieza',materials:d.species,finishes:recipes.find(r=>r.variantId===d.id).finishDescription,specs:specs(...d.size),recipeId:'R-'+d.id,imageId:d.id,sku:'DEMO-'+(id==='SYN-NUBE'?'FLORENCIA-':id==='SYN-BOLONIA'?'BOLONIA-':'CUBIERTA-')+d.name.toUpperCase().replace(/ /g,'-')}))}));
+  descriptions['SYN-BENT-LEGS']='Mesa auxiliar redonda de Encino rojo con cuatro patas de acero doblado y acabado grafito RAL 7021.';
+  const products=[['SYN-NUBE','Mesa Florencia','Mesas'],['SYN-PRISMA','Cubierta redonda de madera','Cubiertas'],['SYN-BOLONIA','Bolonia','Mesas'],['SYN-BENT-LEGS','Bent Legs','Mesas']].map(([id,name,family])=>({id,name,family,description:descriptions[id],unit:'Pieza',imageId:definitions.find(d=>d.productId===id).id,clientId:'SYNTHETIC_ANY_CLIENT',variants:definitions.filter(d=>d.productId===id).map(d=>({id:d.id,name:d.name,articleLabel:d.label,description:recipes.find(r=>r.variantId===d.id).description,unit:'Pieza',materials:d.species,finishes:recipes.find(r=>r.variantId===d.id).finishDescription,specs:specs(...d.size),recipeId:'R-'+d.id,imageId:d.id,sku:'DEMO-'+(id==='SYN-NUBE'?'FLORENCIA-':id==='SYN-BOLONIA'?'BOLONIA-':id==='SYN-BENT-LEGS'?'BENT-LEGS-':'CUBIERTA-')+d.name.toUpperCase().replace(/ /g,'-')}))}));
   function recipe(id) { return recipes.find(row=>row.id===id)||null; }
   function variant(productId,id) { return products.find(row=>row.id===productId)?.variants.find(row=>row.id===id)||null; }
   function scaled(quantity,multiplier) {
@@ -83,7 +85,7 @@
     const wood=rec.wood.map(w=>({...clone(w),id:uid('F'),groupId:uid('FG'),woodKind:rec.woodKind,wasteRate:rec.wasteRate,recipeSource:SOURCE,cnc:clone(w.cnc??{decision:'',length:'',unit:'cm',repetitions:''}),adjustment:null,historical:null,adoptionConfirmed:false}));
     // Historical processes are shown in documentary tables; no active tariff is created.
     const processes=[];
-    return {groups,materials,processes,wood,metadata:{source:SOURCE,recipeId:rec.id,productId:rec.productId,variantId:rec.variantId,woodIds:wood.map(w=>w.id),hardware:hardwareMeta,boards:boardMeta}};
+    return {groups,materials,processes,wood,metadata:{source:SOURCE,recipeId:rec.id,productId:rec.productId,variantId:rec.variantId,woodIds:wood.map(w=>w.id),hardware:hardwareMeta,boards:boardMeta,...(rec.fabrication?{fabrication:clone(rec.fabrication)}:{})}};
   }
   // Existing D87/D91 local Tzalam references; not a confirmed administrative tariff.
   const woodPriceReferences=[['1','78.00'],['1.5','80.00'],['2','88.00']].map(([thickness,price])=>({species:'Tzalam',thicknessIn:Number(thickness),price,unit:UNIT,source:'ADMIN_UAT',quality:'PREVIEW',referenceSource:'USER_PROVIDED_LOCAL_REFERENCE'}));

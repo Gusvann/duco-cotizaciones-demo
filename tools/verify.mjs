@@ -9,7 +9,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 assert.ok(build()===html,'HTML must be reproducible from the reviewed local source only');
 assert.match(html,/<title>Astil · Cotizador<\/title>/,'The selected interface is the official quotation frontend, without a variant label');
-// Scan executable/readable text, excluding only the exact five synthetic PNGs
+// Scan executable/readable text, excluding only the manifest-listed synthetic PNGs
 // whose bytes and hashes the build validates. Random base64 is not business text.
 const imageDirectory=path.join(root,'src/assets/catalogo-sintetico');
 const imageManifest=JSON.parse(fs.readFileSync(path.join(imageDirectory,'manifest.json'),'utf8'));
@@ -34,9 +34,8 @@ assert.equal(new Set(countries.map(country=>country.id)).size,245,'Each territor
 assert.ok(countries.every(country=>/^[A-Z]{2}$/.test(country.id)&&country.name&&/^\+[1-9]\d{0,2}$/.test(country.dial)),'Each calling code is geographic and syntactically valid');
 for(const [id,dial] of [['MX','+52'],['US','+1'],['CA','+1'],['BS','+1'],['ES','+34'],['FR','+33']])assert.equal(countries.find(country=>country.id===id)?.dial,dial,id+' calling code');
 for(const license of ['licenses/libphonenumber-Apache-2.0.txt','licenses/unicode-cldr.txt'])assert.ok(fs.existsSync(path.join(root,license)),license+' required');
-// Publication of the selected interface and its six normalized references was
-// authorized by the owner on 2026-11-05. Private source locators, unselected documentary fixtures and
-// business contacts remain excluded; this is not a blanket anonymization proof.
+// Scan public text for private source locators, documentary fixtures and contacts.
+// Authorization and the financial review of a release are separate from this check.
 assert.ok(!/F0[34]-P\d+|DOCUMENTARY_RECIPE|26\.02\.11|Price List|Alsea|@(?:gmail|outlook|hotmail|tualo)\./i.test(publicText),'Public text must not contain private source identifiers, unselected documentary fixtures or contact addresses');
 assert.ok(!/BEGIN [A-Z ]*PRIVATE KEY|github_pat_|gh[pousr]_[A-Za-z0-9]{16,}|AIza[A-Za-z0-9_-]{24,}/.test(publicText),'Public text must not contain credentials');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
@@ -44,4 +43,4 @@ const staticIds=[...html.slice(0,html.indexOf('<script')).matchAll(/\bid="([^"]+
 assert.equal(new Set(staticIds).size,staticIds.length,'Static DOM IDs unique');
 assert.ok(ids.includes('journey-root')&&ids.includes('quote-host'));
 for(const file of ['cotizador-clasico/index.html','fabricacion/index.html'])assert.ok(fs.existsSync(path.join(root,file)),file+' preserved');
-console.log(JSON.stringify({status:'PASS_LOCAL_STATIC',sha256:createHash('sha256').update(html).digest('hex'),checks:['deterministic','official quotation title','inline syntax','standalone assets','245 geographic calling codes and licenses','CSP','no storage/network/server API','six selected references without private source locators or credentials','legacy demos preserved'],limits:['Static checks; browser acceptance separate','No backend or production validation','Publication authorized for the selected frontend and six reference recipes; financial validation remains pending']}));
+console.log(JSON.stringify({status:'PASS_LOCAL_STATIC',sha256:createHash('sha256').update(html).digest('hex'),checks:['deterministic','official quotation title','inline syntax','standalone assets','245 geographic calling codes and licenses','CSP','no storage/network/server API','selected references without private source locators or credentials','legacy demos preserved'],limits:['Static checks; browser acceptance separate','No backend or production validation','Commercial validity of reference prices requires separate review']}));

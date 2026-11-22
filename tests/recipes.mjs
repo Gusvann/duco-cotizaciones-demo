@@ -35,6 +35,126 @@ function editPart(h,itemId,field,value,type='text'){
   assert.ok(index>=0);assert.equal(h.c.partInput(input({path:'items.'+index+'.'+field},value,type),false),true);
 }
 const itemRow=(quote,id)=>quote.manufacturing.items.find(row=>row.itemId===id);
+test('Florencia wood section totals reconcile to P1 at full precision and the header includes hardware once',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
+  for(const [quantity,expectedWood,expectedArticle] of [['1','2,025.35','2,047.35'],['2','4,050.71','4,094.71']]){
+    editPart(h,itemId,'quantity',quantity,'number');h.c.editor();
+    const html=h.nodes.get('workspace').innerHTML;
+    const study=html.slice(html.indexOf('id="part-detail-'+itemId+'"'));
+    const summaries=[...study.matchAll(/<details class="workshop-block"[^>]*><summary>([\s\S]*?)<\/summary>/g)].map(match=>match[1]);
+    assert.equal(summaries.length,6);
+    assert.match(summaries[0],/Dimensiones de materia prima/);
+    if(quantity==='1')assert.deepEqual(summaries.map(s=>s.match(/data-workshop-live="subtotal-[^"]+">\$\s*([\d,.]+)/)?.[1]),
+      ['1,083.27','48.00','190.08','347.00','155.68','201.32']);
+    const displayedCents=text=>Number(text.replaceAll(',','').replace('.',''));
+    assert.equal(Number(h.c.workshopRead(itemId).total.totalCents),displayedCents(expectedWood));
+    assert.ok(study.match(/<output class="solid-wood-f-total">[\s\S]*?<\/output>/)?.[0].includes(expectedWood));
+    const header=html.match(new RegExp('data-article-cost-status="'+itemId+'"[^>]*>([^<]+)'))?.[1]||'';
+    assert.ok(header.includes(expectedArticle)&&header.includes('Costo incompleto'),header);
+    assert.doesNotMatch(study,/class="part-preview"|Aplicar el artículo no la guarda|<span class="fab-badge">Aplicado localmente/);
+  }
+});
+test('a zero labor tariff completes wood only when all applicable amounts are known',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','1','number');
+  const set=(field,value)=>h.event('input',{workshopItem:itemId,workshopField:field},value);
+  const check=(partial,articleIncomplete=partial)=>{
+    h.c.editor();
+    const html=h.nodes.get('workspace').innerHTML,expected='$ 2,025.35'+(partial?' · parcial':'');
+    const wood=[...html.matchAll(/<(?:output|span) data-rv-family-total="wood"[^>]*>([^<]+)</g)].map(match=>match[1]);
+    assert.deepEqual(wood,[expected,expected],'The family heading and footer agree');
+    assert.equal(h.c.workshopRead(itemId).total.partial,partial);
+    const header=html.match(new RegExp('data-article-cost-status="'+itemId+'"[^>]*>([^<]+)'))[1];
+    assert.equal(header,'$ 2,047.35'+(articleIncomplete?' · Costo incompleto':''));
+  };
+  for(const field of ['days.2.quantity','days.3.quantity','labor.assembly.rate','labor.jointing.rate'])await set(field,'0');
+  check(true);
+  await set('labor.joinery.rate','0.00');check(false);
+  await set('labor.joinery.rate','');check(true);
+  await set('labor.joinery.rate','0');await set('days.2.quantity','');check(true);
+  await set('days.2.quantity','0');check(false);
+  await h.event('click',{breakAction:'add-detail-process',section:'maquilas'});check(false,true);
+});
+test('an empty request can apply its first recipe without changing records outside the article',async()=>{
+  const h=harness(),id='DEMO-EMPTY-RECIPE';
+  h.Q.create(id,'complete',request(),{emptyArticles:true,scopePreset:'fabrication-packaging'});
+  h.Q.open(id);h.Q.showStep(1);
+  const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','1','number');
+  assert.equal(h.c.rowAutoFlush(),true,h.c.app.partDraft?.error);
+  const quote=h.c.app.q;
+  assert.equal(quote.items.length,1);
+  assert.ok(quote.workUnits.every(work=>!work.itemId||work.itemId===itemId));
+  assert.ok(quote.coverageLinks.every(link=>quote.needs.some(need=>need.id===link.needId)));
+  h.c.app.partDraft.quote.name='Cambio fuera del artículo';
+  assert.equal(h.c.partApply(),false);
+  assert.equal(h.c.app.q,quote);
+});
+function renderedWoodQuantities(h,itemId){
+  h.c.editor();
+  return [...h.nodes.get('workspace').innerHTML.matchAll(/<output\b[^>]*data-row-wood-quantity="([^"]+)"[^>]*data-row-wood-article="([^"]+)"[^>]*>([^<]*)<\/output>/g)]
+    .filter(match=>match[2]===itemId).map(match=>match[3]);
+}
+test('wood row totals follow commercial quantity arrows without rescaling the per-article recipe or costs twice',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','1','number');assert.equal(h.c.rowAutoFlush(),true);
+  const master=plain(h.R.recipe('R-SYN-NUBE-C')),wood=plain(h.c.solidWoodEntries(itemId)),snapshot=h.Q.snapshot('DEMO-RECIPE');
+  assert.deepEqual(renderedWoodQuantities(h,itemId),['1 pieza','4 piezas','2 piezas']);
+  for(const [action,expected,totalCost] of [
+    ['headerIncrement',['2 piezas','8 piezas','4 piezas'],1477.18],
+    ['headerIncrement',['3 piezas','12 piezas','6 piezas'],2215.77],
+    ['headerDecrement',['2 piezas','8 piezas','4 piezas'],1477.18],
+    ['headerDecrement',['1 pieza','4 piezas','2 piezas'],738.59]
+  ]){
+    await h.event('click',{[action]:itemId});
+    assert.deepEqual(renderedWoodQuantities(h,itemId),expected);
+    assert.deepEqual(plain(h.c.solidWoodEntries(itemId)),wood,'Per-article geometry, quantities and CNC remain intact');
+    const result=h.c.recipeWoodResult(itemId,h.c.solidWoodEntries(itemId)[0]);
+    assert.equal(result.unitCosts.woodCost,738.59);assert.equal(result.articleCosts.woodCost,totalCost);
+  }
+  assert.deepEqual(plain(h.R.recipe('R-SYN-NUBE-C')),master);assert.deepEqual(h.Q.snapshot('DEMO-RECIPE'),snapshot);
+});
+
+test('wood totals refresh while typing article quantity and reject missing or invalid quantities without a render',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','1','number');assert.equal(h.c.rowAutoFlush(),true);
+  const outputs=Array.from(h.c.solidWoodEntries(itemId),component=>({dataset:{rowWoodQuantity:component.id,rowWoodArticle:itemId},textContent:'stale',setAttribute(){}}));
+  const other={dataset:{rowWoodQuantity:'NOT-THIS-RECIPE',rowWoodArticle:'NOT-THIS-ARTICLE'},textContent:'unchanged',setAttribute(){}};
+  const query=h.host.querySelectorAll;h.host.querySelectorAll=selector=>selector==='[data-row-wood-quantity]'?[...outputs,other]:query.call(h.host,selector);
+  editPart(h,itemId,'quantity','2','number');
+  assert.deepEqual(outputs.map(output=>output.textContent),['2 piezas','8 piezas','4 piezas']);
+  assert.equal(other.textContent,'unchanged');assert.equal(h.c.app.breakdownEditor,null);
+  for(const value of ['', 'invalid', '0', '1.5']){
+    const index=h.c.app.partDraft.quote.items.findIndex(item=>item.id===itemId);
+    h.c.partInput(input({path:'items.'+index+'.quantity',digits:'0'},value,'number'),false);
+    assert.deepEqual(outputs.map(output=>output.textContent),['Pendiente','Pendiente','Pendiente'],value+' must not display a valid requirement');
+    assert.deepEqual(renderedWoodQuantities(h,itemId),['Pendiente','Pendiente','Pendiente']);
+  }
+  editPart(h,itemId,'quantity','3','number');
+  assert.deepEqual(outputs.map(output=>output.textContent),['3 piezas','12 piezas','6 piezas']);
+  assert.equal(h.c.app.q.items.find(item=>item.id===itemId).quantity,'1','Live totals do not save the article');
+  assert.equal(h.Q.snapshot('DEMO-RECIPE'),null);
+});
+
+test('wood row totals follow piece drafts, discard and confirmation while keeping another article isolated',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','2','number');assert.equal(h.c.rowAutoFlush(),true);
+  const leg=h.c.solidWoodEntries(itemId)[1];h.c.solidWoodOpen(itemId,leg.id);
+  await h.event('change',{solidField:'quantityPerProduct'},'5');
+  assert.deepEqual(renderedWoodQuantities(h,itemId),['2 piezas','10 piezas','4 piezas']);
+  assert.equal(h.c.solidWoodEntries(itemId)[1].quantityPerProduct,'4');assert.equal(h.c.rowAutoFlush(),false);
+  await h.event('click',{breakAction:'wood-discard'});
+  assert.deepEqual(renderedWoodQuantities(h,itemId),['2 piezas','8 piezas','4 piezas']);
+  h.c.solidWoodOpen(itemId,leg.id);await h.event('change',{solidField:'quantityPerProduct'},'');
+  assert.deepEqual(renderedWoodQuantities(h,itemId),['2 piezas','Pendiente','4 piezas']);
+  await h.event('change',{solidField:'quantityPerProduct'},'5');await h.event('click',{breakAction:'wood-confirm'});
+  assert.deepEqual(renderedWoodQuantities(h,itemId),['2 piezas','10 piezas','4 piezas']);
+  assert.equal(h.c.solidWoodEntries(itemId)[1].quantityPerProduct,'5');
+  const next=await h.select('SYN-NUBE-C');editPart(h,next.itemId,'quantity','1','number');h.c.rowAutoFlush();
+  assert.deepEqual(renderedWoodQuantities(h,next.itemId),['1 pieza','4 piezas','2 piezas']);
+  h.c.openPartEditor(itemId);assert.deepEqual(renderedWoodQuantities(h,itemId),['2 piezas','10 piezas','4 piezas']);
+  assert.equal(h.Q.snapshot('DEMO-RECIPE'),null);
+});
 test('5 Nov wood waits for explicit confirmation and hides the edit pencil while preserving discard and locks',async()=>{
   const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C'),first=h.c.solidWoodEntries(itemId)[0],before=plain(first),snapshot=h.Q.snapshot(h.c.app.q.id);
   h.c.solidWoodOpen(itemId,first.id);
@@ -61,6 +181,59 @@ test('5 Nov Florencia has explicit technical decisions and priced hardware has n
   h.c.editor();const html=h.nodes.get('workspace').innerHTML;
   const hardware=html.match(/<section[^>]*data-detail-section="supplies"[\s\S]*?<\/section>/)?.[0];assert.ok(hardware);assert.doesNotMatch(hardware,/Costo por validar|Referencia pendiente de validar/);
   assert.equal(itemRow(h.c.app.partDraft.quote,itemId).materials[0].economicReviewed,false,'Presentation is not financial promotion');
+});
+test('Bent Legs reproduces the source recipe and scales unrounded fabrication amounts',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-BENT-LEGS-R');
+  const total=(html,family)=>html.match(new RegExp('data-rv-family-total="'+family+'" data-rv-article="'+itemId+'"[^>]*>([^<]+)'))?.[1];
+  for(const [quantity,wood,boards,metal,grand] of [['1','1,163.51','517.10','1,451.05','3,153.65'],['2','2,327.02','1,034.20','2,902.09','6,307.31']]){
+    editPart(h,itemId,'quantity',quantity,'number');assert.equal(h.c.rowAutoFlush(),true);
+    h.c.editor();const html=h.nodes.get('workspace').innerHTML,row=itemRow(h.c.app.q,itemId);
+    assert.equal(row.materials.filter(material=>material.section==='maquilas').length,0);
+    assert.deepEqual(plain(row.materials.filter(m=>m.section==='supplies').map(m=>m.purchaseQuantity)),[String(4*Number(quantity)),String(4*Number(quantity))]);
+    assert.deepEqual(plain(row.materials.filter(m=>m.section==='metal-tube').map(m=>[m.quantity,m.detail.sideACm])),[['1','0.9525'],['4','1.27']]);
+    for(const [family,expected] of Object.entries({wood,boards,metal}))assert.ok(total(html,family)?.includes(expected),family+' '+total(html,family));
+    assert.ok(html.includes('$ '+grand),'article should display '+grand+'; family totals '+[wood,boards,metal].join(', '));
+  }
+  // Six additional bends cost $540 per article. Explicit zero and a blank are distinct.
+  await h.event('change',{fabCostField:'rollingQty',costFamily:'metal',costItem:itemId},'0');
+  h.c.editor();let html=h.nodes.get('workspace').innerHTML;assert.equal(total(html,'metal'),'$ 1,822.09');assert.ok(html.includes('$ 5,227.31'));
+  await h.event('change',{fabCostField:'rollingQty',costFamily:'metal',costItem:itemId},'');
+  h.c.editor();assert.match(total(h.nodes.get('workspace').innerHTML,'metal'),/parcial/);
+  assert.equal(h.R.recipe('R-SYN-BENT-LEGS-R').fabrication.metal.rollingQty,'6');
+});
+
+test('Excel capture panels allocate material, labor and operations exactly once',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-BENT-LEGS-R');
+  editPart(h,itemId,'quantity','1');assert.equal(h.c.rowAutoFlush(),true);
+  const amounts=()=>{h.c.editor();return Object.fromEntries([...h.nodes.get('workspace').innerHTML.matchAll(/data-capture-subtotal="([^"]+)"[^>]*>([^<]*)</g)].map(m=>[m[1],m[2]]));};
+  const expected={'board-stock':'70.24','board-labor':'40.50','board-days':'251.25','board-cnc':'135.00','board-other':'20.11',
+    'metal-tube':'178.02','metal-work':'231.43','metal-finish':'501.60','metal-other':'540.00'};
+  const values=amounts();
+  for(const [key,value] of Object.entries(expected))assert.equal(values[key],'$ '+value,key);
+  assert.equal(values['metal-sheet'],'Sin captura');assert.equal(values['board-finish'],'Sin captura');
+  assert.equal((h.nodes.get('workspace').innerHTML.match(/data-fab-cost-field="cncRate"/g)||[]).length,1);
+  await h.event('change',{fabCostField:'cncRate',costFamily:'boards',costItem:itemId},'0');assert.equal(amounts()['board-cnc'],'$ 0.00');
+  await h.event('change',{fabCostField:'cncRate',costFamily:'boards',costItem:itemId},'');assert.equal(amounts()['board-cnc'],'Pendiente');
+});
+test('Bent Legs edits a physical profile and board rate on one copy of the recipe',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-BENT-LEGS-R');
+  editPart(h,itemId,'quantity','1');assert.equal(h.c.rowAutoFlush(),true);
+  const legs=itemRow(h.c.app.q,itemId).materials.find(m=>m.name.startsWith('Patas'));
+  await h.event('focusin',{rowOpen:'material',rowItem:itemId,rowId:legs.id,rowField:'length'});
+  assert.equal(h.c.app.breakdownEditor.value.id,legs.id);
+  await h.event('change',{breakField:'length'},'100');assert.equal(h.c.rowAutoFlush(),true);
+  // Four one-meter legs cost 455.40 for steel and labor plus 528.00 for paint.
+  h.c.editor();let html=h.nodes.get('workspace').innerHTML;
+  const amount=(markup,id,key)=>markup.match(new RegExp('data-rv-family-total="'+key+'" data-rv-article="'+id+'"[^>]*>([^<]+)'))?.[1];
+  assert.equal(amount(html,itemId,'metal'),'$ 1,677.23');
+  await h.event('change',{fabCostField:'dayRate',costFamily:'boards',costItem:itemId},'0');
+  h.c.editor();assert.equal(amount(h.nodes.get('workspace').innerHTML,itemId,'boards'),'$ 265.85');
+  await h.event('change',{fabCostField:'dayRate',costFamily:'boards',costItem:itemId},'inválido');
+  h.c.editor();assert.match(amount(h.nodes.get('workspace').innerHTML,itemId,'boards'),/parcial/);
+  const second=await h.select('SYN-BENT-LEGS-R');editPart(h,second.itemId,'quantity','1');assert.equal(h.c.rowAutoFlush(),true);
+  h.c.editor();html=h.nodes.get('workspace').innerHTML;
+  assert.equal(amount(html,second.itemId,'metal'),'$ 1,451.05');assert.equal(amount(html,second.itemId,'boards'),'$ 517.10');
+  assert.equal(h.R.recipe('R-SYN-BENT-LEGS-R').metal[1].length,'77');
 });
 test('5 Nov Bolonia is a separate product with its hardware, board and metal recipe and exact board base',async()=>{
   const h=harness();h.open();const {itemId,product}=await h.select('SYN-BOLONIA-R');assert.equal(product.name,'Bolonia');
@@ -570,7 +743,12 @@ test('wood family total refreshes for dimension edits and does not retain a remo
   await h.event('input',{solidField:'width'},'80');const changed=output.textContent;
   assert.match(changed,/\$.* · parcial/);
   await h.event('input',{solidField:'width'},'');
-  assert.equal(output.textContent,'Pendiente','Missing width cannot retain the previous preview');
+  // With the cover width missing, the two other pieces still have a cost.
+  // The family also includes independent days, connectors and known workshop charges.
+  assert.match(output.textContent,/^\$\s*984\.96 · parcial$/);
+  assert.notEqual(output.textContent,changed,'A removed dimension cannot retain the previous preview');
+  assert.equal(h.c.workshopRead(itemId).groups.dimensions.totalCents,'34468','Only legs and crosspieces have measurable stock (P1!P29:P30)');
+  assert.equal(h.c.workshopRead(itemId).groups.dimensions.partial,true);
 });
 
 test('family totals exclude an included process and never double count historical wood',async()=>{
@@ -952,8 +1130,8 @@ test('synthetic historical phone copies remove explicit extensions and preserve 
 
 test('five D91 commercial variants have exact labels, materials, dimensions and unconfirmed reference recipes',()=>{
   const R=pureCatalog();
-  assert.equal(R.products.length,3);
-  const d91Products=R.products.filter(product=>product.id!=='SYN-BOLONIA');
+  assert.equal(R.products.length,4);
+  const d91Products=R.products.filter(product=>['SYN-NUBE','SYN-PRISMA'].includes(product.id));
   assert.deepEqual(plain(d91Products.map(product=>product.name).sort()),['Cubierta redonda de madera','Mesa Florencia']);
   const variants=d91Products.flatMap(product=>product.variants);
   assert.deepEqual(plain(variants.map(variant=>variant.id).sort()),['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-G','SYN-PRISMA-O']);
@@ -986,9 +1164,9 @@ test('five D91 commercial variants have exact labels, materials, dimensions and 
   assert.equal(new Set(imageIds.map(id=>R.images[id])).size,5,'The preview is not one shared image silently reused for every variant');
 });
 
-test('the package PNG prelude matches all five synthetic assets and uses IA images instead of SVG fallbacks',()=>{
+test('the package PNG prelude matches all six synthetic assets and uses IA images instead of SVG fallbacks',()=>{
   const manifest=JSON.parse(read('src/assets/catalogo-sintetico/manifest.json'));
-  assert.equal(manifest.source,'ImageGen');assert.equal(manifest.assets.length,5);
+  assert.equal(manifest.source,'ImageGen');assert.equal(manifest.assets.length,6);
   const images={};
   for(const asset of manifest.assets){
     assert.equal(asset.file,asset.id+'.png');
@@ -1011,7 +1189,7 @@ test('the package PNG prelude matches all five synthetic assets and uses IA imag
 test('the authored catalog and recipes are immutable and never infer a variant from its family',()=>{
   const R=pureCatalog();
   assert.equal(R.source,'LOCAL_REFERENCE_D91');
-  assert.equal(Object.values(R.recipes).length,6);
+  assert.equal(Object.values(R.recipes).length,7);
   for(const product of R.products){
     assert.equal(Boolean(R.variant(product.id,'')),false);
     assert.equal(Boolean(R.variant(product.id,'UNKNOWN-VARIANT')),false);
@@ -1050,7 +1228,7 @@ test('D91 materialization preserves per-unit quantities, fresh identities and do
 
 test('every D91 variant materializes its own technical recipe without creating charges from documentary references',()=>{
   const R=pureCatalog();let sequence=0;
-  for(const variant of R.products.filter(product=>product.id!=='SYN-BOLONIA').flatMap(product=>product.variants)){
+  for(const variant of R.products.filter(product=>['SYN-NUBE','SYN-PRISMA'].includes(product.id)).flatMap(product=>product.variants)){
     const recipe=R.recipe(variant.recipeId),created=R.instantiate(recipe.id,prefix=>prefix+'-REF-'+(++sequence),'2');
     const table=variant.id.startsWith('SYN-NUBE');
     assert.deepEqual(plain(created.wood.map(row=>row.name)),table?['CUBIERTA','PATAS','TRAVESAÑOS']:['CUBIERTA']);
@@ -1127,11 +1305,11 @@ test('D91 wood preview resolves reference prices by thickness and keeps unpriced
   assert.deepEqual(plain(h.c.solidWoodState(itemId).applied[0]),original,'Preview queries do not mutate the materialized recipe');
 });
 
-test('all five variants stay in Producto de línea without preloading articles when opened, inspected or cancelled',async()=>{
+test('all catalog variants stay in Producto de línea without preloading articles when opened, inspected or cancelled',async()=>{
   for(const scenario of ['complete','wood']){
     const h=harness();h.open('DEMO-CATALOG-'+scenario.toUpperCase(),scenario);
     const variants=h.R.products.flatMap(product=>product.variants);
-    assert.equal(variants.length,6);
+    assert.equal(variants.length,7);
     assert.equal(h.c.app.q.items.length,1,'The existing scenario keeps only its original example article');
     assert.equal(h.c.app.q.items.some(item=>variants.some(variant=>variant.articleLabel===item.description)),false);
     assert.deepEqual(plain(h.c.app.syntheticRecipes.articles),{});
@@ -1152,7 +1330,7 @@ test('all five variants stay in Producto de línea without preloading articles w
     assert.equal(checkpoint(),original,'Cancelling the catalog must preserve the original scenario');
     h.begin();
     assert.equal(h.c.lineState().variantId,'','Reopening must require another explicit variant selection');
-    assert.equal(h.c.app.lineCatalog.products.flatMap(product=>product.variants).length,6);
+    assert.equal(h.c.app.lineCatalog.products.flatMap(product=>product.variants).length,7);
     assert.equal(checkpoint(),original);
   }
 });
@@ -1421,7 +1599,7 @@ test('repeated variants have fresh article/component IDs and remain isolated acr
   h.Q.reset();assert.deepEqual(plain(h.c.app.syntheticRecipes.articles),{});
   h.open('DEMO-FIRST');assert.equal(h.c.app.q.items.length,1);assert.equal(h.c.recipeEntry(first.itemId),null);
   h.c.lineAction('line-use',{dataset:{product:'SYN-NUBE',productIntent:staleNonce}});assert.equal(h.c.app.q.items.length,1);
-  assert.equal(h.c.app.lineCatalog.products.length,3);assert.equal(h.R.recipes.length,6);
+  assert.equal(h.c.app.lineCatalog.products.length,4);assert.equal(h.R.recipes.length,7);
 });
 
 test('invalid PartDraft, unknown saves and frozen snapshots cannot be bypassed by direct recipe actions',async()=>{
@@ -1833,7 +2011,9 @@ test('reference workshop replaces the duplicate source tables and uses live wood
   const titles=['Dóminos × ML','Mano de obra','Mano de obra por días','Materiales de acabado','Otros · consumibles y CNC / Láser'];
   let at=-1;for(const title of titles){const next=html.indexOf(title,at+1);assert.ok(next>at,title+' follows the prior block');at=next;}
   assert.doesNotMatch(html,/Alcance de las referencias|recipe-reference-scope/);
-  for(const name of ['Carpintería','Instalación','CNC / Láser','Acabados','Tejido','Integración'])assert.match(html,new RegExp('<strong>'+name+'(?:<|$)'));
+  // Later owner decision removes these three daily specialties from solid wood.
+  for(const name of ['Carpintería','CNC / Láser','Acabados'])assert.match(html,new RegExp('<strong>'+name+'(?:<|$)'));
+  assert.doesNotMatch(h.c.workshopMarkup(itemId),/Instalación|Tejido|Integración/);
   const top=h.c.solidWoodState(itemId).applied[0];
   await h.event('click',{solidAction:'edit',articleId:itemId,id:top.id});
   await h.event('input',{solidField:'length'},'80');clock.flush();
@@ -2004,21 +2184,41 @@ test('the left quantity arrow reduces whole pieces once, stops at one and retain
   assert.equal(h.Q.snapshot('DEMO-RECIPE'),null);
 });
 
-test('installation exclusion follows the declared scope, protects capture and restores prior days when included',async()=>{
+test('removed wood specialties have no controls or writers and retain original data and scope semantics',async()=>{
   const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
-  let result=h.c.workshopRead(itemId),values=h.c.workshopValues(itemId);
+  const original=plain(h.R.recipe('R-SYN-NUBE-C')),costs=plain(h.c.app.q.costs);
+  const result=h.c.workshopRead(itemId),values=h.c.workshopValues(itemId);
   assert.equal(result.days[1].unitCents,'0');assert.equal(result.days[1].excluded,true);
   assert.equal(values['days.1.quantity'],'');assert.equal(values['days.1.rate'],'1200');
-  let html=h.c.workshopMarkup(itemId);assert.match(html,/data-workshop-field="days\.1\.quantity" disabled[^>]*value="0"/);
-  await h.event('input',{workshopItem:itemId,workshopField:'days.1.quantity'},'4');assert.equal(h.c.workshopValues(itemId)['days.1.quantity'],'');
+  const assertVisibleDays=()=>{
+    const html=h.c.workshopMarkup(itemId);
+    assert.doesNotMatch(html,/Instalación|Tejido|Integración|data-workshop-field="days\.[145]\./);
+    for(const [i,name,rate] of [[0,'Carpintería','867.50'],[2,'CNC / Láser','507.50'],[3,'Acabados','697.50']]){
+      assert.match(html,new RegExp('<strong>'+name+'<'));
+      assert.match(html,new RegExp('data-workshop-field="days\\.'+i+'\\.rate"[^>]*value="'+rate.replace('.','\\.')+'"'));
+    }
+  };
+  assertVisibleDays();
+  // Simulate pre-existing local capture: removing a display row cannot rewrite it.
+  h.c.solidWoodState(itemId).workshop.values['days.1.quantity']='0.5';
   const model=h.c.app.partDraft.quote.manufacturing;model.installation='yes';model.installationReason='';
-  assert.equal(h.c.workshopRead(itemId).days[1].unitCents,null,'Undeclared days are not a free included service');
-  await h.event('input',{workshopItem:itemId,workshopField:'days.1.quantity'},'0.5');
   assert.equal(h.c.workshopRead(itemId).days[1].unitCents,'60000');
+  for(const i of [1,4,5])for(const key of ['quantity','rate']){
+    const path='days.'+i+'.'+key,before=h.c.workshopValues(itemId)[path];
+    await h.event('input',{workshopItem:itemId,workshopField:path},'999');
+    assert.equal(h.c.workshopValues(itemId)[path],before,'Removed specialties cannot be edited through the wood handler');
+  }
+  assertVisibleDays();
   model.installation='no';model.installationReason='Entrega sin instalación.';assert.equal(h.c.workshopRead(itemId).days[1].unitCents,'0');
   assert.equal(h.c.workshopValues(itemId)['days.1.quantity'],'0.5','A scope change preserves the prior capture');
   h.c.scopeAction({dataset:{scopeAction:'select',scopeDirection:'include',scopeId:'SCOPE_INSTALLATION'}});
   assert.notEqual(h.c.workshopRead(itemId).days[1].excluded,true,'A contradictory inclusion cannot silently force an exclusion');
+  assertVisibleDays();
+  await h.event('input',{workshopItem:itemId,workshopField:'days.2.quantity'},'1');
+  assert.equal(h.c.workshopRead(itemId).days[2].unitCents,'50750','CNC keeps its original index and tariff');
+  await h.event('input',{workshopItem:itemId,workshopField:'days.3.quantity'},'2');
+  assert.equal(h.c.workshopRead(itemId).days[3].unitCents,'139500','Acabados keeps its original index and tariff');
+  assert.deepEqual(plain(h.R.recipe('R-SYN-NUBE-C')),original);assert.deepEqual(plain(h.c.app.q.costs),costs);
   assert.equal(h.Q.snapshot('DEMO-RECIPE'),null);
 });
 

@@ -1418,6 +1418,39 @@
       parameters:{cncMinutesPerMeter:{value:'5',unit:'min/m'}}
     }
   });
+  // Bent Legs. Editable inputs are per finished table; source amounts retain their precision.
+  const economicRow=(name,kind,quantity,quantityUnit,unitPrice,priceBasis,totalSaved)=>({
+    name,kind,quantity,quantityUnit,unitPrice,priceUnit:'SOURCE_MONEY_PER_'+priceBasis,totalSaved
+  });
+  const bentHardware=[['NIVELADOR ESTRIADO','5','20'],['TUERCA INSERTO','0.5','2']];
+  recipes.push({
+    id:'SYN-BENT-LEGS-R', description:'Mesa auxiliar redonda de Encino rojo con bajo cubierta de Lisapol y cuatro patas de acero doblado. Diámetro 45 cm y altura 46 cm.',
+    finishDescription:'Sayer retardante de flama y acero con pintura electrostática RAL 7021',
+    finishedSpecs:{Largo:'45',Ancho:'45',Alto:'46',unit:'cm'},woodWastePercent:'30',
+    workshopDefaults:{domino:{quantity:'',lengthCm:'',unions:'3'}},
+    wood:[{name:'CUBIERTA',quantityPerProduct:'1',width:'45',length:'45',lengthUnit:'cm',woodKind:'Encino rojo',thickness:'1.5',finishFaces:'2',jointed:'1',cnc:{decision:'yes',length:'142',unit:'cm',repetitions:'1'}}],
+    hardware:bentHardware.map(([name,unitPrice])=>({name,specification:name,quantityPerProduct:'4',unit:'PZA',unitPrice})),
+    boards:[{name:'Bajo cubierta',quantityPerProduct:'1',width:'45',length:'45',lengthUnit:'cm',substrate:'Lisapol',coating:'',thickness:'12',supplier:'PLACOVE',unitPrice:'868.62',sheetAreaM2:'2.88',wasteRate:'15',detail:{edgeWidthCount:'',edgeLengthCount:'',paintFaces:'',gluedFaces:'',linearCentimeters:'180',laserCount:'1',notes:'El plano menciona 9 mm. Receta seleccionada en 12 mm.'}}],
+    metal:[{name:'Bajo cubierta · cuadrado macizo 3/8″',section:'metal-tube',quantity:'1',length:'72',width:'',lengthUnit:'cm',gauge:'',unitPrice:'50',detail:{sideACm:'0.9525',sideBCm:'0.9525',kgPerMl:'0.71',laborPrice:'65',paintPrice:'110'}},
+      {name:'Patas · redondo macizo 1/2″',section:'metal-tube',quantity:'4',length:'77',width:'',lengthUnit:'cm',gauge:'',unitPrice:'50',detail:{sideACm:'1.27',sideBCm:'1.27',kgPerMl:'0.99',laborPrice:'65',paintPrice:'110'}}],
+    fabrication:{boards:{assemblyRate:'200',cncMinutesPerM:'5',cncRate:'15',integrationDays:'0.5',dayRate:'502.50',extrasPct:'5',extraMaterials:'16.60'},metal:{paintFactor:'1.2',rollingQty:'6',rollingPrice:'90'}},
+    observations:[],
+    economics:{
+      hardware:bentHardware.map(([name,price,amount])=>economicRow(name,'HARDWARE','4','PZA',price,'PZA',amount)),
+      wood:[economicRow('CUBIERTA','WOOD','5.19321493188441','P1_WOOD_UNIT_PENDING_DUCO','77','P1_WOOD_UNIT_PENDING_DUCO','399.87754975509955')],
+      consumables:[economicRow('ACABADO SAYER RETARDANTE FUEGO','FINISH','0.11571428571428573','L','403','L','46.63285714285715'),
+        economicRow('FONDO SAYER RETARDANTE FUEGO','FINISH_PRIMER','0.057857142857142864','L','226','L','13.075714285714287'),
+        economicRow('DÓMINOS','DOMINO_CONSUMPTION','5.4','FRACTIONAL_PZA_CONSUMPTION','5','PZA_CONSUMPTION','27'),
+        economicRow('PEGAMENTO ENTABLERADO','GLUE','0.1215','L','183','L','22.2345')],
+      processes:[economicRow('MO ARMADO','ASSEMBLY','0.2025','M2','200','M2','40.5'),
+        economicRow('MO ENTABLERADO','JOINTING','0.2025','M2','300','M2','60.75'),
+        economicRow('MO ENSAMBLES','JOINERY','5.4','FRACTIONAL_PZA_CONSUMPTION','20','PZA_CONSUMPTION','108'),
+        economicRow('MO BARNIZ','VARNISH_LABOR','0.405','M2_FINISH','180','M2_FINISH','72.9'),
+        economicRow('CNC / LÁSER','CNC','1.42','ML','10','MINUTE','71')],
+      dayLabor:[['Carpintería','0.33','867.5','286.275'],['Instalación',null,'1200','0'],['CNC / Láser',null,'507.5','0'],['Acabados',null,'697.5','0'],['Tejido',null,'840','0'],['Integración',null,'502.5','0']].map(([name,quantity,price,total])=>economicRow('MO '+name,'LABOR_DAYS',quantity,'DAY',price,'DAY',total)),
+      parameters:{cncMinutesPerMeter:{value:'5',unit:'min/m'}}
+    }
+  });
   function recipe(id) { return recipes.find(value => value.id === id) || null; }
   globalThis.DemoRecipeReference = freeze({ source: 'LOCAL_REFERENCE_D91', recipes, recipe });
 }());

@@ -60,7 +60,7 @@ export const recipeClient = String.raw`
     const variant=lineState().productId===product.id&&product.variants.find(v=>v.id===lineState().variantId);
     if(!variant)return '<p class="meta">Selecciona una variante para consultar su imagen, medidas y receta.</p>';
     if(!variant.recipeId)return recipeBaseLineVariantSummary(product);
-    const rec=DemoRecipeCatalog.recipe(variant.recipeId),fields=[['Artículo',variant.articleLabel],['SKU de muestra',variant.sku],['Descripción',variant.description],['Medidas terminadas',rec.finishedDimensions],['Material',variant.materials],['Acabados',variant.finishes],['Receta',rec.wood.length+' componentes de madera · '+rec.hardware.length+' herrajes']];
+    const rec=DemoRecipeCatalog.recipe(variant.recipeId),fields=[['Artículo',variant.articleLabel],['SKU de muestra',variant.sku],['Descripción',variant.description],['Medidas terminadas',rec.finishedDimensions],['Material',variant.materials],['Acabados',variant.finishes],['Receta',rec.wood.length+' componente'+(rec.wood.length===1?'':'s')+' de madera · '+rec.hardware.length+' herrajes'+(rec.fabrication?' · Tableros ('+rec.boards.length+') · Herrería ('+rec.metal.length+')':'')]];
     return '<dl class="line-variant-summary">'+fields.map(([label,value])=>'<div><dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl><p class="recipe-preview-note">Receta de la referencia local. Madera y CNC siguen pendientes de validación; los importes históricos no confirman costos vigentes.</p>';
   }
   function lineResults(){

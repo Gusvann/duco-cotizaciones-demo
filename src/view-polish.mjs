@@ -1,8 +1,18 @@
 // Local B presentation approved in the 4 November browser annotations.
 // Quantity still uses the native item setter, validation and session capture.
 function installViewPolish() {
-  const nativePartPreview=partPreviewHtml;
-  partPreviewHtml=function(id){return nativePartPreview(id).replace('<p class="error" role="alert">Escribe la descripción de la pieza.</p>','');};
+  partPreviewHtml=function(id){
+    const tx=app.partDraft;
+    return tx?.itemId===id&&tx.error&&tx.error!=='Escribe la descripción de la pieza.'
+      ? '<p class="error" data-part-error role="alert">'+esc(tx.error)+'</p>':'';
+  };
+  const nativeHeaderValue=articleHeaderSingleValue;
+  articleHeaderSingleValue=function(cost){
+    const value=nativeHeaderValue(cost);
+    if(value.amount||!Number.isSafeInteger(cost.cents)||cost.cents<0)return value;
+    const text=QuotePdf.money(cost.cents)+' · Costo incompleto';
+    return {...value,text,label:text};
+  };
   const discrete=item=>['Pieza','Juego'].includes(item.unit);
   function quantityField(item,index,open) {
     let html=open?field('items.'+index+'.quantity','Cantidad',{type:'number',digits:discrete(item)?0:3,positive:true,max:100000})
@@ -70,6 +80,10 @@ function once(source,before,after,label) {
 }
 
 export function extendViewPolish(source) {
+  source=once(source,'<p class="meta">Aplicar el artículo no la guarda: usa Guardar borrador y espera su confirmación por relectura.</p>','','remove repeated draft instructions');
+  source=once(source,"body.querySelector('.part-preview')?.remove();","body.querySelector('[data-part-error]')?.remove();",'refresh only the current article error');
+  source=once(source,"'La aplicación afectaría información ajena a este artículo ('+delta.unexpected.join(', ')+'). No se aplicó ningún cambio.'",
+    "'No se pudieron aplicar los cambios a este artículo. La captura sigue abierta.'",'article error without internal field names');
   // Later user annotation: only discrete commercial units require integers.
   source=once(source,'quantity: num(r.quantity, 3, 100000, `items.${i}.quantity`, true),','quantity: num(r.quantity, [\'Pieza\',\'Juego\'].includes(r.unit)?0:3, 100000, `items.${i}.quantity`, true),','discrete commercial quantity');
   const statuses=source.match(/<p class="meta article-flow-status">[\s\S]*?<\/p>/g)||[];

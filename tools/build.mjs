@@ -16,7 +16,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function recipeImages(){
  const directory=path.join(root,'src/assets/catalogo-sintetico');
  const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));
- const expected=['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-O','SYN-PRISMA-G'];
+ const expected=['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-O','SYN-PRISMA-G','SYN-BENT-LEGS-R'];
  if(manifest.assets?.length!==expected.length||new Set(manifest.assets.map(asset=>asset.id)).size!==expected.length)throw Error('RECIPE_IMAGES_INCOMPLETE');
  return Object.fromEntries(expected.map(id=>{
   const asset=manifest.assets.find(row=>row.id===id);

@@ -203,7 +203,11 @@
       state.q.items=[];state.q.manufacturing.items=[];
       state.q.needs=state.q.needs.filter(need=>!need.itemId);
       state.q.costs=state.q.costs.filter(cost=>!cost.itemId&&!cost.id?.startsWith('CST_MFG_'));
+      state.q.resources=state.q.resources.filter(resource=>!resource.itemId);
+      state.q.workUnits=state.q.workUnits.filter(work=>!work.itemId);
       state.q.scopeReview.confirmations=[];
+      // Rebuild generated coverage and general costs against the now-empty request.
+      state.q=M.apply(state.q);
     }
     const entry = { id, scenario, request: req, state, revision: 1, savedRevision: 0, savedFingerprint: '', saved: null, pendingSave: null, saveState: 'idle', frozen: false, lastFingerprint: '' };
     entries.set(id, entry); entry.lastFingerprint = fingerprint(entry); return summary(id);

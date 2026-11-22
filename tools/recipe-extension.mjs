@@ -6,6 +6,9 @@ function once(source, from, to) {
 }
 /** Build-time extension only: the canonical D85 file is never rewritten. */
 export function extendRecipes(source) {
+  // The 3/8-inch solid profile measures exactly 0.9525 cm.
+  source=once(source,"sideACm:'decimal:3',sideBCm:'decimal:3'","sideACm:'decimal:4',sideBCm:'decimal:4'");
+  source=once(source,"/exchangeRate$/.test(field)?4", "/(?:exchangeRate|sideACm|sideBCm)$/.test(field)?4");
   const names=['lineStructuredBreakdown','partStartCreation','lineVariantSummary','lineResults','lineCatalogPanel','lineAction','filterLineCatalog','partInput','solidWoodOpen','solidWoodSet','solidWoodApply','solidWoodAction','solidWoodApplyCnc','breakdownSetField','breakdownSave','partPaint','partCandidate','partDraftDirty','partApply','partDiscard','recipeDirectoryHtml','breakdownDetailedSections'];
   for(const name of names)source=once(source,'function '+name+'(','function recipeBase'+name[0].toUpperCase()+name.slice(1)+'(');
   source=once(source,"row.mode='detailed';row.groups=breakdown.groups;row.materials=breakdown.materials;","row.mode='detailed';row.groups=breakdown.groups;row.materials=breakdown.materials;row.processes=breakdown.processes||row.processes;");

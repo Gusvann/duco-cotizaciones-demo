@@ -13,16 +13,9 @@
 #quote-host .article-study[data-article-study="desglose"] .fab-detail-list{gap:0}
 #quote-host .rv-family-meta{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:6px 12px;min-width:0}
 #quote-host .rv-family-meta output{color:var(--navy);font-size:.8rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-#quote-host .rv-wood-dimensions{margin-top:8px}
-#quote-host .rv-wood-dimensions>summary{display:flex;align-items:center;gap:10px;min-height:40px;cursor:pointer;color:var(--navy);font-weight:600;list-style:none}
-#quote-host .rv-wood-dimensions>summary::-webkit-details-marker{display:none}
-#quote-host .rv-wood-dimensions>summary::after{content:'⌄';margin-left:auto;color:#6989a7}
-#quote-host .rv-wood-dimensions[open]>summary::after{transform:rotate(180deg)}
-#quote-host .rv-section-number{font-size:.75rem;font-weight:500;color:#7390aa}
-#quote-host .rv-wood-dimensions-body{min-width:0}
 
 /* The row and its heading use the same grid; only this region scrolls at narrow widths. */
-#quote-host .rv-table-scroll{max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-gutter:stable;scroll-padding-inline:10px}
+#quote-host .rv-table-scroll{position:relative;max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-gutter:stable;scroll-padding-inline:10px}
 #quote-host .rv-table-scroll:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 #quote-host .rv-table-content{min-width:620px}
 #quote-host .rv-table-content.rv-supply-table{min-width:820px}
@@ -64,6 +57,53 @@
 #quote-host .rv-board-options{margin-top:8px;max-width:1000px;font-size:.72rem}
 #quote-host .rv-board-options>summary{color:var(--blue);cursor:pointer}
 #quote-host .rv-board-options-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:10px 0}
+#quote-host .fabrication-workshop{margin:0;max-width:100%}
+#quote-host .fabrication-block>.workshop-block-body{container-type:inline-size}
+#quote-host .fabrication-block summary{list-style:none}
+#quote-host .fabrication-block summary::-webkit-details-marker{display:none}
+#quote-host .fabrication-inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));align-items:end;gap:10px 14px;margin:0 0 12px}
+#quote-host .fabrication-metal-list{container-type:inline-size}
+#quote-host .fabrication-metal-row{padding:12px 0}
+#quote-host .fabrication-metal-piece{display:grid;grid-template-columns:minmax(140px,2.2fr) repeat(7,minmax(46px,1fr));gap:8px;align-items:start}
+#quote-host .fabrication-metal-piece .field,#quote-host .fabrication-inputs .field{min-width:0;margin:0}
+#quote-host .fabrication-metal-piece label,#quote-host .fabrication-metric small,#quote-host .fabrication-inputs label{display:block;color:var(--muted);font-size:.72rem;line-height:1.3;margin:0 0 5px}
+#quote-host .fabrication-metal-piece input,#quote-host .fabrication-inputs :is(input,select){width:100%;min-width:0;min-height:34px;border-radius:6px;padding:5px 8px;font-size:.8rem}
+#quote-host .fabrication-metric output{display:block;padding:7px 0;font-weight:600;font-size:.82rem;font-variant-numeric:tabular-nums}
+#quote-host .fabrication-metal-row>.rv-row-actions{position:static;justify-content:flex-end;gap:12px}
+#quote-host .fabrication-edit{font-size:.75rem;color:var(--blue);min-height:30px}
+#quote-host .fabrication-breakdown:empty,#quote-host .fabrication-metal-row>.rv-row-status:empty{display:none}
+#quote-host .fabrication-breakdown{display:grid;gap:0;margin:10px 0 0;font-size:.8rem}
+#quote-host .fabrication-breakdown>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-top:1px solid var(--line);padding:7px 0}
+#quote-host .fabrication-breakdown dd{margin:0;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+@container(max-width:690px){
+  #quote-host .fabrication-metal-piece{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #quote-host .fabrication-metal-name{grid-column:span 2}
+}
+@container(max-width:380px){
+  #quote-host .fabrication-metal-piece{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@container (min-width:500px) and (max-width:1420px){
+  #quote-host .fabrication-workshop .rv-table-content.rv-board-table{min-width:0}
+  #quote-host .fabrication-workshop .rv-board-heading{display:none}
+  #quote-host .fabrication-workshop .rv-board-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,.85fr) minmax(0,1.45fr);gap:14px;align-items:start}
+  #quote-host .fabrication-workshop .rv-board-grid .field>label{position:static;clip-path:none;width:auto;height:auto;white-space:normal;font-size:.72rem;color:var(--muted)}
+  #quote-host .fabrication-workshop .rv-board-cell-7{position:static;text-align:right;align-self:end}
+  #quote-host .fabrication-workshop :is([data-board-area],[data-board-base])::before{display:block;font-size:.72rem;font-weight:400;color:var(--muted);margin-bottom:7px}
+  #quote-host .fabrication-workshop [data-board-area]::before{content:'Área · m²'}
+  #quote-host .fabrication-workshop [data-board-base]::before{content:'Costo base'}
+}
+@container(max-width:499px){
+  #quote-host .fabrication-workshop .rv-table-content.rv-board-table{min-width:0}
+  #quote-host .fabrication-workshop .rv-board-heading{display:none}
+  #quote-host .fabrication-workshop .rv-board-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px 8px}
+  #quote-host .fabrication-workshop .rv-board-cell:is(.rv-board-cell-0,.rv-board-cell-1,.rv-board-cell-3,.rv-board-cell-4,.rv-board-cell-5,.rv-board-cell-6,.rv-board-cell-7){grid-column:1/-1}
+  #quote-host .fabrication-workshop .rv-board-cell-7{position:static;text-align:left;padding:0}
+  #quote-host .fabrication-workshop .rv-board-grid .field>label{position:static;clip-path:none;width:auto;height:auto;white-space:normal;font-size:.72rem;color:var(--muted)}
+  #quote-host .fabrication-workshop :is([data-board-area],[data-board-base])::before{display:block;font-size:.72rem;font-weight:400;color:var(--muted)}
+  #quote-host .fabrication-workshop [data-board-area]::before{content:'Área · m²'}
+  #quote-host .fabrication-workshop [data-board-base]::before{content:'Costo base'}
+  #quote-host .fabrication-workshop .rv-board-options-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 #quote-host .rv-cell .field{margin:0}
 #quote-host .rv-cell label{display:block;margin:0 0 4px;color:var(--muted);font-size:.72rem;line-height:1.25}
 /* Labels remain associated with the controls; shared visible headings avoid repetition. */
@@ -75,6 +115,8 @@
 #quote-host .rv-cell input[readonly]{cursor:text}
 #quote-host .rv-cell :is(input,select,textarea):focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 #quote-host .rv-wood-quantity{display:flex;align-items:center;gap:3px}
+#quote-host .rv-wood-required{display:block;margin:0 0 6px;color:var(--navy);font-size:.8rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25;overflow-wrap:anywhere}
+#quote-host .rv-wood-basis-label{display:block;margin-top:3px;color:var(--muted);font-size:.65rem;line-height:1.25}
 #quote-host .rv-wood-quantity>.field:first-child{flex:1;min-width:0}
 #quote-host .rv-wood-quantity>.field:last-child{flex:0 0 36px}
 #quote-host .rv-wood-quantity select{appearance:none;padding:4px 1px;text-align:center;font-size:.65rem;background:transparent;border-color:transparent}

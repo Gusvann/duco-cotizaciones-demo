@@ -58,6 +58,9 @@ async function capture(options){
   if(options.fullPage) await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo({top:0,left:0,behavior:'instant'});});
   return page.screenshot(options);
 }
+// A component capture excludes the fixed shell and transient session notice.
+const captureFamily=(element,name)=>element.screenshot({path:path.join(artifacts,name),
+  style:'#journey-root .j-top, #quote-host #notice {visibility:hidden !important}'});
 page.on('pageerror', error => browserErrors.push(error.message));
 page.on('console', message => { if (message.type() === 'error') browserErrors.push(message.text()); });
 page.on('dialog', dialog => dialog.accept());
@@ -144,6 +147,122 @@ async function test(name, run) {
 }
 
 try {
+  await test('Bent Legs tiene imagen, receta editable y totales precisos para una y dos mesas',async()=>{
+    await action('new-request').click();
+    await quote('.panel-actions [data-action="step"][data-step="1"]').click();
+    await quote('[data-action="line-open"]').click();
+    const product=quote('[data-line-product="SYN-BENT-LEGS"]');
+    await product.locator('select').selectOption('SYN-BENT-LEGS-R');
+    assert.ok(await product.locator('img').evaluate(img=>img.complete&&img.naturalWidth>500&&img.src.startsWith('data:image/png;')));
+    await product.screenshot({path:path.join(artifacts,'bent-legs-catalogo.png')});
+    await product.locator('[data-action="line-use"]').click();
+    const qty=quote('.header-quantity-control input'),total=quote('[data-article-cost-status]');
+    if(await qty.inputValue()!=='1')await quote('[data-header-increment]').click();
+    assert.match(await total.innerText(),/3,153\.65/);
+    await quote('[data-header-increment]').click();
+    assert.equal(await qty.inputValue(),'2');assert.match(await total.innerText(),/6,307\.31/);
+    const metal=quote('.article-study-fold').filter({has:page.locator('[data-fab-cost-field="rollingQty"]')});
+    if(!await metal.evaluate(el=>el.open))await metal.locator(':scope > summary').click();
+    const rolling=metal.locator('[data-fab-panel="metal-other"]');
+    if(!await rolling.evaluate(el=>el.open))await rolling.locator(':scope > summary').click();
+    const bends=metal.locator('[data-fab-cost-field="rollingQty"]');
+    await page.setViewportSize({width:390,height:760});
+    await bends.fill('0');assert.match(await total.innerText(),/5,227\.31/);
+    await bends.fill('6');await bends.press('Tab');assert.match(await total.innerText(),/6,307\.31/);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));
+    await quote('[data-header-decrement]').click();await total.scrollIntoViewIfNeeded();
+    assert.match(await total.innerText(),/3,153\.65/);
+    await capture({path:path.join(artifacts,'bent-legs-movil.png')});
+  });
+  await test('Tableros y herrería muestran despiece de Excel en escritorio y móvil',async()=>{
+    await action('new-request').click();
+    await quote('.panel-actions [data-action="step"][data-step="1"]').click();
+    await quote('[data-action="line-open"]').click();
+    const product=quote('[data-line-product="SYN-BENT-LEGS"]');
+    await product.locator('select').selectOption('SYN-BENT-LEGS-R');
+    await product.locator('[data-action="line-use"]').click();
+    if(await quote('.header-quantity-control input').inputValue()!=='1')await quote('[data-header-increment]').click();
+    const fold=key=>quote('[data-article-fold="'+key+'"]');
+    for(const [family,expected] of [['boards','517.10'],['metal','1,451.05']]){
+      const panel=fold(family);
+      if(!await panel.evaluate(el=>el.open))await panel.locator(':scope > summary').click();
+      assert.ok((await panel.locator(':scope > summary').innerText()).includes(expected));
+      const summaries=panel.locator('.fabrication-block > summary');
+      assert.equal(await summaries.count(),family==='boards'?6:7);
+      await captureFamily(panel,'vista-'+family+'-bent-legs.png');
+      await page.setViewportSize({width:390,height:844});
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));
+      assert.ok(await panel.locator('.fabrication-workshop').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+      await captureFamily(panel,'vista-'+family+'-movil.png');
+      await page.setViewportSize({width:1440,height:1000});
+    }
+    await quote('[data-fab-panel="board-cnc"] > summary').click();
+    await quote('[data-fab-cost-field="cncRate"]').fill('0');
+    assert.match(await quote('[data-capture-subtotal="board-cnc"]').innerText(),/0\.00/);
+    assert.match(await fold('boards').locator(':scope > summary').innerText(),/382\.10/);
+  });
+  await test('Bolonia permite editar calibre y peso de lámina junto al despiece de perfiles',async()=>{
+    await action('new-request').click();
+    await quote('.panel-actions [data-action="step"][data-step="1"]').click();
+    await quote('[data-action="line-open"]').click();
+    await quote('[data-line-variant]').filter({has:page.locator('option[value="SYN-BOLONIA-R"]')}).selectOption('SYN-BOLONIA-R');
+    await quote('[data-line-product]').filter({has:page.locator('option[value="SYN-BOLONIA-R"]')}).locator('[data-action="line-use"]').click();
+    if(await quote('.header-quantity-control input').inputValue()!=='1')await quote('[data-header-increment]').click();
+    const metal=quote('[data-article-fold="metal"]');
+    if(!await metal.evaluate(el=>el.open))await metal.locator(':scope > summary').click();
+    const sheet=metal.locator('[data-fab-panel="metal-sheet"]');
+    assert.match(await sheet.innerText(),/0\.4356/);assert.match(await sheet.innerText(),/5\.445/);
+    await captureFamily(metal,'vista-herreria-bolonia.png');
+    await sheet.locator('[data-row-field="gauge"]').click();
+    const editor=sheet.locator('[data-row-editor]');
+    assert.equal(await editor.locator('[data-break-field="gauge"]').inputValue(),'16');
+    assert.equal(await editor.locator('[data-break-field="detail.kgPerM2"]').inputValue(),'12.5');
+    await editor.locator('[data-break-field="width"]').fill('70');
+    await editor.locator('[data-break-field="width"]').press('Tab');
+    await sheet.locator('summary').first().click();
+    if(!await sheet.evaluate(el=>el.open))await sheet.locator(':scope > summary').click();
+    const width=sheet.locator('[data-break-field="width"],[data-row-field="width"]').first();
+    assert.equal(await width.inputValue(),'70');
+  });
+  await test('Florencia móvil mantiene la captura y el desplazamiento dentro de la tabla',async()=>{
+    await action('new-request').click();
+    await quote('.panel-actions [data-action="step"][data-step="1"]').click();
+    await quote('[data-action="line-open"]').click();
+    await quote('[data-line-variant="SYN-NUBE"]').selectOption('SYN-NUBE-C');
+    await quote('[data-action="line-use"][data-product="SYN-NUBE"]').click();
+    await quote('[data-header-increment]').click();
+    const wood=quote('[data-article-fold="wood"]');
+    const labor=wood.locator('[data-fab-panel="workshop-labor"]'),table=labor.locator('.workshop-table-scroll');
+    const tariff=table.locator('[data-workshop-field="labor.assembly.rate"]');
+    async function expand(fold,open){
+      if(await fold.evaluate(el=>el.open)!==open)await fold.locator(':scope > summary').click();
+    }
+    async function fits(width){
+      const size=await page.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth,x:window.scrollX}));
+      assert.ok(size.page<=size.viewport+1,`At ${width}px the document is ${size.page}px for a ${size.viewport}px viewport`);
+      assert.equal(size.x,0);
+    }
+    for(const width of [360,390,468]){
+      await page.setViewportSize({width,height:760});
+      await expand(wood,false);await fits(width);
+      await expand(wood,true);await expand(labor,false);await fits(width);
+      await expand(labor,true);await fits(width);
+      await table.evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+      const last=table.locator('.workshop-table-row').first().locator('output');
+      assert.equal(await last.evaluate(el=>{
+        const cell=el.getBoundingClientRect(),view=el.closest('[role="region"]').getBoundingClientRect();
+        return cell.left>=view.left-1&&cell.right<=view.right+1;
+      }),true,'The last amount is reachable inside its table');
+      await tariff.fill('0');await tariff.press('End');
+      const before=await page.evaluate(()=>({x:scrollX,y:scrollY}));
+      await tariff.pressSequentially('.00');
+      assert.equal(await tariff.inputValue(),'0.00');
+      assert.equal(await tariff.evaluate(el=>el===document.activeElement),true);
+      assert.deepEqual(await page.evaluate(()=>({x:scrollX,y:scrollY})),before);
+      await tariff.press('Tab');await fits(width);
+      assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Cómo se calcula MO Entablerado');
+    }
+  });
   await test('Exterior Astil conserva identidad, navegación y menú móvil',async()=>{
     const phase=process.env.DEMO_CAPTURE_PHASE||'after';
     const measurements=[];

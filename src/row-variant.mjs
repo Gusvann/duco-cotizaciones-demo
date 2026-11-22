@@ -1,6 +1,109 @@
 /* Local alternate presentation. Existing editors and calculators remain authoritative. */
 import {createBoardCalculator} from './board-calculator.mjs';
-function installRowVariant(boardCalculator) {
+import {createFabricationCosts} from './fabrication-costs.mjs';
+function installRowVariant(boardCalculator,createCosts) {
+  const fabrication=createCosts(boardCalculator);
+  function fabricationSettings(itemId){
+    return recipeEntry(itemId)?.fabrication||null;
+  }
+  const fabricationMoney=key=>/(?:Rate|Price|Materials)$/.test(key);
+  function formatRate(key,value){
+    if(!fabricationMoney(key)||!boardCalculator.dec(value,2,100000000))return value;
+    const [whole,fraction='']=value.split('.');
+    return formatMoneyDisplay(whole+'.'+fraction.padEnd(2,'0'));
+  }
+  const fabricationLines=rows=>rows.map(([name,amount])=>'<div><dt>'+esc(name)+'</dt><dd>'+esc(boardMoney(boardCalculator.cents(amount)))+'</dd></div>').join('');
+  const panelInputs={
+    'board-labor':['assemblyRate'],'board-days':['integrationDays','dayRate'],'board-cnc':['cncMinutesPerM','cncRate'],
+    'board-other':['extrasPct','extraMaterials'],'metal-finish':['paintFactor'],'metal-other':['rollingQty','rollingPrice']
+  };
+  function fabricationFields(itemId,family,panel,settings){
+    const disabled=!recipeCanEdit()||app.busy||app.operation;
+    const controls=(settings?panelInputs[panel]||[]:[]).map(key=>{
+      const value=settings[key],label=fabrication.fields[family][key],id='fab-rate-'+itemId+'-'+key;
+      const input='<input id="'+esc(id)+'" inputmode="decimal" maxlength="40" data-fab-cost-field="'+esc(key)+'" data-cost-family="'+esc(family)+'" data-cost-item="'+esc(itemId)+'" value="'+esc(formatRate(key,value))+'"'+(disabled?' disabled':'')+'>';
+      return '<div class="field"><label for="'+esc(id)+'">'+esc(label)+'</label>'+(fabricationMoney(key)?'<span class="break-money-input"><span aria-hidden="true">$</span>'+input+'</span>':input)+'</div>';
+    }).join('');
+    return controls?'<div class="fabrication-inputs">'+controls+'</div>':'';
+  }
+  function fabricationPanel(item,family,key,number,label,body,active,populated,settings){
+    const saved=app.breakdownUi.panels||{},stateKey=item.id+'|'+key;
+    const open=active||(Object.hasOwn(saved,stateKey)?saved[stateKey]:populated);
+    return '<details class="workshop-block fabrication-block" data-fab-item="'+esc(item.id)+'" data-fab-panel="'+esc(key)+'"'+(open?' open':'')+'><summary><span class="workshop-number">'+number+'</span><span>'+esc(label)+'</span><output class="workshop-subtotal" data-capture-subtotal="'+esc(key)+'" data-cost-item="'+esc(item.id)+'" data-cost-family="'+family+'"></output></summary><div class="workshop-block-body">'+
+      fabricationFields(item.id,family,key,settings)+body+(key==='board-stock'?'':'<dl class="fabrication-breakdown" data-fabrication-lines="'+esc(item.id)+'" data-cost-family="'+family+'" data-cost-panel="'+key+'"></dl>')+'</div></details>';
+  }
+  function panelFor(record){
+    if(record.section==='boards')return 'board-stock';
+    if(record.section==='board-labor'&&breakdownLaborByDays(record))return 'board-days';
+    if(record.section==='metal-labor')return 'metal-days';
+    return record.section;
+  }
+  function fabricationFamilies({item,row,family,boardPieces,activePanel,materialCard,processCard,editing,addMaterial,addProcess}){
+    const settings=fabricationSettings(item.id);
+    const steel=row.materials.filter(m=>['metal-sheet','metal-tube'].includes(m.section));
+    const hasBoards=row.materials.some(m=>m.section==='boards'),hasProfiles=row.materials.some(m=>m.section==='metal-tube');
+    const block=(key,number,label,options={})=>{
+      const board=key.startsWith('board-'),category=board?'boards':'metal',active=activePanel===key||(key==='board-stock'&&activePanel.startsWith('board-piece-'));
+      const materials=row.materials.filter(m=>panelFor(m)===key),processes=row.processes.filter(p=>panelFor(p)===key);
+      const physical=key==='metal-tube'||key==='metal-sheet';
+      const cards=materials.map(materialCard).join('')+processes.map(processCard).join('');
+      const list=cards?'<div class="'+(physical?'fabrication-metal-list':'fab-detail-list')+'">'+cards+'</div>':'';
+      const add=options.material?addMaterial(options.material,options.action):options.process?addProcess(options.process,options.action,key):'';
+      const rateKey=key==='metal-work'?'laborPrice':key==='metal-finish'?'paintPrice':'';
+      const rates=rateKey&&steel.length?'<div class="fabrication-inputs">'+steel.map(m=>{
+        const unit=rateKey==='laborPrice'?'kg':m.section==='metal-sheet'?'m²':'m';
+        return readField(item.id,m.id,'material','detail.'+rateKey,(m.name||'Pieza')+' · $/'+unit,formatRate(rateKey,m.detail?.[rateKey]??''));
+      }).join('')+'</div>':'';
+      const body=rates+(key==='board-stock'?boardPieces:list)+(key==='board-stock'?'':editing(key))+(add?'<div class="fab-detail-actions">'+add+'</div>':'');
+      const inputs=(board?hasBoards:hasProfiles)?settings?.[category]:null;
+      return fabricationPanel(item,category,key,number,label,body,active,
+        (key==='board-stock'||physical)&&materials.length>0,inputs);
+    };
+    const wrap=(key,label,blocks)=>family(key,label,'<div class="recipe-workshop fabrication-workshop">'+blocks.join('')+'</div>');
+    const boards=wrap('boards','Tableros',[
+      block('board-stock','01','Despiece y composición de tablero',{material:'boards',action:'Pieza de tablero'}),
+      block('board-labor','02','Mano de obra por operación',{process:'board-labor',action:'Operación'}),
+      block('board-days','03','Mano de obra por días',{process:'board-labor',action:'Jornada'}),
+      block('board-cnc','04','CNC / Láser',{process:'board-cnc',action:'Corte CNC / láser'}),
+      block('board-finish','05','Materiales de acabado',{process:'board-finish',action:'Acabado'}),
+      block('board-other','06','Consumibles y adicionales',{material:'board-other',action:'Material adicional'})
+    ]);
+    const blocks=[
+      block('metal-sheet','01','Despiece de lámina',{material:'metal-sheet',action:'Pieza en lámina'}),
+      block('metal-tube','02','Perfiles y tubulares',{material:'metal-tube',action:'Perfil o tubular'})
+    ];
+    if(steel.length)blocks.push(block('metal-work','03','Mano de obra por kg'));
+    const next=blocks.length+1,num=i=>String(next+i).padStart(2,'0');
+    blocks.push(block('metal-days',num(0),'Mano de obra por días',{process:'metal-labor',action:'Mano de obra'}),
+      block('metal-finish',num(1),'Pintura y electrostática',{process:'metal-finish',action:'Pintura / acabado'}),
+      block('metal-cnc',num(2),'Corte láser',{process:'metal-cnc',action:'Corte láser'}),
+      block('metal-other',num(3),'Rolado y otros materiales',{material:'metal-other',action:'Material adicional'}));
+    return {boards,metal:wrap('metal','Herrería',blocks)};
+  }
+  function panelTotal(group){
+    if(!group?.length)return 'Sin captura';
+    if(group.every(line=>line[3]==='rate'||line[3]==='missing-rate'))return group.some(line=>line[3]==='missing-rate')?'Tarifa pendiente':'Tarifa capturada';
+    const included=group.some(line=>line[3]==='included'),charged=group.filter(line=>line[3]!=='included');
+    if(!charged.length&&included)return 'Incluido';
+    const result=fabrication.sum(charged),cents=boardCalculator.cents(result.amount);
+    if(cents===null)return 'Pendiente';
+    return boardMoney(cents)+(result.partial?' · parcial':charged.some(line=>line[3]==='provisional')?' · por validar':'');
+  }
+  function updateFabrication(event){
+    const target=event.target,key=target?.dataset?.fabCostField,family=target?.dataset?.costFamily,id=target?.dataset?.costItem;
+    if(!key||id!==app.openPartId||!recipeCanEdit()||!Object.hasOwn(fabrication.fields,family)||!Object.hasOwn(fabrication.fields[family],key))return;
+    const settings=fabricationSettings(id);
+    if(!settings)return;
+    let value=String(target.value).slice(0,40);
+    const monetary=fabricationMoney(key);
+    if(monetary){try{value=moneyInputValue(value);}catch{/* Keep invalid text editable and mark its cost pending. */}}
+    settings[family][key]=value;
+    target.setAttribute?.('aria-invalid',String(value!==''&&!boardCalculator.dec(value,monetary?2:6,monetary?100000000:1000000)));
+    if(event.type==='change')target.value=formatRate(key,value);
+    app.dirty=true;refreshFamilyTotals(id);articleHeaderRefresh(id);
+  }
+  quoteRoot.addEventListener('input',updateFabrication);
+  quoteRoot.addEventListener('change',updateFabrication);
   const nativeEditor = breakdownEditorHtml;
   const nativeWoodEditor = solidWoodEditorHtml;
   const nativeWoodCard = solidWoodRecipeCard;
@@ -40,7 +143,7 @@ function installRowVariant(boardCalculator) {
     const label = text => '<span>' + text + '</span>';
     const required=text=>label(text+requiredSymbol);
     const measures = '<span class="rv-measure-heading">Medidas y acabado</span><div class="rv-wood-measure-grid">'+['Ancho','Largo','Unidad','Caras','Entablado','Desperdicio %'].map(required).join('')+'</div>';
-    const html = kind === 'wood' ? woodGrid(required('Pieza'),required('Cantidad'),required('Material'),required('Espesor · in'),measures,required('Precio del material'),required('CNC / láser'),label('Importe'))
+    const html = kind === 'wood' ? woodGrid(required('Pieza'),label('Cantidad total'),required('Material'),required('Espesor · in'),measures,required('Precio del material'),required('CNC / láser'),label('Importe'))
       : kind === 'supply' ? supplyGrid(label('Tipo de insumo'),label('Concepto'),label('SKU'),label('Cantidad'),label('Unidad'),label('Precio unitario'),label('Importe'))
       : grid(label('Concepto'),label('Cantidad'),label('Unidad'),label('Precio unitario'),label('Importe'));
     return html.replace('class="rv-grid','aria-hidden="true" class="rv-table-heading rv-grid');
@@ -49,6 +152,29 @@ function installRowVariant(boardCalculator) {
   const pending = label => '<div class="field"><label>' + esc(label) + '</label><span class="rv-pending">Pendiente</span></div>';
   const woodUnit = id => '<div class="field"><label for="rv-wood-unit-' + esc(id) + '">Unidad</label><select id="rv-wood-unit-' + esc(id) + '" aria-label="Unidad de la pieza"><option value="Pieza" selected>Pieza</option></select></div>';
   const laborUnit = (id, days) => '<div class="field"><label for="rv-labor-unit-'+esc(id)+'">Unidad</label><select id="rv-labor-unit-'+esc(id)+'" aria-label="Unidad del tiempo"><option selected>'+ (days?'Día':'Hora') +'</option></select></div>';
+
+  // The engine owns scaling. Keep the editable recipe per article and expose
+  // its derived total without writing that total back into quantityPerProduct.
+  function woodQuantityText(itemId,result) {
+    const index=partViewQuote().items.findIndex(item=>item.id===itemId);
+    const invalid=app.partDraft?.raw?.['items.'+index+'.quantity'];
+    const total=result.requiredQuantity;
+    return invalid||!Number.isFinite(total)||total<=0?'Pendiente':solidWoodNumber(total)+(total===1?' pieza':' piezas');
+  }
+  function woodQuantityCell(itemId,component,quantity,unit,result) {
+    return '<output class="rv-wood-required" data-row-wood-quantity="'+esc(component.id)+'" data-row-wood-article="'+esc(itemId)+'" aria-label="'+esc('Cantidad total de '+(component.name||'la pieza'))+'" aria-live="polite">'+esc(woodQuantityText(itemId,result))+'</output>'
+      +'<div class="rv-wood-quantity">'+quantity+unit+'</div><small class="rv-wood-basis-label">Por artículo'+requiredSymbol+'</small>';
+  }
+  function refreshWoodQuantities() {
+    const cache=new Map();
+    quoteRoot.querySelectorAll('[data-row-wood-quantity]').forEach(output=>{
+      const itemId=output.dataset.rowWoodArticle;
+      if(!partViewQuote().items.some(item=>item.id===itemId))return;
+      if(!cache.has(itemId))cache.set(itemId,new Map(solidWoodEntries(itemId,true).map(component=>[component.id,component])));
+      const component=cache.get(itemId).get(output.dataset.rowWoodQuantity);
+      if(component)output.textContent=woodQuantityText(itemId,solidWoodResult(itemId,component));
+    });
+  }
 
   // Read-only capture summaries. Purchases are grouped exactly as in the
   // manufacturing projection; an incomplete or ambiguous charge stays pending.
@@ -87,9 +213,23 @@ function installRowVariant(boardCalculator) {
         const material=row.materials.find(value=>value.id===issue.target.id);
         if(material)conflictIds.add(material.purchaseGroup||material.id);
       }
-      const add=(total,cents,provisional=false)=>{
+      const settings=fabricationSettings(itemId),math=boardCalculator,articleQty=math.dec(String(item.quantity),3,100000);
+      const sections=new Map(),byPanel=Object.create(null);
+      const recordPanel=(panel,name,exact,state='')=>{(byPanel[panel]||=[]).push([name,exact,panel,state]);};
+      const recordNative=(record,cents,state='')=>recordPanel(panelFor(record),record.name||record.category,Number.isSafeInteger(cents)?math.div(math.v(cents),math.v(100)):null,state);
+      const add=(total,cents,provisional=false,exact=null)=>{
         if(cents===null||!Number.isSafeInteger(cents)||cents<0||!Number.isSafeInteger(total.cents+cents)){total.missing++;return;}
+        if(settings)total.exact=math.add(total.exact||math.v(0),exact||math.div(math.v(cents),math.v(100)));
         total.cents+=cents;total.known++;total.provisional ||= provisional;
+      };
+      const capture=(family,lines)=>{
+        const section=sections.get(family)||[];
+        const scaled=lines.map(([name,unit,panel])=>[name,math.mul(unit,articleQty),panel]);
+        for(const [name,amount,panel] of scaled)recordPanel(panel,name,amount);
+        section.push(...scaled);sections.set(family,section);
+        const {amount,partial}=fabrication.sum(scaled),cents=math.cents(amount);
+        add(totals[family],cents===null?null:Number(cents),false,amount);
+        if(partial&&cents!==null)totals[family].missing++;
       };
       const groups=new Map();
       for(const material of row.materials){
@@ -102,57 +242,109 @@ function installRowVariant(boardCalculator) {
       for(const [purchase,materials] of groups){
         const families=new Set(materials.map(material=>articleStudyFamily(material.section)));
         for(const family of families)totals[family].count++;
+        for(const m of materials){
+          if(m.section!=='metal-sheet'&&m.section!=='metal-tube')continue;
+          if(m.section==='metal-tube'&&settings&&materials.length===1&&!conflictIds.has(purchase))continue;
+          for(const [key,field] of [['metal-work','laborPrice'],['metal-finish','paintPrice']])
+            recordPanel(key,m.name,null,math.dec(m.detail?.[field],2,100000000)?'rate':'missing-rate');
+        }
         if(families.size!==1||conflictIds.has(purchase)||(overlap&&families.has('wood'))){
           for(const family of families)totals[family].missing++;
+          for(const material of materials)recordNative(material,null);
           continue;
         }
         const family=[...families][0],cost=costs.get(id('M',purchase));
-        if(family==='boards'&&materials.length===1){const value=boardResult(item,materials[0]);if(value.totalCents!==null){add(totals[family],Number(value.totalCents));totals[family].base=true;continue;}}
-        add(totals[family],cost?.netAmount?D.decimal(cost.netAmount,2):null,family==='supplies'&&materials.every(hasPurchasePrice)?false:!cost||cost.status==='Pendiente');
+        const material=materials[0];
+        if(settings&&materials.length===1&&(material.section==='boards'||material.section==='metal-tube')){
+          const physical=boardMaterial(item,material),basis=family==='boards'?boardBasis(itemId,material.id):null;
+          const lines=fabrication.piece(physical,basis,settings[family]);
+          capture(family,lines.map(([name,value,panel])=>[material.name+' · '+name,value,panel]));
+          continue;
+        }
+        if(material.section==='boards'&&materials.length===1){const value=boardResult(item,material);if(value.totalCents!==null){add(totals[family],Number(value.totalCents));recordNative(material,Number(value.totalCents));totals[family].base=true;continue;}}
+        const cents=cost?.netAmount?D.decimal(cost.netAmount,2):null,provisional=!(family==='supplies'&&materials.every(hasPurchasePrice))&&(!cost||cost.status==='Pendiente');
+        add(totals[family],cents,provisional);
+        const panels=new Set(materials.map(panelFor));
+        if(panels.size===1)recordNative(material,cents,provisional?'provisional':'');
+        else for(const part of materials)recordNative(part,null);
       }
+      for(const family of sections.keys())capture(family,fabrication.overhead(family,settings[family]));
       for(const process of row.processes){
         const total=totals[articleStudyFamily(process.section)];total.count++;
         if(process.source?.kind==='included'){
-          if(process.source.reviewed&&row.materials.some(material=>material.id===process.source.includedInMaterialId))total.included=true;
+          const included=process.source.reviewed&&row.materials.some(material=>material.id===process.source.includedInMaterialId);
+          recordNative(process,null,included?'included':'');
+          if(included)total.included=true;
           else total.missing++;
           continue;
         }
         const cost=costs.get(id('P',process.id));
         const amount=process.source?.kind==='manual'?breakdownLineSubtotal(process,item,true):cost?.netAmount?D.decimal(cost.netAmount,2):null;
         add(total,amount,!cost||cost.status==='Pendiente');
+        recordNative(process,amount,!cost||cost.status==='Pendiente'?'provisional':'');
       }
       if(draft?.kind==='group'){
         const affected=new Set(row.materials.filter(material=>material.groupId===draft.value?.id).map(material=>articleStudyFamily(material.section)));
         for(const family of affected)totals[family].missing++;
       }
-      if(wood.length){
-        const total=totals.wood;total.count+=wood.length;total.preview=true;
+      const workshop=solidWoodEnabled()&&(wood.length||solidWoodState(itemId)?.workshop)?localWorkshop.read(itemId):null;
+      if(wood.length||workshop?.total.totalCents!=null){
+        const total=totals.wood;total.count+=wood.length||1;total.preview=true;
         if(overlap)total.missing++;
         else{
-          const value=solidWoodSummary(itemId).articleCosts.woodCost;
-          add(total,value===null?null:D.decimal(String(value),2),true);
+          // Legacy wood processes can represent the same work as the recipe.
+          // With both sources present only the raw stock is unambiguous.
+          const hasProcesses=row.processes.some(process=>articleStudyFamily(process.section)==='wood');
+          const result=hasProcesses?workshop?.groups.dimensions:workshop?.total;
+          const exact=settings&&!hasProcesses&&workshop?.exactArticleTotal;
+          add(total,result?.totalCents==null?null:Number(result.totalCents),false,exact?{n:BigInt(exact.n),d:BigInt(exact.d)}:null);
+          if(hasProcesses||result?.partial)total.missing++;
         }
       }
       return Object.fromEntries(keys.map(key=>{
         const total=totals[key];
-        if(!total.count&&!total.missing)return [key,{text:QuotePdf.money(0),title:'Sin conceptos capturados.'}];
-        if(total.missing&&!total.known)return [key,{text:'Pendiente',title:'Hay conceptos sin importe o relaciones por resolver.'}];
-        const suffix=total.missing||total.preview?' · parcial':total.base?' · base':total.provisional?' · por validar':total.included&&!total.known?' · incluido':'';
-        const title=total.preview?'Vista parcial de madera; los procesos y tarifas pendientes no se incluyen ni quedan confirmados.':total.missing?'Importe parcial; hay conceptos o relaciones pendientes.':total.provisional?'Importe capturado, sujeto a validación.':total.included?'Los procesos incluidos no se suman otra vez.':'Importe capturado del rubro.';
-        return [key,{text:QuotePdf.money(total.cents)+suffix,title}];
+        if(total.exact){const cents=math.cents(total.exact);if(cents===null)return [key,{text:'Fuera de rango',title:'El costo excede el importe admitido.'}];total.cents=Number(cents);}
+        if(!total.count&&!total.missing)return [key,{complete:true,text:QuotePdf.money(0),title:'Sin conceptos capturados.'}];
+        if(total.missing&&!total.known)return [key,{byPanel,text:'Pendiente',title:'Hay conceptos sin importe o relaciones por resolver.'}];
+        const suffix=total.missing?' · parcial':total.base?' · base':total.provisional?' · por validar':total.included&&!total.known?' · incluido':'';
+        const title=total.missing?'Importe parcial; hay conceptos o relaciones pendientes.':total.preview?'Costo calculado de madera maciza.':total.provisional?'Importe capturado, sujeto a validación.':total.included?'Los procesos incluidos no se suman otra vez.':'Importe capturado del rubro.';
+        return [key,{exact:total.exact,lines:sections.get(key),byPanel,complete:!total.missing&&!total.provisional&&!total.base,cents:total.known?total.cents:null,workshop:total.preview,text:QuotePdf.money(total.cents)+suffix,title}];
       }));
     }catch(_){return unknown();}
   }
   function familyOutput(itemId,key,value){
     return '<output data-rv-family-total="'+esc(key)+'" data-rv-article="'+esc(itemId)+'" aria-live="polite" title="'+esc(value.title)+'">'+esc(value.text)+'</output>';
   }
-  function refreshFamilyTotals(){
+  const nativeHeaderCost=articleHeaderRead;
+  articleHeaderRead=function(id){
+    const cost=nativeHeaderCost(id);
+    if(cost.source!=='LOCAL_CAPTURE'||cost.status!=='Costo incompleto')return cost;
+    const families=familyTotals(id),groups=Object.values(families);
+    const amounts=groups.map(group=>group.cents).filter(Number.isSafeInteger);
+    const precise=groups.filter(group=>group.exact).map(group=>group.exact);
+    const exactCents=precise.length?boardCalculator.cents(precise.reduce(boardCalculator.add)):null;
+    if(precise.length&&exactCents===null)return cost;
+    const cents=precise.length?Number(exactCents):amounts.reduce((sum,value)=>sum+value,0);
+    if(!amounts.length||!Number.isSafeInteger(cents))return cost;
+    if(families.wood.workshop&&groups.every(group=>group.complete))
+      return {...cost,cents,status:'Costo capturado',reason:'Costo calculado de los rubros del artículo, sin IVA.'};
+    return {...cost,cents,reason:'Costo actual de los rubros capturados, sin IVA. Hay importes pendientes.'};
+  };
+  function refreshFamilyTotals(onlyId){
     const cache=new Map();
     quoteRoot.querySelectorAll('[data-rv-family-total]').forEach(output=>{
       const id=output.dataset.rvArticle,key=output.dataset.rvFamilyTotal;
+      if(onlyId&&id!==onlyId)return;
       if(!cache.has(id))cache.set(id,familyTotals(id));
       const value=cache.get(id)?.[key];if(!value)return;
       output.textContent=value.text;output.title=value.title;
+    });
+    quoteRoot.querySelectorAll('[data-fabrication-lines], [data-capture-subtotal]').forEach(node=>{
+      const id=node.dataset.fabricationLines||node.dataset.costItem;
+      if(onlyId&&id!==onlyId)return;
+      const family=cache.get(id)?.[node.dataset.costFamily];
+      if(node.dataset.captureSubtotal)node.textContent=family?.text==='Sin evaluar'?'Sin evaluar':panelTotal(family?.byPanel?.[node.dataset.captureSubtotal]);
+      else node.innerHTML=fabricationLines((family?.lines||[]).filter(line=>line[2]===node.dataset.costPanel));
     });
   }
 
@@ -200,6 +392,10 @@ function installRowVariant(boardCalculator) {
   function rowEditor(original, wood) {
     const draft = app.breakdownEditor;
     if (!original || !draft || !draft.itemId || (wood && !draft.solidWoodF) || (!wood && !['component','purchase','process'].includes(draft.kind))) return original;
+    if(!wood&&draft.kind==='component'&&['metal-sheet','metal-tube'].includes(draft.value.section)){
+      if(draft.value.section==='metal-tube'&&fabricationSettings(draft.itemId))return profileEditor(draft);
+      return metalEditor(original,draft);
+    }
     if(!wood&&draft.value.section==='boards'&&draft.kind==='component')return boardEditor(draft);
     const value = wood ? draft.solidWoodF : draft.value, process = !wood && draft.kind === 'process', supply = !wood && !process && value.section === 'supplies';
     const state = {html:original}, attr = wood ? 'data-solid-field' : 'data-break-field';
@@ -231,10 +427,10 @@ function installRowVariant(boardCalculator) {
     const group=wood ? takeRegion(state,'data-solid-action="group-price"','button') : '';
     const cnc=wood ? woodCncEditor(state,draft,attr) : '';
     if(wood){takeRegion(state,'data-solid-live="referencePending"','div') || takeRegion(state,'data-solid-live="pending"','div');}
-    let amount;
+    let amount,woodResult;
     if (wood) {
-      const result=solidWoodResult(draft.itemId,value);
-      amount=amountHtml(solidWoodMoney(result.articleCosts.woodCost),value.id,true,'Calculado con medidas');
+      woodResult=solidWoodResult(draft.itemId,value);
+      amount=amountHtml(solidWoodMoney(woodResult.articleCosts.woodCost),value.id,true,'Calculado con medidas');
     } else {
       const previous = takeRegion(state, 'data-break-subtotal="' + esc(value.id) + '"', 'output');
       const nonManual=process && value.source?.kind && value.source.kind!=='manual';
@@ -249,7 +445,7 @@ function installRowVariant(boardCalculator) {
     const measures=wood?'<div class="rv-wood-measure-grid">'+width+length+measureUnit+faces+jointed+waste+'</div>':'';
     const priceOptions=wood?'<details class="rv-wood-price-options" data-solid-exceptions'+(value.adjustment?' open':'')+'><summary>Ajustar precio</summary>'+reason+'<div class="rv-wood-price-actions">'+(reset?renameButton(reset,'Restablecer'):'')+(group?renameButton(group,'Compartir precio'):'')+'</div></details>':'';
     const material=wood?species+(historical?historical.replace('class="note"','class="rv-wood-legacy"'):''):'';
-    const row=wood ? woodGrid(concept,'<div class="rv-wood-quantity">'+quantity+unit+'</div>',material,thickness,measures,price+priceOptions,cnc,amount) : supply ? supplyGrid(type||pending('Tipo de insumo'),concept,sku,quantity,unit,price,amount) : grid(concept,quantity,unit,price,amount);
+    const row=wood ? woodGrid(concept,woodQuantityCell(draft.itemId,value,quantity,unit,woodResult),material,thickness,measures,price+priceOptions,cnc,amount) : supply ? supplyGrid(type||pending('Tipo de insumo'),concept,sku,quantity,unit,price,amount) : grid(concept,quantity,unit,price,amount);
     const options=supply?supplyDetails(state,value):type+state.html;
     const actions=wood?'<div class="rv-wood-confirm"><button type="button" class="quiet" data-break-action="wood-confirm">Confirmar cambios</button><button type="button" class="quiet" data-break-action="wood-discard">Descartar</button></div>':footer;
     return '<div class="rv-edit" data-row-editor="' + esc(value.id) + '">' + row + (wood?'':details(draft.itemId,value.id,options,false,supply)) + error + actions + '</div>';
@@ -277,8 +473,12 @@ function installRowVariant(boardCalculator) {
   };
   solidWoodRefresh = function () {
     nativeWoodRefresh();
+    refreshWoodQuantities();
     const draft=app.breakdownEditor;
-    if(!draft?.solidWoodF || !partSameContext(draft.context))return;
+    if(!draft?.solidWoodF || !partSameContext(draft.context)){
+      if(app.openPartId)refreshFamilyTotals(app.openPartId);
+      return;
+    }
     const result=solidWoodResult(draft.itemId,draft.solidWoodF),output=quoteRoot.querySelector('[data-row-wood-total="'+CSS.escape(draft.solidWoodF.id)+'"] strong');
     if(output)output.textContent=solidWoodMoney(result.articleCosts.woodCost);
     const issues={quantityPerProduct:'QUANTITY_PER_ARTICLE',width:'WIDTH',length:'LENGTH',thickness:'THICKNESS',finishFaces:'FINISH_FACES',jointed:'JOINTED',wasteRate:'WASTE_RATE'};
@@ -288,8 +488,9 @@ function installRowVariant(boardCalculator) {
       field.dataset.rvMissing=String(missing);input.setAttribute('aria-invalid',String(missing));
     });
     const family=quoteRoot.querySelector('.solid-wood-f-total>span');
-    if(family){const summary=solidWoodSummary(draft.itemId);family.textContent=solidWoodMoney(summary.articleCosts.woodCost)+' · '+(summary.quality==='PENDING'?'Pendiente':'Por validar');}
-    refreshFamilyTotals();
+    if(family&&!family.dataset.rvFamilyTotal){const summary=solidWoodSummary(draft.itemId);family.textContent=solidWoodMoney(summary.articleCosts.woodCost)+' · '+(summary.quality==='PENDING'?'Pendiente':'Por validar');}
+    refreshFamilyTotals(draft.itemId);
+    articleHeaderRefresh(draft.itemId);
   };
   breakdownRefreshSubtotal = function () {nativeRefreshSubtotal();refreshFamilyTotals();};
   breakdownMaquilaSummaryText = function(summary) {
@@ -297,6 +498,7 @@ function installRowVariant(boardCalculator) {
   };
   solidWoodFamilyHtml = function(item,row,fold) {
     let html=nativeWoodFamily(item,row,fold)
+      .replace(/<div class="fab-heading"><h5>Madera maciza[^<]*<\/h5>(?:<span class="fab-badge">[^<]*<\/span>)*<\/div>/,'')
       .replace('<span class="fab-badge">Variante en evaluación</span>','')
       .replace('<p class="meta">UAT local · preview sin persistencia backend. Los precios DEMO no son tarifas de Duco.</p>','')
       .replace('<p class="note">UAT local · precios y procesos preview. No se guardan en el backend ni son costos financieros confirmados.</p>','')
@@ -349,7 +551,7 @@ function installRowVariant(boardCalculator) {
   function boardMaterial(item,value){
     if(value.measureSource!=='part')return value;
     const width=item.specs.find(spec=>spec.type==='Ancho'&&!spec.na),length=item.specs.find(spec=>spec.type==='Largo'&&!spec.na);
-    return {...value,width:width?.value||'',length:length?.value||'',lengthUnit:width?.unit===length?.unit?width?.unit:''};
+    return {...value,width:width?.value||'',length:length?.value||'',lengthUnit:value.section==='metal-tube'?length?.unit:width?.unit===length?.unit?width?.unit:''};
   }
   function boardResult(item,value){const draft=app.breakdownEditor,invalid=draft?.value.id===value.id&&Object.keys(draft.numericErrors||{}).length,perSheet=/^hoja$/i.test(value.purchaseUnit||'');return boardCalculator.calculate(boardMaterial(item,invalid||!perSheet?{...value,unitPrice:''}:value),boardBasis(item.id,value.id),String(item.quantity));}
   function boardMoney(cents){return cents===null?'Pendiente':QuotePdf.money(Number(cents));}
@@ -368,12 +570,53 @@ function installRowVariant(boardCalculator) {
     const select=(key,label,v)=>f(key,label,v,{values:options(['0','1','2'],v)});
     const dim=(key,label)=>{let html=f(key,label,physical[key],{number:true});if(editing&&inherited)html=html.replace('<input ','<input readonly aria-readonly="true" ');return html;};
     const composition=f('substrate','Sustrato',value.substrate,{values:options(boardSubstrates,value.substrate)})+f('thickness','Espesor · mm',value.thickness,{values:options(['3','4.2','5','5.5','6','9','12','15','18','25','30','45'],value.thickness)})+'<small>'+esc(value.supplier||'')+'</small>';
-    return boardGrid(f('name','Pieza',value.name),composition,f('quantity','Cantidad por artículo',value.quantity,{number:true}),
+    return boardGrid(f('name','Pieza',value.name),composition,f('quantity','Cantidad por artículo',value.quantity,{number:true})+requiredPieces(item,value),
       '<div class="rv-board-three">'+dim('width','Ancho · '+(physical.lengthUnit||'unidad'))+dim('length','Largo · '+(physical.lengthUnit||'unidad'))+'<output data-board-area="'+esc(value.id)+'">'+esc(result.areaM2??'—')+'</output></div>',
       '<div class="rv-board-two">'+select('detail.edgeWidthCount','Cantos ancho',d.edgeWidthCount)+select('detail.edgeLengthCount','Cantos largo',d.edgeLengthCount)+'</div>',
       '<div class="rv-board-two">'+select('detail.paintFaces','Caras con pintura',d.paintFaces)+select('detail.gluedFaces','Caras pegadas',d.gluedFaces)+'</div>',
       '<div class="rv-board-two">'+f('detail.linearCentimeters','Recorrido CNC · cm',d.linearCentimeters,{number:true})+f('detail.laserCount','Repeticiones CNC',d.laserCount,{number:true})+'</div>',
       '<output data-board-base="'+esc(value.id)+'" aria-live="polite">'+esc(boardMoney(result.totalCents))+'</output>');
+  }
+  function requiredPieces(item,material){
+    const index=partViewQuote().items.findIndex(row=>row.id===item.id);
+    let value='';
+    if(!app.partDraft?.raw?.['items.'+index+'.quantity']){
+      try{value=DemoRecipeCatalog.scaled(material.quantity,String(item.quantity));}catch{/* Incomplete physical quantity. */}
+    }
+    return '<small class="rv-required-pieces">'+(value?esc(value)+(value==='1'?' pieza total':' piezas totales'):'Cantidad pendiente')+'</small>';
+  }
+  function profileEditor(draft){
+    const item=partViewQuote().items.find(row=>row.id===draft.itemId),m=draft.value,d=m.detail||{};
+    const field=(key,label,value)=>breakdownField(key,label,value,{number:true});
+    return '<div class="rv-edit" data-row-editor="'+esc(m.id)+'"><div class="tech-form-grid">'+
+      breakdownField('name','Perfil',m.name)+field('quantity','Piezas por artículo',m.quantity)+requiredPieces(item,m)+
+      field('length','Largo del desarrollo',m.length)+breakdownField('lengthUnit','Unidad de longitud',m.lengthUnit,{values:['mm','cm','m']})+
+      field('detail.sideACm','Lado A o diámetro · cm',d.sideACm)+field('detail.sideBCm','Lado B · cm',d.sideBCm)+
+      field('detail.kgPerMl','Peso · kg/m',d.kgPerMl)+field('unitPrice','Precio de material · $/kg',m.unitPrice)+
+      field('detail.laborPrice','Precio de mano de obra · $/kg',d.laborPrice)+field('detail.paintPrice','Precio de pintura · $/m',d.paintPrice)+
+      '</div>'+(draft.error?'<p class="error" role="alert">'+esc(draft.error)+'</p>':'')+'</div>';
+  }
+  function metalEditor(original,draft){
+    const state={html:original},sheet=draft.value.section==='metal-sheet';
+    const field=(key,label)=>{const html=takeField(state,'data-break-field',key);return label&&html?renameLabel(html,label):html;};
+    const error=takeRegion(state,'<p class="error" role="alert">','p'),actions=takeRegion(state,'<div class="break-editor-actions">','div');
+    const inputs=[field('name','Pieza'),field('quantity','Piezas por artículo'),field('measureSource'),field('lengthUnit','Unidad de medidas'),
+      ...(sheet?[field('width','Ancho'),field('length','Largo'),field('gauge','Calibre'),field('detail.kgPerM2','Peso · kg/m²')]:
+        [field('profile','Perfil'),field('detail.sideACm','Lado A o diámetro · cm'),field('detail.sideBCm','Lado B · cm'),field('length','Desarrollo'),field('detail.kgPerMl','Peso · kg/m')]),
+      field('unitPrice','Precio por unidad de compra'),field('purchaseUnit'),field('detail.laborPrice','Mano de obra · $/kg'),field('detail.paintPrice',sheet?'Pintura · $/m²':'Pintura · $/m'),
+      field('detail.linearCentimeters','Corte · cm'),field('detail.laserCount','Repeticiones')];
+    return '<div class="rv-edit" data-row-editor="'+esc(draft.value.id)+'"><div class="fabrication-inputs">'+inputs.join('')+'</div><details class="rv-board-options"><summary>Compra, proveedor y especificaciones</summary>'+state.html+'</details>'+error+actions+'</div>';
+  }
+  function metalRow(item,m){
+    const sheet=m.section==='metal-sheet',physical=boardMaterial(item,m),geometry=fabrication.metalGeometry(physical),data=m.detail||{};
+    const field=(key,label,value)=>readField(item.id,m.id,'material',key,label,value);
+    const unit=physical.lengthUnit||'unidad';
+    const metric=(label,amount)=>'<div class="fabrication-metric"><small>'+label+'</small><output>'+esc(boardCalculator.text(amount)??'Pendiente')+'</output></div>';
+    const dimensions=sheet?[field('width','Ancho · '+unit,physical.width),field('length','Largo · '+unit,physical.length),field('gauge','Calibre',m.gauge)]:
+      [field('detail.sideACm','Lado A / Ø · cm',data.sideACm),field('detail.sideBCm','Lado B · cm',data.sideBCm),field('length','Desarrollo · '+unit,physical.length)];
+    return '<div class="fabrication-metal-piece"><div class="fabrication-metal-name">'+field('name','Pieza',m.name)+requiredPieces(item,m)+'</div>'+field('quantity','Cant.',m.quantity)+dimensions.join('')+
+      field(sheet?'detail.kgPerM2':'detail.kgPerMl',sheet?'kg/m²':'kg/m',sheet?data.kgPerM2:data.kgPerMl)+
+      metric(sheet?'Área · m²':'Longitud · m',geometry.measure)+metric('Peso · kg',geometry.kg)+'</div>';
   }
   function boardEditor(draft){
     const value=draft.value,item=partViewQuote().items.find(item=>item.id===draft.itemId),basis=boardBasis(item.id,value.id);
@@ -406,6 +649,7 @@ function installRowVariant(boardCalculator) {
   function closedRow(item, value, kind, costMap) {
     if(kind==='material'&&value.section==='boards')return boardRow(item,value);
     const wood=kind==='wood', process=kind==='process', supply=!wood&&!process&&value.section==='supplies', f=(key,label,v,select=false)=>readField(item.id,value.id,kind,key,label,v,select);
+    if(kind==='material'&&['metal-sheet','metal-tube'].includes(value.section))return metalRow(item,value);
     const namedBySpecification=!wood && ['supplies','maquilas'].includes(value.section);
     const name=wood?value.name:namedBySpecification?value.specification||value.name||value.category||'':value.name||value.category||value.specification||'';
     const labor=process && /-(labor|cnc)$/.test(value.section||''), conceptKey=wood?'name':((process&&value.section==='maquilas')||value.section==='supplies')?'specification':labor?'category':'name';
@@ -421,7 +665,7 @@ function installRowVariant(boardCalculator) {
     const measures=wood?'<div class="rv-wood-measure-grid">'+f('width','Ancho',value.width)+f('length','Largo',value.length)+f('lengthUnit','Unidad de medidas',value.lengthUnit,true)+f('finishFaces','Caras de acabado',value.finishFaces,true)+f('jointed','Entablerado',jointLabel,true)+f('wasteRate','Desperdicio (%)',value.wasteRate)+'</div>':'';
     const choice=wood?value.cnc?.decision==='yes'?'Sí':value.cnc?.decision==='no'?'No':'—':'';
     const cnc=wood?f('cnc.decision','CNC / láser',choice,true):'';
-    const row=wood?woodGrid(concept,'<div class="rv-wood-quantity">'+quantity+unit+'</div>',f('woodKind','Material',value.woodKind,true),f('thickness','Espesor (in)',value.thickness),measures,price,cnc,amountHtml(amount,'',false,'Calculado con medidas')):supply?supplyGrid(f('category','Tipo de insumo',value.category,true),concept,f('sku','SKU',value.sku),quantity,unit,price,amountHtml(amount)):grid(concept,quantity,unit,price,amountHtml(amount));
+    const row=wood?woodGrid(concept,woodQuantityCell(item.id,value,quantity,unit,result),f('woodKind','Material',value.woodKind,true),f('thickness','Espesor (in)',value.thickness),measures,price,cnc,amountHtml(amount,'',false,'Calculado con medidas')):supply?supplyGrid(f('category','Tipo de insumo',value.category,true),concept,f('sku','SKU',value.sku),quantity,unit,price,amountHtml(amount)):grid(concept,quantity,unit,price,amountHtml(amount));
     if(wood)return row;
     const detailLabel=supply?'Proveedor':process?'Proveedor / SKU y detalles':'Proveedor / SKU';
     const detailButton='<button type="button" class="quiet rv-detail-trigger" data-row-details="'+esc(kind)+'" data-row-item="'+esc(item.id)+'" data-row-id="'+esc(value.id)+'">'+detailLabel+'</button>';
@@ -437,9 +681,10 @@ function installRowVariant(boardCalculator) {
     const remove=articlePanelDeleteButton(kind,item,value.id,value.name||value.category);
     const body=active?breakdownEditorHtml():closedRow(item,value,kind,costMap);
     if(kind==='material'&&value.section==='boards')return '<article class="fab-detail-line article-panel-record rv-row rv-board-row" data-record-id="'+esc(value.id)+'" data-record-kind="material">'+body+'<div class="rv-board-actions"><button type="button" class="quiet" data-break-action="duplicate-component" data-id="'+esc(value.id)+'">Duplicar</button>'+remove+'</div></article>';
-    const priced=kind==='material'&&value.section==='supplies'&&hasPurchasePrice(value);
+    const priced=kind==='material'&&(value.section==='supplies'&&hasPurchasePrice(value)||value.section==='metal-tube'&&!!fabricationSettings(item.id));
     const status='<div class="rv-row-status">'+(priced?'':nativeStatus(nativeHtml))+(shared?'<small>Compra compartida: se suma una sola vez.</small>':'')+(!priced&&referenceItem(item.id)?'<small>Referencia pendiente de validar.</small>':'')+'</div>';
-    return '<article class="fab-detail-line article-panel-record rv-row" data-record-id="'+esc(value.id)+'" data-record-kind="'+kind+'">'+body+status+'<div class="rv-row-actions">'+(active?'':edit)+remove+'</div></article>';
+    const metal=kind==='material'&&['metal-sheet','metal-tube'].includes(value.section);
+    return '<article class="fab-detail-line article-panel-record rv-row'+(metal?' fabrication-metal-row':'')+'" data-record-id="'+esc(value.id)+'" data-record-kind="'+kind+'">'+body+status+'<div class="rv-row-actions">'+(active?'':metal?edit.replace('rv-redundant-edit','fabrication-edit'):edit)+remove+'</div></article>';
   }
   articlePanelMaterialCard = function (item, row, value, measurement) {
     const shared=!!value.purchaseGroup&&row.materials.filter(material=>material.purchaseGroup===value.purchaseGroup).length>1;
@@ -482,22 +727,26 @@ function installRowVariant(boardCalculator) {
       const region=articleStudyElement(html,supplyAt,'section');
       html=html.slice(0,supplyAt)+tableWrap(region.html,'<div class="fab-detail-list">','supply')+html.slice(region.end);
     }
+    for(const family of ['boards','metal']){
+      const result=totals[family];
+      const subtotal=new RegExp('(<output class="workshop-subtotal" data-capture-subtotal="([^"]+)" data-cost-item="[^"]+" data-cost-family="'+family+'">)</output>','g');
+      html=html.replace(subtotal,(_,tag,key)=>tag+esc(result.text==='Sin evaluar'?'Sin evaluar':panelTotal(result.byPanel?.[key]))+'</output>');
+      const lines=new RegExp('(<dl class="fabrication-breakdown" data-fabrication-lines="[^"]+" data-cost-family="'+family+'" data-cost-panel="([^"]+)">)</dl>','g');
+      html=html.replace(lines,(_,tag,key)=>tag+fabricationLines((result.lines||[]).filter(line=>line[2]===key))+'</dl>');
+    }
     html=tableWrap(html,'<div class="fab-detail-list rv-board-list">','board');
     html=tableWrap(html,'<div class="fab-detail-list">','general');
     html=tableWrap(html,'<div class="recipe-piece-list">','wood');
-    const marker='<div class="wood-direct-pieces" aria-label="Piezas de madera">',at=html.indexOf(marker);
-    if(at>=0){
-      const region=articleStudyElement(html,at,'div'), key=item.id+'|row-wood-dimensions', stored=app.breakdownUi.panels||{};
-      const open=Object.hasOwn(stored,key)?stored[key]:true;
-      const body=region.html.slice(marker.length,-6);
-      const folded=marker+'<details class="rv-wood-dimensions" data-fab-item="'+esc(item.id)+'" data-fab-panel="row-wood-dimensions"'+(open?' open':'')+'><summary><span class="rv-section-number">01</span>Dimensiones de materia prima</summary><div class="rv-wood-dimensions-body">'+body+'</div></details></div>';
-      html=html.slice(0,at)+folded+html.slice(region.end);
+    if(totals.wood.workshop||solidWoodEntries(item.id,true).length){
+      html=html.replace(/(<output class="solid-wood-f-total"><strong[^>]*>[^<]*<\/strong>)<span>[\s\S]*?<\/span><\/output>/,
+        (_,label)=>label+'<span data-rv-family-total="wood" data-rv-article="'+esc(item.id)+'">'+esc(totals.wood.text)+'</span></output>');
     }
     return html;
   };
   quoteRoot.addEventListener('focusin', event => {
     const target=event.target, kind=target?.dataset?.rowOpen, itemId=target?.dataset?.rowItem, id=target?.dataset?.rowId, field=target?.dataset?.rowField;
     if(!kind||!id||itemId!==app.openPartId||!recipeCanEdit()||app.breakdownContinuation||app.partContinuation)return;
+    const fromRatePanel=!!target.closest?.('.fabrication-inputs')&&['detail.laborPrice','detail.paintPrice'].includes(field);
     if(kind==='wood')solidWoodOpen(itemId,id);
     else breakdownAction({dataset:{breakAction:kind==='material'?'edit-component':'edit-process',id}});
     requestAnimationFrame(()=>{
@@ -505,7 +754,7 @@ function installRowVariant(boardCalculator) {
       if(app.breakdownContinuation||!draft||draft.itemId!==itemId||(draft.solidWoodF?.id||draft.value?.id)!==id)return;
       const attr=kind==='wood'?'data-solid-field':'data-break-field';
       const selector=kind==='wood'&&field==='cnc.decision'?'[data-solid-cnc-choice], [data-solid-field="cnc.decision"]':'['+attr+'="'+CSS.escape(field)+'"]';
-      quoteRoot.querySelector(selector)?.focus({preventScroll:true});
+      quoteRoot.querySelector(selector)?.focus({preventScroll:!fromRatePanel});
     });
   },true);
   quoteRoot.addEventListener('click', event => {
@@ -521,6 +770,7 @@ function installRowVariant(boardCalculator) {
       quoteRoot.querySelector('[data-fab-panel="variant-row-detail-'+CSS.escape(id)+'"] > summary')?.focus({preventScroll:true});
     });
   });
+  return {refreshFamilyTotals,fabricationFamilies};
 }
 
 function once(source, before, after, label) {
@@ -555,8 +805,11 @@ export function extendRowVariant(source) {
   source=once(source,"activePanel==='board-piece-'+m.id?editing(activePanel):materialCard(m)","activePanel==='board-piece-'+m.id&&draft?.kind==='group'?editing(activePanel):materialCard(m)",'board rows');
   source=once(source,"const boardPieces=boardMaterials.map((m,index)=>fold('board-piece-'+m.id,'Pieza '+(index+1)+' · '+(m.name||'Sin nombre'),activePanel==='board-piece-'+m.id&&draft?.kind==='group'?editing(activePanel):materialCard(m),'Tablero')).join('')\n      +(newBoard?fold('board-piece-'+newBoard.id,'Nueva pieza de tablero',editing('board-piece-'+newBoard.id)):'');",
     "const boardPieces='<div class=\"fab-detail-list rv-board-list\">'+boardMaterials.map(materialCard).join('')+(newBoard?editing('board-piece-'+newBoard.id):'')+'</div>'+(draft?.kind==='group'&&draft.sectionKey==='boards'?editing(activePanel):'');",'flat board rows');
-  source=once(source,"+fold('board-new','Añadir pieza de tablero',addMaterial('boards','Pieza / material'))","+addMaterial('boards','Pieza / material')",'board add action');
-  source=once(source,"+fold('board-dimensions','Dimensiones de materia prima',dimensions(['boards'],true),'Medidas y área de cantos')","",'board dimensions in row');
+  const familiesStart=source.indexOf("    const boardLabor=processesIn('board-labor'),boards=family(");
+  const familiesEnd=source.indexOf('    const pendingMaterial=row.materials.filter',familiesStart);
+  if(familiesStart<0||familiesEnd<0)throw Error('Board and metal presentation anchors changed');
+  source=source.slice(0,familiesStart)+'    const {boards,metal}=localRows.fabricationFamilies({item,row,family,boardPieces,activePanel,materialCard,processCard,editing,addMaterial,addProcess});\n'+source.slice(familiesEnd);
+  source=once(source,"'board-cnc':'board-labor','board-finish':'board-other'","'board-cnc':'board-cnc','board-finish':'board-finish'",'fabrication editor sections');
   source=once(source,"const variant='panel'; // User-approved article architecture, independent of candidate interiors.","const variant='desglose'; // Local row variant: expandable families.",'article accordion');
   source=once(source,"folds:{general:true,supplies:true,wood:false}","folds:{general:false,supplies:true,wood:true}",'initial accordion state');
   source=once(source,"const summary=s=>'<span class=\"article-study-section-name\">'+esc(s.label)+'</span><small>'+esc(s.summary)+'</small>';",
@@ -564,5 +817,5 @@ export function extendRowVariant(source) {
   source=once(source,"if(profile==='current')return output;","if(profile==='current'||!output.includes('data-article-study=\"panel\"'))return output;",'alternate profile');
   const marker='globalThis.__client = {';
   if(source.includes('/* ROW_VARIANT */')||source.split(marker).length!==2)throw Error('Row variant installation anchor changed');
-  return source.replace(marker,()=> '/* ROW_VARIANT */\n('+installRowVariant.toString()+')(('+createBoardCalculator.toString()+')());\n'+marker);
+  return source.replace(marker,()=> '/* ROW_VARIANT */\nconst localRows=('+installRowVariant.toString()+')(('+createBoardCalculator.toString()+')(),('+createFabricationCosts.toString()+'));\n'+marker);
 }
