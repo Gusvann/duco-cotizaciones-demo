@@ -157,6 +157,8 @@ Los recorridos de edición usan la cantidad en la cabecera, el desplegable **Dat
 
 ## Publicación y recuperación
 
+El 24 de noviembre de 2026 se verificó el catálogo de 135 variantes y el recorrido de cotización a proyecto. El SHA-256 del HTML es `550bbdf9215c8772425ae7eadc1676c9d42345eb33ff74c920e77abc911b9d0b`. Pasaron 274 pruebas de Node, 34 recorridos de Edge al abrir el archivo local y 7 recorridos de Edge sobre HTTP en localhost. Estos últimos incluyen cerrar y reabrir una cotización con madera, recuperar una escritura fallida, resolver ediciones de dos pestañas y convertir la versión aceptada en un único proyecto. El selector y la galería se probaron con las 135 imágenes en el navegador.
+
 El destino es `Gusvann/duco-cotizaciones-demo`, rama `main`, con la configuración existente de GitHub Pages. La entrega del 23 de noviembre parte de [063d346](https://github.com/Gusvann/duco-cotizaciones-demo/commit/063d346f610b5b5895f3b6d635fd209998637673) e incorpora el diseño «Líneas limpias», el formulario continuo y el catálogo con ficha lateral. El SHA-256 de su `index.html` es `a4abc6971673da346546e191cb86650733568b88b26980d524ce46fc8bfb59ab`. Compararlo con el de la portada servida permite comprobar qué versión recibió el navegador. El corte de fabricación del 22 de noviembre conserva su [propia verificación](docs/recetas-de-fabricacion.md#verificación-del-corte).
 
 La publicación de esta interfaz no modifica el cotizador operativo, Astil, sus documentos canónicos ni servicios conectados. Ante una regresión crítica de publicación, la recuperación consiste en un nuevo commit que restaure el árbol anterior; no se reescribe el historial.
