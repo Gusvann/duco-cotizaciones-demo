@@ -1,11 +1,14 @@
 /* Local B: one section bar, compact article facts, quiet reference tables. */
 #quote-host .shell{gap:18px}
-#quote-host .steps.compact-steps{display:flex;align-items:stretch;gap:6px;max-width:100%;min-width:0;margin:0;padding:0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;overflow-x:auto;scroll-padding-inline:4px}
-#quote-host .steps.compact-steps>button{position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;min-height:44px;margin:0;padding:10px 14px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font:500 .82rem Sora,Arial,sans-serif;white-space:nowrap}
+#quote-host .steps.compact-steps{display:flex;flex-wrap:wrap;align-items:stretch;gap:0 6px;max-width:100%;min-width:0;margin:0;padding:0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;overflow:visible}
+#quote-host .steps.compact-steps>button{position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;min-height:44px;margin:0;padding:10px 14px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font:600 .82rem Sora,Arial,sans-serif;white-space:nowrap}
 #quote-host .steps.compact-steps>button.current{border-bottom-color:var(--blue);background:transparent;color:var(--blue);font-weight:600}
 #quote-host .steps.compact-steps>button:hover:not(:disabled){background:#edf6ff;color:var(--blue)}
 #quote-host .steps.compact-steps>button:focus-visible{outline:2px solid var(--blue);outline-offset:-3px}
-#quote-host[data-journey-screen="request"] .steps.compact-steps{display:none}
+@media(max-width:600px), (min-width:751px) and (max-width:880px){
+ #quote-host .steps.compact-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 4px}
+ #quote-host .steps.compact-steps>button{min-width:0;white-space:normal;padding:6px 4px;text-align:center;overflow-wrap:anywhere}
+}
 
 #quote-host .part-accordion-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0;padding:12px 16px;background:#f8fbfe}
 #quote-host .part-accordion.is-open>.part-accordion-heading{background:#e3f1fd;box-shadow:inset 4px 0 0 var(--blue)}

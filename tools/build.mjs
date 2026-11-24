@@ -16,7 +16,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function recipeImages(){
  const directory=path.join(root,'src/assets/catalogo-sintetico');
  const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));
- const expected=['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-O','SYN-PRISMA-G','SYN-BENT-LEGS-R'];
+ const expected=['SYN-NUBE-C','SYN-NUBE-O','SYN-PRISMA-C','SYN-PRISMA-O','SYN-PRISMA-G','SYN-BENT-LEGS-R','SYN-BOLONIA-R'];
  if(manifest.assets?.length!==expected.length||new Set(manifest.assets.map(asset=>asset.id)).size!==expected.length)throw Error('RECIPE_IMAGES_INCOMPLETE');
  return Object.fromEntries(expected.map(id=>{
   const asset=manifest.assets.find(row=>row.id===id);
@@ -47,6 +47,8 @@ ${read('row-variant.css')}
 ${read('view-polish.css')}
 ${read('recipe-workshop.css')}
 ${read('project-operations.css')}
+${read('list-tables.css')}
+${read('request-form.css')}
 </style></head><body>
 <div id="journey-root"></div><section id="quote-host" hidden aria-label="Cotizador de la simulación">${body}</section><div id="journey-footer"></div>
 <script>${read('country-codes.js')}</script>

@@ -2,6 +2,9 @@
 #journey-root .op-page-head,#journey-root .op-detail-head,#journey-root .op-section-head{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:16px}
 #journey-root .op-page-head>.j-muted{flex:none;padding-top:5px}
 #journey-root .op-scope{padding:10px 0 17px}
+#journey-root .op-page-head+.op-scope{padding:0 0 12px}
+#journey-root .op-projects-list-meta{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin-bottom:10px}
+#journey-root .op-projects-list-meta>.op-scope{padding:0}
 #journey-root .op-empty{padding:22px}
 #journey-root .op-empty h3{margin-bottom:8px}
 #journey-root .op-phase{display:inline-flex;align-items:center;min-height:28px;border-radius:999px;padding:4px 10px;background:var(--j-soft);color:var(--j-blue);font-size:11px;white-space:nowrap}

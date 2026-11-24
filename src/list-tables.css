@@ -1,0 +1,54 @@
+/* Líneas limpias para Cotizador, Proyectos y el catálogo de productos. */
+#journey-root, #quote-host {
+  --j-list-border: #d5e3ef;
+  --j-list-divider: #e3edf5;
+  --j-list-hover: #f4f9fe;
+  --j-list-name: #123e6b;
+  --j-list-radius: 10px;
+}
+#journey-root .j-table-wrap.j-list-table { border: 1px solid var(--j-list-border); border-radius: var(--j-list-radius); box-shadow: none; }
+#journey-root .j-table-wrap.j-list-table .j-table { font-size: 13px; }
+#journey-root .j-table-wrap.j-list-table .j-table th {
+  padding: 13px 16px;
+  background: #f0f6fc;
+  color: #3d5872;
+  font-size: 10px;
+  letter-spacing: .55px;
+  font-weight: 650;
+}
+#journey-root .j-table-wrap.j-list-table .j-table td {
+  padding: 13px 16px;
+  border-bottom-color: var(--j-list-divider);
+  vertical-align: middle;
+}
+#journey-root .j-table-wrap.j-list-table .j-table tbody tr:hover,
+#journey-root .j-table-wrap.j-list-table .j-table tbody tr:focus-within { background: var(--j-list-hover); }
+#journey-root .j-table-wrap.j-list-table .j-table td:first-child .j-btn {
+  color: var(--j-list-name);
+  font-size: 14px;
+  font-weight: 650;
+  min-height: 24px;
+}
+#journey-root .j-table-wrap.j-list-table .j-sub { margin-top: 4px; }
+#journey-root .j-table-wrap.j-list-table .j-table td.j-money { font-weight: 650; color: #173a5b; text-align: right; }
+#journey-root .j-table-wrap.j-list-table .j-table th.j-money { text-align: right; }
+#journey-root .j-table-wrap.j-list-table .j-table td:last-child [data-action="open"] {
+  justify-content: flex-start;
+  font-size: 12px;
+  min-height: 34px;
+  padding: 5px 2px;
+  background: transparent;
+  color: #075eab;
+  border: 0;
+  box-shadow: none;
+}
+#journey-root .j-table-wrap.j-list-table td:last-child [data-action="open"]::after {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border: solid currentColor;
+  border-width: 1.5px 1.5px 0 0;
+  transform: rotate(45deg);
+}
+#journey-root .j-table-wrap.j-list-table :is(.j-pill,.op-phase) { min-height: 25px; font-weight: 550; }

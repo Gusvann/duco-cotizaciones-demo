@@ -1164,9 +1164,9 @@ test('five D91 commercial variants have exact labels, materials, dimensions and 
   assert.equal(new Set(imageIds.map(id=>R.images[id])).size,5,'The preview is not one shared image silently reused for every variant');
 });
 
-test('the package PNG prelude matches all six synthetic assets and uses IA images instead of SVG fallbacks',()=>{
+test('the package PNG prelude matches all seven catalog images',()=>{
   const manifest=JSON.parse(read('src/assets/catalogo-sintetico/manifest.json'));
-  assert.equal(manifest.source,'ImageGen');assert.equal(manifest.assets.length,6);
+  assert.equal(manifest.source,'ImageGen');assert.equal(manifest.assets.length,7);
   const images={};
   for(const asset of manifest.assets){
     assert.equal(asset.file,asset.id+'.png');
@@ -1178,8 +1178,8 @@ test('the package PNG prelude matches all six synthetic assets and uses IA image
     images[asset.id]='data:image/png;base64,'+bytes.toString('base64');
   }
   const R=pureCatalog(images);
-  assert.deepEqual(plain(Object.keys(R.images).sort()),[...manifest.assets.map(asset=>asset.id),'SYN-BOLONIA-R'].sort());
-  assert.equal(R.imageKinds['SYN-BOLONIA-R'],'SVG','Bolonia has a separate labeled geometric illustration');
+  assert.deepEqual(plain(Object.keys(R.images).sort()),manifest.assets.map(asset=>asset.id).sort());
+  assert.equal(R.imageKinds['SYN-BOLONIA-R'],'IA');
   for(const asset of manifest.assets){
     assert.equal(R.imageKinds[asset.id],'IA');assert.match(R.images[asset.id],/^data:image\/png;base64,/);
     assert.equal(createHash('sha256').update(Buffer.from(R.images[asset.id].split(',')[1],'base64')).digest('hex'),asset.sha256);
@@ -1317,6 +1317,7 @@ test('all catalog variants stay in Producto de línea without preloading article
     const original=checkpoint();
     h.begin();
     for(const product of h.R.products){
+      h.c.lineAction('line-select-product',{dataset:{product:product.id}});
       for(const variant of product.variants){
         assert.ok(h.c.lineCatalogPanel().includes('value="'+variant.id+'"'),'The explicit variant remains available in the catalog');
         await h.event('change',{lineVariant:product.id},variant.id);
@@ -1943,11 +1944,14 @@ test('annotated B removes only the additional wood-material capture fold and pre
   assert.equal(JSON.stringify(h.R.recipe('R-SYN-NUBE-C').documentary),reference);
 });
 
-test('annotated B shows only quote sections in the editor and retains the commercial navigation elsewhere',async()=>{
+test('request groups client and responsibility data in the form and the editor uses native navigation',async()=>{
   const h=harness(),{J,action}=await h.initJourney();
   await action('open',{id:'DEMO-101'});
-  assert.match(h.nodes.get('journey-root').innerHTML,/class="j-stages"/);
-  await action('stage',{screen:'quote'});
+  assert.doesNotMatch(h.nodes.get('journey-root').innerHTML,/class="j-stages"|Cliente ficticio Alba · Account de ejemplo/);
+  assert.match(h.nodes.get('workspace').innerHTML,/class="client-assignment-summary"/);
+  await h.event('click',{action:'step',step:'1'});
+  await h.bubbleToDocument('click');
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(J.inspect().state.screen,'quote');
   assert.doesNotMatch(h.nodes.get('journey-root').innerHTML,/class="j-stages"/);
   assert.equal((h.nodes.get('workspace').innerHTML.match(/class="steps compact-steps"/g)||[]).length,1);
@@ -1957,8 +1961,7 @@ test('annotated B shows only quote sections in the editor and retains the commer
   await h.bubbleToDocument('click');
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(J.inspect().state.screen,'request');
-  assert.match(h.nodes.get('journey-root').innerHTML,/class="j-stages"/);
-  assert.match(h.nodes.get('journey-root').innerHTML,/data-screen="response"[^>]*disabled/,'Removing the duplicate bar does not grant access to later stages');
+  assert.doesNotMatch(h.nodes.get('journey-root').innerHTML,/class="j-stages"/);
 });
 
 test('whole piece quantities reject decimals, increment from the right arrow and retain measured-unit decimals',async()=>{

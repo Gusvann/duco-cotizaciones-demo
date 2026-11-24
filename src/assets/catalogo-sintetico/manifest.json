@@ -4,7 +4,7 @@
   "purpose": "Ilustraciones IA de los productos de referencia D89; no fotografías verificadas de fabricación ni recetas reales.",
   "referencePreview": "duco-catalogo-productos-imagenes-20261015.html",
   "referenceSha256": "badaf65e755f5f0a1cc078bd68ab467827220bdbdc315a3a1a117bfeb1fb6b78",
-  "visualInspection": "Cinco ilustraciones originales y una imagen de Bent Legs revisadas en el catálogo local.",
+  "visualInspection": "Siete ilustraciones revisadas en el catálogo local, incluidas Bent Legs y Bolonia.",
   "assets": [
     {
       "id": "SYN-NUBE-C",
@@ -65,6 +65,18 @@
       "height": 768,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
       "referenceIllustration": "Bent Legs · Encino rojo"
+    },
+    {
+      "id": "SYN-BOLONIA-R",
+      "file": "SYN-BOLONIA-R.png",
+      "sha256": "713425d209d87cf2671418707776e7038e6afae30ffa49d207adada4c2708378",
+      "bytes": 1899808,
+      "width": 1254,
+      "height": 1254,
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "referenceIllustration": "Bolonia · Encino rojo",
+      "createdOn": "2026-11-23",
+      "prompt": "Use case: product-mockup. Generate one square, photorealistic furniture catalog photo of Mesa Bolonia as described by its recipe. A low round table, approximately 70 cm in diameter and 50 cm high. Solid natural red oak round top with subtle warm grain, satin finish, approximately 38 mm thickness, clean straight edge lightly eased. Four slim straight 19 mm square-tube steel legs in matte graphite black RAL 7021, connected by a slim cross brace. The discreet support plate sits immediately below the wooden top. Keep the frame slim, practical and symmetrical, use plausible welded joints. Center the whole table with every foot inside a comfortable margin, three-quarter view from just above table height, on a pale warm-gray seamless studio backdrop with soft daylight and natural contact shadows. Looks like a professionally photographed real piece of furniture. No props, people, text, watermarks or logos."
     }
   ]
 }

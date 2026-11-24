@@ -32,11 +32,13 @@
     const projects = records.filter(record => record.project && !record.historicalPartial);
     const titles = {projects:'Proyectos',production:'Producción',deliveries:'Entregas'};
     const captions = {
-      projects:'Organiza responsables, fechas y tareas de los proyectos convertidos.',
       production:'Consulta las tareas y los pendientes de fabricación de cada proyecto.',
       deliveries:'Consulta la preparación, el recibo y el cierre de cada entrega.'
     };
-    const heading = `<div class="op-page-head"><div><h2>${titles[mode]}</h2><p class="j-muted">${captions[mode]}</p></div><span class="j-muted">${projects.length} proyecto${projects.length === 1 ? '' : 's'}</span></div>${scope()}`;
+    const count = `<span class="j-muted">${projects.length} proyecto${projects.length === 1 ? '' : 's'}</span>`;
+    const heading = mode === 'projects'
+      ? `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Seguimiento operativo</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus proyectos.</span> <span class="j-heading-emphasis">Del plan a la entrega.</span></h1><p class="j-muted">Consulta responsables, fechas y tareas de los proyectos convertidos.</p></div></header><div class="op-projects-list-meta">${scope()}${count}</div>`
+      : `<header class="op-page-head"><div><h2>${titles[mode]}</h2><p class="j-muted">${captions[mode]}</p></div>${count}</header>${scope()}`;
     if (!projects.length) return `${heading}<section class="j-panel op-empty"><h3>Aún no hay proyectos</h3><p class="j-muted">Los expedientes aparecen aquí después de convertir una oferta aceptada.</p></section>`;
     const rows = projects.map(record => {
       const project = record.project;
@@ -50,7 +52,7 @@
       const extra = mode === 'deliveries' ? ops?.delivery ? `Recibo: ${date(ops.delivery.date)}` : 'Recibo pendiente' : routes[ops?.route] || 'Ruta por definir';
       return `<tr><td><button type="button" class="j-btn op-open" data-action="project-open" data-id="${escape(record.id)}" data-project="${escape(project.id)}" data-revision="${escape(ops?.revision ?? '')}" data-tab="${tab}">${escape(title)}</button><div class="j-sub">${escape(project.id)} · ${escape(client)}</div></td><td>${escape(ops?.owner || 'Sin asignar')}<div class="j-sub">${escape(extra)}</div></td><td>${escape(date(ops?.dueDate))}</td><td><span class="op-phase${ops?.closed ? ' op-phase-closed' : ''}">${escape(summary?.phase || 'Sin plan')}</span><div class="j-sub">${escape(note)}</div></td><td>${escape(progress)}</td></tr>`;
     }).join('');
-    return `${heading}<div class="j-table-wrap op-list-wrap"><table class="j-table op-list"><caption class="op-caption">${titles[mode]} de esta sesión</caption><thead><tr><th scope="col">Proyecto / cliente</th><th scope="col">Responsable / ${mode === 'deliveries' ? 'recibo' : 'ruta'}</th><th scope="col">Fecha objetivo</th><th scope="col">Estado</th><th scope="col">${mode === 'projects' ? 'Tareas' : titles[mode]}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `${heading}<div class="j-table-wrap op-list-wrap${mode === 'projects' ? ' j-list-table' : ''}"><table class="j-table op-list"><caption class="op-caption">${titles[mode]} de esta sesión</caption><thead><tr><th scope="col">Proyecto / cliente</th><th scope="col">Responsable / ${mode === 'deliveries' ? 'recibo' : 'ruta'}</th><th scope="col">Fecha objetivo</th><th scope="col">Estado</th><th scope="col">${mode === 'projects' ? 'Tareas' : titles[mode]}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   function planMarkup(record, ops, draft) {

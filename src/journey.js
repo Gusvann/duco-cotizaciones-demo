@@ -35,7 +35,7 @@
   const stages = [{key:'request', label:'Solicitud'}, {key:'quote', label:'Cotizador'}, {key:'review', label:'Revisión'}, {key:'offer', label:'Envío'}, {key:'response', label:'Respuesta'}, {key:'project', label:'Proyecto'}];
   const statuses = {request:'Solicitud', draft:'Borrador', review:'Revisada', sent:'Enviada', accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada', project:'Convertida'};
   const profiles = {account:'Account de ejemplo',designer:'Diseño de ejemplo'};
-  const state = {view:'mesa', screen:'list', id:null, search:'', filter:'all', profile:'account', saveOutcome:'success', busy:false, feedback:'', tone:'info', guard:null, menu:false,returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}};
+  const state = {view:'mesa', screen:'list', id:null, search:'', filter:'all', profile:'account', saveOutcome:'success', busy:false, feedback:'', tone:'info', guard:null, menu:false,navGroup:'portfolio',returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}};
   let records = [];
   let suppressChanges = false;
   let sequence = 102;
@@ -43,6 +43,13 @@
   const globalScreens = new Set(['list','kpis','projects','production','deliveries','workflow']);
   const operationDrafts = new Map();
   let taskSequence = 0;
+
+  const sidebarGroupFor = screen => ['production','deliveries','workflow'].includes(screen) ? 'operations' : 'portfolio';
+
+  function setScreen(screen) {
+    if (state.screen !== screen) state.navGroup = sidebarGroupFor(screen);
+    state.screen = screen;
+  }
 
   function projectOperations(record) {
     if (!record?.project || record.historicalPartial) return null;
@@ -122,7 +129,17 @@
     const inactive = (name, label) => `<div class="j-module j-nav-disabled" aria-disabled="true" title="No disponible">${navIcon(name)}<span>${label}</span></div>`;
     const modal = state.menu && window.matchMedia('(max-width:750px)').matches ? ' role="dialog" aria-modal="true"' : '';
     const navEntry = (label,action,active) => `<button type="button" class="${active ? 'j-nav-current' : 'j-nav-link'}" data-action="${action}" ${active ? 'aria-current="page"' : ''}>${label}${active ? '<span class="j-active-dot" aria-hidden="true"></span>' : ''}</button>`;
-    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}<details class="j-nav-group" open><summary class="j-module">${navIcon('portfolio')}<span>Operación</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${navEntry('Producción','production',state.screen === 'production')}${navEntry('Entregas','deliveries',state.screen === 'deliveries')}</div></details><details class="j-nav-group" open><summary class="j-module">${navIcon('portfolio')}<span>Portafolio</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${navEntry('KPIs','kpis',state.screen === 'kpis')}${navEntry('Cotizador','list',state.screen === 'list'||!globalScreens.has(state.screen)&&state.screen !== 'project')}${navEntry('Proyectos','projects',['projects','project'].includes(state.screen))}</div></details>${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(profiles[state.profile])}</strong><small>Sin sesión iniciada</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
+    const group = (key,label,entries) => `<details class="j-nav-group" data-nav-group="${key}"${state.navGroup === key ? ' open' : ''}><summary class="j-module">${navIcon('portfolio')}<span>${label}</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${entries.join('')}</div></details>`;
+    const operationMenu = group('operations','Operación',[
+      navEntry('Producción','production',state.screen === 'production'),
+      navEntry('Entregas','deliveries',state.screen === 'deliveries')
+    ]);
+    const portfolioMenu = group('portfolio','Portafolio',[
+      navEntry('KPIs','kpis',state.screen === 'kpis'),
+      navEntry('Cotizador','list',state.screen === 'list'||!globalScreens.has(state.screen)&&state.screen !== 'project'),
+      navEntry('Proyectos','projects',['projects','project'].includes(state.screen))
+    ]);
+    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(profiles[state.profile])}</strong><small>Sin sesión iniciada</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
   }
 
   function closeMenu() {
@@ -214,7 +231,7 @@
     const controls = `<div class="j-toolbar"><label class="j-field j-search"><span>Buscar solicitudes</span><input id="j-search" class="j-input" type="search" placeholder="Nombre, cliente o folio" value="${escape(state.search)}"></label><label class="j-field"><span>Estado</span><select id="j-status-filter" class="j-input">${options}</select></label><p class="j-muted j-record-count" role="status">${visible.length} de ${records.length} expedientes</p></div>`;
     let body;
     if (state.view === 'mesa') {
-      body = `<div class="j-table-wrap"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${record.id}"><td>${button(record.request.title,'open',`data-id="${record.id}"`)}<div class="j-sub">${record.id} · ${escape(record.request.client)}</div></td><td>${pill(statuses[status(record)], status(record) === 'project' || accepted(record) ? 'good' : record.scenario === 'wood' ? 'warn' : '')}<div class="j-sub">Versión ${record.version}</div></td><td>${escape(record.request.account)}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',`data-id="${record.id}"`)}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
+      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${record.id}"><td>${button(record.request.title,'open',`data-id="${record.id}"`)}<div class="j-sub">${record.id} · ${escape(record.request.client)}</div></td><td>${pill(statuses[status(record)], status(record) === 'project' || accepted(record) ? 'good' : record.scenario === 'wood' ? 'warn' : '')}<div class="j-sub">Versión ${record.version}</div></td><td>${escape(record.request.account)}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',`data-id="${record.id}"`)}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
     } else {
       const columns = [{label:'Por cotizar', keys:['request']}, {label:'En preparación', keys:['draft','review','changes']}, {label:'Con el cliente', keys:['sent','rejected']}, {label:'Aceptadas', keys:['accepted']}, {label:'Convertidas', keys:['project']}];
       body = `<div class="j-board">${columns.map(column => { const items = visible.filter(record => column.keys.includes(status(record))); return `<section class="j-lane" aria-label="${column.label}"><div class="j-lane-head"><h2>${column.label}</h2><span>${items.length}</span></div>${items.map(record => `<article class="j-card" data-record-id="${record.id}"><span class="j-sub">${record.id} · V${record.version}</span><h3>${button(record.request.title,'open',`data-id="${record.id}"`)}</h3><p class="j-muted">${escape(record.request.client)}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${pill(statuses[status(record)], accepted(record) ? 'good' : '')}<p class="j-next">${escape(nextLabel(record))}</p></article>`).join('') || '<p class="j-empty">Sin expedientes</p>'}</section>`; }).join('')}</div>`;
@@ -341,11 +358,13 @@
 
   function caseMarkup(record) {
     const s = summary(record);
-    const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${record.id} · Versión ${record.version}</p><h1>${escape(record.request.title)}</h1><p class="j-muted">${escape(record.request.client)} · ${escape(record.request.account)} · ${escape(record.request.designer)}</p></div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
+    const isEditing = state.screen === 'request' || state.screen === 'quote';
+    const metadata = isEditing ? '' : `<p class="j-muted">${escape(record.request.client)} · ${escape(record.request.account)} · ${escape(record.request.designer)}</p>`;
+    const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${record.id} · Versión ${record.version}</p><h1>${escape(record.request.title)}</h1>${metadata}</div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
     const back = state.returnToKpis ? `<div class="j-kpi-return">${button('Regresar a KPIs','return-kpis')}<span class="j-muted">Se conservarán los filtros y el detalle.</span></div>` : '';
     const phoneNotice = phone.recordNeedsAttention(record) ? '<p class="j-notice" role="status">Un teléfono de este expediente requiere revisión para retirar una posible extensión.</p>' : '';
     if (state.screen === 'record') return crumbs+back+phoneNotice+recordMarkup(record);
-    const nav = state.screen === 'quote' ? '' : `<nav class="j-stages" aria-label="Etapas del expediente">${stages.map(stage => button(stage.label,'stage',`data-screen="${stage.key}" aria-pressed="${state.screen === stage.key}" ${canStage(record,stage.key) ? '' : 'disabled'}`)).join('')}</nav>`;
+    const nav = isEditing ? '' : `<nav class="j-stages" aria-label="Etapas del expediente">${stages.map(stage => button(stage.label,'stage',`data-screen="${stage.key}" aria-pressed="${state.screen === stage.key}" ${canStage(record,stage.key) ? '' : 'disabled'}`)).join('')}</nav>`;
     let body = '';
     if (state.screen === 'request' || state.screen === 'quote') body = nativeFormMarkup(record);
     if (state.screen === 'review') body = reviewMarkup(record);
@@ -417,16 +436,13 @@
     return `<section class="j-panel"><p class="j-eyebrow">Conversión ilustrativa</p><h2>De cotización aceptada a proyecto</h2><p>Se conservarán la solicitud, la versión aceptada, su alcance y el presupuesto base.</p><div class="j-grid j-spaced"><div>${row('Solicitud',record.id)}${row('Versión aceptada',`V${record.sent?.version}`)}${row('Cliente',record.sent?.snapshot?.request?.client || record.request.client)}</div><div>${row('Total aceptado',money(record.sent?.snapshot?.summary?.totalCents))}${row('Entrega',date(record.sent?.snapshot?.request?.deliveryDate))}</div></div><p class="j-notice">No se registra ningún anticipo. Las condiciones de pagos y permisos siguen pendientes.</p>${button('Convertir en proyecto','convert',`${accepted(record) && !state.busy ? '' : 'disabled'}`,true)}</section>`;
   }
 
-  function revealActiveSteps() {
-    // Reveal only horizontally: editing deep in the form must not jump the page.
-    for (const [container,selector,currentSelector] of [[root,'.j-stages','[aria-pressed="true"]'],[host,'.steps','.current']]) {
-      const navigation = container.querySelector(selector);
-      const currentStep = navigation?.querySelector(currentSelector);
-      if (!currentStep) continue;
-      const viewport = navigation.getBoundingClientRect(), target = currentStep.getBoundingClientRect();
-      if (target.left < viewport.left) navigation.scrollLeft -= viewport.left-target.left;
-      else if (target.right > viewport.right) navigation.scrollLeft += target.right-viewport.right;
-    }
+  function revealCommercialStage() {
+    const navigation = root.querySelector('.j-stages');
+    const currentStage = navigation?.querySelector('[aria-pressed="true"]');
+    if (!currentStage) return;
+    const viewport = navigation.getBoundingClientRect(), target = currentStage.getBoundingClientRect();
+    if (target.left < viewport.left) navigation.scrollLeft -= viewport.left-target.left;
+    else if (target.right > viewport.right) navigation.scrollLeft += target.right-viewport.right;
   }
 
   function render() {
@@ -442,8 +458,9 @@
     const selection = restoreSearch ? activeElement.selectionStart : null;
     root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions"><span class="j-demo">SÓLO EN ESTA SESIÓN</span>${button('Reiniciar sesión','reset')}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(active.id)}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
     host.hidden = atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
+    root.dataset.journeyScreen = state.screen;
     host.dataset.journeyScreen = state.screen;
-    revealActiveSteps();
+    revealCommercialStage();
     if (restoreSearch) { const input = document.getElementById('j-search'); input?.focus(); if (selection != null) input?.setSelectionRange(selection,selection); }
     renderFooter();
   }
@@ -466,7 +483,6 @@
   }
 
   function refreshQuoteChrome(record) {
-    revealActiveSteps();
     const s = summary(record);
     const heading = root.querySelector('.j-case-head h1');
     if (heading) heading.textContent = record.request.title;
@@ -502,7 +518,7 @@
       if (screen === 'quote') nextRecord.started = true;
     } else api.hide();
     state.id = id;
-    state.screen = screen;
+    setScreen(screen);
     if(screen==='project')state.opTab='plan';
     state.menu = false;
     state.guard = null;
@@ -562,7 +578,7 @@
     suppressChanges = true;
     try { api.reset(); }
     finally { suppressChanges = false; }
-    Object.assign(state,{view:'mesa',screen:'list',id:null,search:'',filter:'all',profile:'account',saveOutcome:'success',busy:true,feedback:'',tone:'info',guard:null,menu:false,returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}});
+    Object.assign(state,{view:'mesa',screen:'list',id:null,search:'',filter:'all',profile:'account',saveOutcome:'success',busy:true,feedback:'',tone:'info',guard:null,menu:false,navGroup:'portfolio',returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}});
     sequence = 102;
     clockTick = 0;
     for (const id of Object.keys(clients)) if (!initialClientIds.has(id)) delete clients[id];
@@ -580,7 +596,12 @@
     if (target.disabled || state.busy && !['stay'].includes(action)) return;
     if (action === 'toggle-menu') {
       if (state.menu) closeMenu();
-      else { state.menu = true; render(); root.querySelector('.j-nav-group > summary')?.focus(); }
+      else {
+        state.menu = true;
+        render();
+        const focusGroup = state.navGroup || sidebarGroupFor(state.screen);
+        root.querySelector(`[data-nav-group="${focusGroup}"] > summary`)?.focus();
+      }
     }
     else if (action === 'close-menu') closeMenu();
     else if (action === 'view') { state.view = target.dataset.view; render(); }
@@ -649,7 +670,7 @@
       record.project = {id:`PR-${record.id}`,title:record.sent.snapshot.request.title,version:record.sent.version,baseline:clone(record.sent.snapshot),sourceId:record.id,conversionKey:`${record.id}:V${record.sent.version}`,createdAt:stamp()};
       projectOperations(record);
       log(record,`Proyecto registrado en esta sesión ${record.project.id} creado desde V${record.project.version}.`);
-      state.screen = 'project'; render(); notify('Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
+      setScreen('project'); render(); notify('Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
     } else if (action === 'new-request') {
       let id;
       do {id=`DEMO-${++sequence}`;} while (records.some(item => item.id === id));
@@ -670,6 +691,16 @@
   }
 
   for (const container of [root,footer]) container.addEventListener('click',event => {
+    const heading = event.target.closest('#j-sidebar [data-nav-group] > summary');
+    const group = heading?.parentElement;
+    if (group?.dataset.navGroup && container === root && root.contains(heading)) {
+      event.preventDefault();
+      state.navGroup = group.open ? null : group.dataset.navGroup;
+      for (const panel of root.querySelectorAll('#j-sidebar [data-nav-group]')) {
+        panel.open = panel.dataset.navGroup === state.navGroup;
+      }
+      return;
+    }
     const target = event.target.closest('[data-action]');
     if (!target || !container.contains(target)) return;
     handleAction(target).catch(() => notify('No se completó la acción. El expediente se conserva durante esta sesión.','error'));
@@ -724,8 +755,8 @@
     if (!state.guard && state.menu && window.matchMedia('(max-width:750px)').matches) {
       if (event.key === 'Escape') { event.preventDefault(); closeMenu(); return; }
       if (event.key === 'Tab') {
-        const controls = Array.from(root.querySelectorAll('.j-sidebar summary, .j-sidebar button:not(:disabled)')).filter(element => element.getClientRects().length);
-        const first = controls[0], last = controls.at(-1);
+        const controls = root.querySelectorAll('.j-sidebar summary, .j-sidebar details[open] button:not(:disabled)');
+        const first = controls[0], last = controls[controls.length - 1];
         if (!root.querySelector('.j-sidebar').contains(document.activeElement)) { event.preventDefault(); first?.focus(); }
         else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -754,7 +785,7 @@
       if (record && ['request','quote'].includes(state.screen) && state.id === id) {
         const screen = step === 0 ? 'request' : 'quote';
         if (step > 0) { record.quoteStep = step; record.started = true; }
-        if (screen !== state.screen) { state.screen = screen; render(); }
+        if (screen !== state.screen) { setScreen(screen); render(); }
         else refreshQuoteChrome(record);
       }
       else render();

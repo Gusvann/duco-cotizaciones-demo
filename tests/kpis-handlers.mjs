@@ -123,7 +123,7 @@ test('quote omits the duplicate action strip but preserves native saving, status
   await h.click('open',{id:'DEMO-101'});
   clean();
   assert.doesNotMatch(h.root.innerHTML,/j-save-strip|data-action="save"/,'Request omits the duplicate upper strip; the native form owns save');
-  assert.match(h.root.innerHTML,/data-action="stage" data-screen="quote"/,'Request keeps access to the editor');
+  assert.doesNotMatch(h.root.innerHTML,/class="j-stages"/,'The request form owns Continue and the shell omits its stage bar');
   assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status" hidden><\/strong>/,'An unused status has no visible placeholder');
   await h.sandbox.DemoJourney.saveCurrent();
   clean();
@@ -150,7 +150,7 @@ test('quote omits the duplicate action strip but preserves native saving, status
   assert.equal(h.metrics().totalCents,21000000,'Removing presentation does not alter accepted sales');
 });
 
-test('active steps reveal themselves horizontally without scrolling the form vertically',async()=>{
+test('refreshing the quote leaves its navigation at the same scroll position',async()=>{
   const h=await harness();
   await h.click('open',{id:'DEMO-101'});
   await h.click('stage',{screen:'quote'});
@@ -170,16 +170,12 @@ test('active steps reveal themselves horizontally without scrolling the form ver
   await h.click('toggle-menu');
   assert.doesNotMatch(h.root.innerHTML,/class="j-stages"/,'The quote editor has one section bar');
   assert.equal(outer.navigation.scrollLeft,0,'The absent commercial menu does not scroll');
-  for(const {navigation} of [inner]) {
-    assert.equal(navigation.scrollLeft,170,'A later active step is revealed at the right edge');
-    assert.equal(navigation.scrollTop,75,'Vertical position is preserved');
-  }
+  assert.equal(inner.navigation.scrollLeft,0,'The quote menu does not scroll toward a later step');
+  assert.equal(inner.navigation.scrollTop,75,'Vertical position is preserved');
   outer.target({left:20,right:100});inner.target({left:20,right:100});
   await h.click('toggle-menu');
-  for(const {navigation} of [inner]) {
-    assert.equal(navigation.scrollLeft,20,'Returning to an earlier step reveals its left edge');
-    assert.equal(navigation.scrollTop,75,'Returning never moves the form vertically');
-  }
+  assert.equal(inner.navigation.scrollLeft,0,'Returning to an earlier step leaves the horizontal position unchanged');
+  assert.equal(inner.navigation.scrollTop,75,'Returning leaves the vertical position unchanged');
 });
 
 test('request can continue without saving and unknown saves require explicit resolution',async()=>{

@@ -38,9 +38,9 @@ test('B retains minimal confirmation controls, focus and family subtotals',()=>{
 });
 
 test('annotated B uses Astil section tabs and compact accessible header quantity controls',()=>{
-  assert.match(polish,/\.steps\.compact-steps\{[^}]*overflow-x:auto/);
+  assert.match(polish,/\.steps\.compact-steps\{[^}]*flex-wrap:wrap[^}]*overflow:visible/);
   assert.match(polish,/\.steps\.compact-steps>button\.current\{[^}]*border-bottom-color:var\(--blue\)/);
-  assert.match(polish,/#quote-host\[data-journey-screen="request"\] \.steps\.compact-steps\{display:none\}/,'Request retains just the commercial navigation, despite the later tab styles');
+  assert.doesNotMatch(polish,/#quote-host\[data-journey-screen="request"\] \.steps\.compact-steps\{display:none\}/);
   assert.match(polish,/\.part-header-quantity input\{[^}]*min-height:34px/);
   assert.match(polish,/@container part-card \(max-width:660px\)/);
   assert.match(polish,/\.part-header-quantity input:focus-visible\{outline:2px solid/);

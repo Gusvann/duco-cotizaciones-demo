@@ -97,6 +97,9 @@ export function extendViewPolish(source) {
   source=once(source,"</strong></span></span>'+articleHeaderMarkup(r,costHeader)+'</button></h3>'",
     "</strong></span></span></button></h3>'+articleHeaderMarkup(r,costHeader)+'</div>'",'quantity outside toggle');
   source=once(source,'aria-label="Etapas de la cotización"','aria-label="Secciones del cotizador"','quote section navigation');
+  source=once(source,"        if(app.step===2&&nextStep!==2", "        const fromTab=Boolean(b.closest?.('.steps'));\n        if(fromTab&&nextStep===app.step)return;\n        if(app.step===2&&nextStep!==2",'active tab preserves the form');
+  source=once(source,"        if(app.step!==0)app.lineState=null;\n        editor();\n        $('#workspace').focus();",
+    "        if(app.step!==0)app.lineState=null;\n        editor();\n        if(fromTab)quoteRoot.querySelector('.steps button.current')?.focus({preventScroll:true});\n        else $('#workspace').focus();",'focus the selected tab without moving the page');
   const numbers="'><span class=\"stepnum\">' +\n            (i + 1) +\n            '</span>' +";
   source=once(source,numbers,"'>' +",'un-numbered section tabs');
   return once(source,'globalThis.__client = {','('+installViewPolish.toString()+')();\nglobalThis.__client = {','view installation');

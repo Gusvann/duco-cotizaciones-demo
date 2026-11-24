@@ -60,22 +60,23 @@ async function capture(options){
 }
 // A component capture excludes the fixed shell and transient session notice.
 const captureFamily=(element,name)=>element.screenshot({path:path.join(artifacts,name),
-  style:'#journey-root .j-top, #quote-host #notice {visibility:hidden !important}'});
+  style:'#journey-root .j-top, #journey-root .j-skip, #quote-host #notice {visibility:hidden !important}'});
 page.on('pageerror', error => browserErrors.push(error.message));
 page.on('console', message => { if (message.type() === 'error') browserErrors.push(message.text()); });
 page.on('dialog', dialog => dialog.accept());
 const action = (name, suffix = '') => page.locator(`#journey-root [data-action="${name}"]${suffix}, #journey-footer [data-action="${name}"]${suffix}`);
 const requestedField = key => quote(`[data-path="${({title:'name'})[key] || key}"]`);
+const catalogRow = product => quote(`[data-action="line-select-product"][data-product="${product}"]`);
 async function fillRequest(key, value) {
   if (['quoteDue','deliveryDate'].includes(key) && !await requestedField(key).isVisible()) await quote('[data-action="toggle-responsibles"]').click();
   await requestedField(key).fill(value);
 }
 const stageControl = name => action('stage', `[data-screen="${name}"]`).first();
 async function stage(name) {
-  // Inside the editor, Cliente is the remaining route to Solicitud; there is
-  // deliberately no second commercial stage bar above the section tabs.
-  if(name==='request'&&!await stageControl(name).count())await quote('.steps [data-action="step"][data-step="0"]').click();
-  else await stageControl(name).click();
+  const control = stageControl(name);
+  if(name==='request'&&!await control.count())await quote('.steps [data-action="step"][data-step="0"]').click();
+  else if(name==='quote'&&!await control.count())await quote('.panel-actions [data-action="step"][data-step="1"]').click();
+  else await control.click();
   if (await action('keep-and-leave').isVisible()) await action('keep-and-leave').click();
 }
 async function list() {
@@ -151,8 +152,10 @@ try {
     await action('new-request').click();
     await quote('.panel-actions [data-action="step"][data-step="1"]').click();
     await quote('[data-action="line-open"]').click();
+    await catalogRow('SYN-BENT-LEGS').click();
     const product=quote('[data-line-product="SYN-BENT-LEGS"]');
     await product.locator('select').selectOption('SYN-BENT-LEGS-R');
+    await product.locator('img').evaluate(img=>img.decode());
     assert.ok(await product.locator('img').evaluate(img=>img.complete&&img.naturalWidth>500&&img.src.startsWith('data:image/png;')));
     await product.screenshot({path:path.join(artifacts,'bent-legs-catalogo.png')});
     await product.locator('[data-action="line-use"]').click();
@@ -178,6 +181,7 @@ try {
     await action('new-request').click();
     await quote('.panel-actions [data-action="step"][data-step="1"]').click();
     await quote('[data-action="line-open"]').click();
+    await catalogRow('SYN-BENT-LEGS').click();
     const product=quote('[data-line-product="SYN-BENT-LEGS"]');
     await product.locator('select').selectOption('SYN-BENT-LEGS-R');
     await product.locator('[data-action="line-use"]').click();
@@ -205,8 +209,14 @@ try {
     await action('new-request').click();
     await quote('.panel-actions [data-action="step"][data-step="1"]').click();
     await quote('[data-action="line-open"]').click();
-    await quote('[data-line-variant]').filter({has:page.locator('option[value="SYN-BOLONIA-R"]')}).selectOption('SYN-BOLONIA-R');
-    await quote('[data-line-product]').filter({has:page.locator('option[value="SYN-BOLONIA-R"]')}).locator('[data-action="line-use"]').click();
+    await catalogRow('SYN-BOLONIA').click();
+    const product=quote('[data-line-product]').filter({has:page.locator('option[value="SYN-BOLONIA-R"]')});
+    await product.locator('[data-line-variant]').selectOption('SYN-BOLONIA-R');
+    await product.locator('img').evaluate(img=>img.decode());
+    assert.ok(await product.locator('img').evaluate(img=>img.naturalWidth>500&&img.src.startsWith('data:image/png;')));
+    assert.match(await product.locator('figcaption').innerText(),/IA/);
+    await captureFamily(product,'bolonia-catalogo.png');
+    await product.locator('[data-action="line-use"]').click();
     if(await quote('.header-quantity-control input').inputValue()!=='1')await quote('[data-header-increment]').click();
     const metal=quote('[data-article-fold="metal"]');
     if(!await metal.evaluate(el=>el.open))await metal.locator(':scope > summary').click();
@@ -331,8 +341,9 @@ try {
     await toggle.focus();await page.keyboard.press('Enter');
     assert.equal(await toggle.getAttribute('aria-expanded'),'true');
     assert.equal(await page.locator('.j-sidebar-backdrop[data-action="close-menu"]').isVisible(),true);
-    const navSummary=page.locator('#j-sidebar .j-nav-group > summary');
-    const navCotizador=page.locator('#j-sidebar [data-action="list"]');
+    const navSummary=page.locator('#j-sidebar [data-nav-group="portfolio"] > summary');
+    const operationSummary=page.locator('#j-sidebar [data-nav-group="operations"] > summary');
+    const navProjects=page.locator('#j-sidebar [data-action="projects"]');
     const navKpis=page.locator('#j-sidebar [data-action="kpis"]');
     assert.equal(await navSummary.evaluate(element=>element===document.activeElement),true);
     await page.keyboard.press('Tab');
@@ -340,9 +351,11 @@ try {
     await page.keyboard.press('Shift+Tab');
     assert.equal(await navSummary.evaluate(element=>element===document.activeElement),true);
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await navCotizador.evaluate(element=>element===document.activeElement),true,'Backward focus wraps to Cotizador, the last entry within the open navigation');
+    assert.equal(await operationSummary.evaluate(element=>element===document.activeElement),true,'The closed section still has a reachable heading');
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await navProjects.evaluate(element=>element===document.activeElement),true,'Backward focus wraps to the last visible entry');
     await page.keyboard.press('Tab');
-    assert.equal(await navSummary.evaluate(element=>element===document.activeElement),true,'Forward focus wraps within the open navigation');
+    assert.equal(await operationSummary.evaluate(element=>element===document.activeElement),true,'Forward focus wraps within the open navigation');
     await capture({path:path.join(artifacts,'astil-shell-after-menu-390.png'),fullPage:true});
     await page.keyboard.press('Escape');
     assert.equal(await toggle.getAttribute('aria-expanded'),'false');
@@ -362,11 +375,148 @@ try {
     assert.equal(createHash('sha256').update(await fs.readFile(path.join(root,'src','cotizador.html'))).digest('hex'),'3291618da77246df866be50ce53e3a74589435797e0b75975e35d69b71bb6a67','Shell alignment must preserve the native D85 source');
   });
 
+  await test('Las pantallas aprovechan el ancho y Proyectos recupera el título resaltado',async()=>{
+    const main=page.locator('#j-main');
+    const projectHeading=main.locator('.j-head .j-section-statement');
+    const nav=section=>page.locator('#j-sidebar [data-action="'+section+'"]');
+    const group=section=>page.locator('#j-sidebar [data-nav-group="'+section+'"] > summary');
+    async function verifyWidth(selector, embedded=false) {
+      for(const width of [2560,1920,1440,768,390]){
+        await page.setViewportSize({width,height:950});
+        const geometry=await page.locator(selector).evaluate((el,showForm)=>{
+          const main=document.getElementById('j-main'), sidebar=document.getElementById('j-sidebar');
+          const leftInset=el.getBoundingClientRect().left-(getComputedStyle(sidebar).visibility==='hidden'?0:sidebar.getBoundingClientRect().right);
+          const width=document.documentElement.clientWidth;
+          const rightInset=width-el.getBoundingClientRect().right;
+          const form=showForm?document.querySelector('#quote-host .mainform').getBoundingClientRect():null;
+          return {leftInset,rightInset,width,overflow:document.documentElement.scrollWidth-width,formInset:form?Math.abs(form.left-el.getBoundingClientRect().left):null,
+            topInset:parseFloat(getComputedStyle(main).paddingTop)};
+        },embedded);
+        assert.ok(geometry.leftInset>=15&&geometry.leftInset<=27&&geometry.rightInset>=15&&geometry.rightInset<=27,selector+' '+JSON.stringify(geometry));
+        assert.ok(geometry.overflow<=1&&geometry.topInset<=23,selector+' '+JSON.stringify(geometry));
+        if(embedded)assert.ok(geometry.formInset<=1,'El formulario comparte el borde del encabezado');
+      }
+      await page.setViewportSize({width:1920,height:950});
+    }
+    await verifyWidth('#j-main .j-table-wrap');
+    const offset=await main.evaluate(el=>el.querySelector('.j-table-wrap').getBoundingClientRect().top-el.getBoundingClientRect().top);
+    assert.ok(offset<320,'Los filtros y el encabezado dejan visible la lista antes');
+    await page.screenshot({path:path.join(artifacts,'mesa-espaciado-1920.png')});
+    await action('view','[data-view="flujo"]').click();
+    await verifyWidth('#j-main .j-board');
+    await nav('projects').click();
+    await verifyWidth('#j-main .j-table-wrap');
+    assert.equal(await projectHeading.locator('.j-eyebrow').textContent(),'Seguimiento operativo');
+    assert.equal(await projectHeading.locator('.j-heading-emphasis').textContent(),'Del plan a la entrega.');
+    for(const width of [1920,390]){
+      await page.setViewportSize({width,height:950});
+      const heading=await projectHeading.evaluate(el=>{
+        const lead=el.querySelector('.j-heading-lead');
+        const emphasis=el.querySelector('.j-heading-emphasis');
+        const main=el.closest('main').getBoundingClientRect();
+        const table=el.closest('main').querySelector('.j-table-wrap').getBoundingClientRect();
+        return {color:getComputedStyle(emphasis).color,
+          onNewLine:emphasis.getBoundingClientRect().top>=lead.getBoundingClientRect().bottom-1,
+          tableOffset:table.top-main.top};
+      });
+      assert.equal(heading.color,'rgb(15, 116, 217)');
+      assert.equal(heading.onNewLine,true,'The highlighted phrase starts on a second line at '+width+' px');
+      assert.ok(heading.tableOffset<240,'The heading keeps the first row close at '+width+' px');
+      await page.screenshot({path:path.join(artifacts,`proyectos-del-plan-a-la-entrega-${width}.png`)});
+    }
+    await page.setViewportSize({width:1920,height:950});
+    await nav('kpis').click();
+    await verifyWidth('#j-main .j-kpi-toolbar');
+    await group('operations').click();
+    for(const screen of ['production','deliveries']){
+      await nav(screen).click();
+      await verifyWidth('#j-main .j-table-wrap');
+    }
+    await group('portfolio').click();
+    await nav('list').click();
+    await open('DEMO-101');
+    await verifyWidth('#j-main .j-case-head',true);
+    await stage('quote');
+    await verifyWidth('#j-main .j-case-head',true);
+  });
+
+  await test('Líneas limpias se aplica a Mesa y Proyectos en escritorio y móvil',async()=>{
+    const list=page.locator('#j-main .j-list-table');
+    const nav=section=>page.locator('#j-sidebar [data-action="'+section+'"]');
+    const verifyList=async columns=>{
+      assert.equal(await list.locator('th').count(),columns);
+      assert.equal(await list.locator('th').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(240, 246, 252)');
+      assert.equal(await list.evaluate(el=>getComputedStyle(el).boxShadow),'none');
+      await page.setViewportSize({width:390,height:800});
+      const size=await list.evaluate(el=>({documentWidth:document.documentElement.scrollWidth,width:el.clientWidth,content:el.scrollWidth}));
+      assert.ok(size.documentWidth<=391&&size.content>size.width,'Only the table scrolls horizontally on mobile');
+      await page.setViewportSize({width:1440,height:1000});
+    };
+    await verifyList(6);
+    assert.equal(await list.locator('th.j-money').evaluate(el=>getComputedStyle(el).textAlign),'right');
+    await page.locator('#j-search').fill('sin-resultado');
+    assert.match(await list.locator('.j-empty').innerText(),/No hay expedientes/);
+    await page.locator('#j-search').fill('');
+    await page.screenshot({path:path.join(artifacts,'lineas-limpias-cotizador.png')});
+    await nav('projects').click();
+    await verifyList(5);
+    await page.screenshot({path:path.join(artifacts,'lineas-limpias-proyectos.png')});
+    await list.locator('[data-action="project-open"]').first().click();
+    assert.equal((await inspect()).state.screen,'project');
+    await page.locator('#j-sidebar [data-nav-group="operations"] > summary').click();
+    await nav('production').click();
+    assert.equal(await list.count(),0);
+    await page.locator('#j-sidebar [data-nav-group="portfolio"] > summary').click();
+    await nav('list').click();
+    await action('view','[data-view="flujo"]').click();
+    assert.equal(await list.count(),0);
+  });
+
+  await test('Acordeón lateral conserva su estado y admite teclado en escritorio y móvil',async()=>{
+    const section=key=>page.locator('#j-sidebar [data-nav-group="'+key+'"]');
+    const heading=key=>section(key).locator(':scope > summary');
+    const expanded=()=>page.locator('#j-sidebar [data-nav-group][open]').evaluateAll(groups=>groups.map(group=>group.dataset.navGroup));
+    assert.deepEqual(await expanded(),['portfolio']);
+    await heading('operations').click();
+    assert.deepEqual(await expanded(),['operations']);
+    assert.equal(await section('portfolio').locator('[data-action="list"]').isVisible(),false);
+    await page.locator('#j-search').fill('mesa');
+    assert.deepEqual(await expanded(),['operations'],'Filtering preserves the disclosure choice');
+    await heading('operations').press('Space');
+    assert.deepEqual(await expanded(),[]);
+    await page.locator('#j-search').fill('');
+    assert.deepEqual(await expanded(),[],'Both sections can stay collapsed');
+    await heading('operations').press('Enter');
+    await section('operations').locator('[data-action="production"]').click();
+    assert.deepEqual(await expanded(),['operations']);
+    assert.equal(await section('operations').locator('[data-action="production"]').getAttribute('aria-current'),'page');
+    await page.setViewportSize({width:390,height:760});
+    const menu=page.locator('.j-mobile-menu');
+    await menu.press('Enter');
+    assert.equal(await heading('operations').evaluate(element=>element===document.activeElement),true);
+    await heading('portfolio').press('Enter');
+    assert.deepEqual(await expanded(),['portfolio']);
+    await page.keyboard.press('Escape');
+    assert.equal(await menu.evaluate(element=>element===document.activeElement),true);
+    await menu.click();
+    assert.deepEqual(await expanded(),['portfolio'],'Reopening the drawer preserves the choice');
+    await section('portfolio').locator('[data-action="projects"]').click();
+    assert.equal((await inspect()).state.screen,'projects');
+    assert.equal(await menu.getAttribute('aria-expanded'),'false');
+    await menu.click();
+    assert.deepEqual(await expanded(),['portfolio']);
+    assert.equal(await section('portfolio').locator('[data-action="projects"]').getAttribute('aria-current'),'page');
+  });
+
   await test('Solicitud usa el formulario nativo D85 sin captura duplicada', async () => {
     await open('DEMO-101');
+    assert.equal(await page.locator('#j-main .j-case-head p.j-muted, #j-main .j-stages').count(),0);
+    assert.equal(await page.locator('#j-main .j-case-head .j-eyebrow').textContent(),'DEMO-101 · Versión 1');
+    assert.equal(await quote('#request-scope-title').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(240, 246, 252)');
     const phase = process.env.DEMO_CAPTURE_PHASE || 'after';
     for (const width of [1440,390]) {
       await page.setViewportSize({width,height:1000});
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
       await capture({path:path.join(artifacts,`request-${phase}-${width}.png`),fullPage:true});
     }
     await page.setViewportSize({width:1440,height:1000});
@@ -802,6 +952,138 @@ try {
     assert.equal((await record('DEMO-101')).project, null);
   });
 
+  await test('Las pestañas del cotizador quedan estables al navegar', async () => {
+    await open('DEMO-101');
+    const navigation=quote('.steps');
+    const tab=index=>navigation.locator(`button[data-step="${index}"]`);
+    const measure=()=>navigation.evaluate(element=>{
+      const position=target=>{
+        const {x,y,width,height}=target.getBoundingClientRect();
+        return [x,y,width,height].map(Math.round);
+      };
+      return {
+        document:[scrollX,scrollY],
+        maxScroll:Math.max(0,document.scrollingElement.scrollHeight-innerHeight),
+        menu:position(element),
+        tabs:[...element.children].map(position)
+      };
+    });
+    for (const width of [1440,390]) {
+      await page.setViewportSize({width,height:720});
+      assert.deepEqual(await navigation.locator('button').allTextContents(),['Cliente','Artículos','Costos generales','Precio','Revisión']);
+      assert.equal(await page.locator('#j-main .j-stages').count(),0);
+      let preservedScroll=false;
+      for (const index of [1,2,3,4,0]) {
+        await page.evaluate(()=>scrollTo(0,40));
+        const before=await measure();
+        await tab(index).click();
+        assert.equal(await tab(index).getAttribute('aria-current'),'step');
+        assert.equal(await tab(index).evaluate(element=>element===document.activeElement),true);
+        const after=await measure();
+        const targetScroll=Math.min(before.document[1],after.maxScroll);
+        assert.deepEqual(after.document,[0,targetScroll],`Page scroll moves to step ${index} at ${width}px`);
+        const aligned=([x,y,w,h])=>[x,y+before.document[1]-targetScroll,w,h];
+        assert.deepEqual(after.menu,aligned(before.menu),`Menu moves to step ${index} at ${width}px`);
+        assert.deepEqual(after.tabs,before.tabs.map(aligned),`Tabs move to step ${index} at ${width}px`);
+        preservedScroll ||= targetScroll>0 && targetScroll===before.document[1];
+      }
+      assert.ok(preservedScroll,`Exercise a transition with a nonzero scroll position at ${width}px`);
+      const origin=await measure();
+      const field=await quote('[data-path="need"]').elementHandle();
+      await tab(0).press('Enter');
+      assert.ok(await field.evaluate(element=>element.isConnected),'Reactivating the current tab preserves the form');
+      assert.deepEqual(await measure(),origin);
+    }
+    await page.setViewportSize({width:1440,height:1000});
+  });
+
+  await test('Agregar producto integra ambos caminos al diseño de líneas limpias',async()=>{
+    await open('DEMO-101');
+    await stage('quote');
+    await quote('[data-action="line-add"]').click();
+    const selector=quote('#product-path-selector');
+    const paths=selector.locator('.product-path');
+    assert.deepEqual(await paths.locator('strong').allTextContents(),['Producto de línea','Producto nuevo']);
+    assert.equal(await paths.first().evaluate(el=>getComputedStyle(el).borderRadius),'8px');
+    await captureFamily(selector,'agregar-producto.png');
+    await paths.first().press('Enter');
+    assert.equal(await quote('#line-catalog-panel').isVisible(),true);
+    await quote('[data-action="line-cancel"]').click();
+    await paths.last().press('Enter');
+    assert.equal(await quote('.part-accordion').count(),2);
+  });
+
+  await test('Catálogo con lista y ficha lateral conserva filtros, foco y variante explícita',async()=>{
+    await action('new-request').click();
+    await quote('.steps [data-step="1"]').click();
+    await quote('[data-action="line-open"]').click();
+    const catalog=quote('.recipe-catalog');
+    const rows=catalog.locator('.recipe-catalog-row');
+    const detail=catalog.locator('.recipe-catalog-card');
+    const use=detail.locator('[data-action="line-use"]');
+    const bolonia=catalogRow('SYN-BOLONIA');
+    assert.equal(await rows.count(),4);
+    const desktopRow=await rows.first().elementHandle();
+    await bolonia.press('Enter');
+    assert.ok(await desktopRow.evaluate(el=>el.isConnected),'Selecting a product keeps the list in place');
+    assert.equal(await bolonia.getAttribute('aria-pressed'),'true');
+    assert.equal(await bolonia.evaluate(el=>el===document.activeElement),true);
+    assert.equal(await detail.getAttribute('data-line-product'),'SYN-BOLONIA');
+    assert.equal(await detail.locator('select').inputValue(),'');
+    assert.equal(await use.isEnabled(),false);
+    await detail.locator('select').selectOption('SYN-BOLONIA-R');
+    assert.equal(await use.isEnabled(),true);
+    assert.equal(await quote('.part-accordion').count(),0,'Browsing the catalog must leave the quotation intact');
+    await detail.locator('[data-action="line-details-toggle"]').click();
+    assert.match(await detail.locator('.line-product-detail').innerText(),/Medidas terminadas/);
+    await detail.locator('[data-action="line-details-toggle"]').click();
+    const layout=()=>catalog.evaluate(el=>{
+      const results=el.querySelector('.recipe-catalog-products').getBoundingClientRect();
+      const product=el.querySelector('.recipe-catalog-card').getBoundingClientRect();
+      return {
+        beside:results.right<product.left&&Math.abs(results.top-product.top)<1,
+        stacked:results.bottom<product.top,
+        fits:document.documentElement.scrollWidth<=innerWidth+1
+      };
+    });
+    assert.deepEqual(await layout(),{beside:true,stacked:false,fits:true});
+    const controls=await detail.locator('.line-card-actions').evaluate(el=>{
+      const variant=el.querySelector('select').getBoundingClientRect();
+      const use=el.querySelector('[data-action="line-use"]').getBoundingClientRect();
+      return { sideBySide:use.left>variant.right, aligned:Math.abs(use.bottom-variant.bottom)<2 };
+    });
+    assert.deepEqual(controls,{sideBySide:true,aligned:true});
+    await catalog.locator('img').evaluateAll(images=>Promise.all(images.map(image=>image.decode())));
+    await captureFamily(catalog,'catalogo-lista-ficha-escritorio.png');
+    await page.setViewportSize({width:1000,height:850});
+    assert.deepEqual(await layout(),{beside:true,stacked:false,fits:true});
+    await page.setViewportSize({width:390,height:850});
+    assert.deepEqual(await layout(),{beside:false,stacked:true,fits:true});
+    await bolonia.press('Enter');
+    assert.equal(await detail.locator('h4').evaluate(el=>el===document.activeElement),true);
+    assert.equal(await detail.locator('select').inputValue(),'SYN-BOLONIA-R','Revisiting the active row keeps its variant');
+    await captureFamily(catalog,'catalogo-lista-ficha-movil.png');
+    await detail.locator('[data-action="line-back-results"]').press('Enter');
+    assert.equal(await bolonia.evaluate(el=>el===document.activeElement),true);
+    const search=catalog.locator('#line-search');
+    await search.fill('FLORÉNCIA');
+    assert.equal(await rows.count(),1);
+    assert.equal(await detail.getAttribute('data-line-product'),'SYN-NUBE');
+    assert.equal(await use.isEnabled(),false);
+    await search.fill('sin coincidencias 199');
+    assert.match(await catalog.locator('[role="status"]').innerText(),/Sin coincidencias/);
+    assert.equal(await detail.count(),0);
+    await search.clear();
+    await catalog.locator('#line-family').selectOption('Cubiertas');
+    assert.equal(await rows.count(),1);
+    assert.equal(await detail.getAttribute('data-line-product'),'SYN-PRISMA');
+    assert.equal(await use.isEnabled(),false);
+    await search.press('Escape');
+    assert.equal(await catalog.count(),0);
+    assert.equal(await quote('[data-action="line-open"]').evaluate(el=>el===document.activeElement),true);
+    await page.setViewportSize({width:1440,height:1000});
+  });
+
   await test('Mesa, Flujo y cotizador se usan en móvil y por teclado', async () => {
     for (const width of [390, 538, 768, 783, 1100, 1280, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -823,15 +1105,18 @@ try {
           buttons:[...element.querySelectorAll('button')].map(button=>button.getBoundingClientRect().toJSON())
         }));
         assert.ok(bounds.rect.width<=width,`Navigation remains within the viewport at ${width}px`);
-        for (let i=1;i<bounds.buttons.length;i++) {
-          assert.ok(bounds.buttons[i].left>=bounds.buttons[i-1].right-1,`Adjacent menu targets do not overlap at ${width}px`);
-          assert.ok(Math.abs(bounds.buttons[i].top-bounds.buttons[0].top)<1,`Steps stay in one scrollable row at ${width}px`);
+        for (const [i,button] of bounds.buttons.entries()) {
+          assert.ok(button.left>=bounds.rect.left-1&&button.right<=bounds.rect.right+1,`Tab is fully visible at ${width}px`);
+          const previous=bounds.buttons[i-1];
+          if(previous)assert.ok(button.left>=previous.right-1||button.top>=previous.bottom-1,`Tab targets do not overlap at ${width}px`);
         }
       }
       if(width<=1150) {
         const sizes=await quote('.shell').evaluate(element=>({shell:element.clientWidth,form:element.querySelector('.mainform').clientWidth}));
         assert.ok(sizes.form>=sizes.shell-1,`Form uses the available width rather than an empty second column at ${width}px`);
       }
+      // Compare the same resting state after layout changes move buttons under the pointer.
+      await page.mouse.move(0,0);
       const buttonStyles=await quote('.panel-actions [data-action="save"]').evaluate(button=>{
         const embedded=getComputedStyle(button),footer=getComputedStyle(document.querySelector('#journey-footer [data-action="list"]'));
         return ['borderRadius','fontFamily','fontSize','padding','backgroundColor','borderColor'].map(key=>[key,embedded[key],footer[key]]);

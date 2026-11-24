@@ -17,6 +17,8 @@ export function extendRecipes(source) {
   source=once(source,'  function items() {',recipeClient.replace(/^\r?\n/,'')+'\n  function items() {');
   source=once(source,'globalThis.__client = {','globalThis.__client = {lineAction,lineState,productStart,filterLineCatalog,lineResults,lineVariantSummary,lineCatalogPanel,breakdownSetField,breakdownSave,partInput,partPaint,partCandidate,recipeEntry,recipeDirectoryHtml,recipeSyncQuote,recipeMaterialPrice,recipeWoodResult:solidWoodResult,');
   source=once(source,"if(!editable()||!app.lineCatalog||!lineState().open)return;","if(!recipeCanEdit()||!app.lineCatalog||!lineState().open)return;");
+  source=once(source,"refreshLineResults();focusLine('[data-line-variant=", "refreshRecipeCatalogChoice(product);focusLine('[data-line-variant=");
+  source=once(source,"refreshLineResults();focusLine('[data-action=\"line-details-toggle\"]", "refreshRecipeCatalogChoice(product);focusLine('[data-action=\"line-details-toggle\"]");
   source=once(source,'if (!editable()) return;\n      beginCapture();','if (!recipeCanEdit()) return;\n      beginCapture();');
   source=once(source,'app.q.items.splice(i, 1);','app.q.items.splice(i, 1);\n        app.solidWoodLocal?.articles.delete(id);\n        if(app.syntheticRecipes?.articles)delete app.syntheticRecipes.articles[id];');
   // Per-article recipe metadata must never borrow the legacy singleton preview.

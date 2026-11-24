@@ -1,19 +1,78 @@
-#quote-host .recipe-catalog-products {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-#quote-host .recipe-catalog-card {display:block;padding:0;overflow:hidden;border:1px solid #d9d8d1;border-radius:14px;background:#fff;min-width:0}
+#quote-host .product-path-selector {margin:0; padding:14px 0; border-color:var(--j-line)}
+#quote-host .product-path-selector h3 {color:#173e63; font-weight:650}
+#quote-host .product-path-selector .product-path {
+  min-width:0; min-height:64px; padding:10px 13px;
+  border:1px solid var(--j-line); border-radius:8px;
+  background:#fff; box-shadow:none; justify-content:center; gap:4px;
+}
+#quote-host .product-path-selector .product-path strong {color:#123e6b}
+#quote-host .product-path-selector .product-path:is(:hover:not(:disabled),[aria-expanded="true"]) {
+  border-color:#8cbce6; background:#f0f6fc;
+}
+#quote-host .product-path-selector button:focus-visible,
+#quote-host .line-catalog-head button:focus-visible {outline:2px solid var(--j-blue); outline-offset:3px}
+#quote-host .product-add button,
+#quote-host .product-path-selector>button,
+#quote-host .line-catalog-head button {border-radius:6px; box-shadow:none}
+#quote-host .recipe-catalog {
+  container:recipe-catalog / inline-size;
+  padding:clamp(12px,2vw,20px);
+  border-color:var(--j-list-border);
+  border-radius:var(--j-list-radius);
+  background:var(--j-paper);
+  box-shadow:none;
+}
+#quote-host .recipe-catalog .line-catalog-head h3 {color:var(--j-list-name); font-weight:650}
+#quote-host .recipe-catalog .line-catalog-head button {min-height:39px}
+#quote-host .recipe-catalog .line-search > .field:first-child {flex:2 1 210px}
+#quote-host .recipe-catalog .field :is(input,select) {
+  border:1px solid #acbfd3; border-radius:6px; background-color:var(--j-paper); box-shadow:none;
+}
+#quote-host .recipe-catalog-layout {display:grid; grid-template-columns:minmax(0,2fr) minmax(0,3fr); gap:14px; align-items:start}
+#quote-host :is(.recipe-catalog-products,.recipe-catalog-card) {
+  min-width:0; margin:0; padding:0; list-style:none; background:var(--j-paper);
+  border:1px solid var(--j-list-border); border-radius:var(--j-list-radius);
+}
+#quote-host .recipe-catalog-products > li + li {border-top:1px solid var(--j-list-divider)}
+#quote-host .recipe-catalog-row {
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12px; width:100%;
+  padding:10px 13px; text-align:left; color:var(--j-list-name); border:0; border-radius:0;
+  background:transparent; box-shadow:none; line-height:1.35; overflow-wrap:anywhere;
+}
+#quote-host .recipe-catalog-products li:first-child button {border-radius:9px 9px 0 0}
+#quote-host .recipe-catalog-products li:last-child button {border-bottom-left-radius:9px; border-bottom-right-radius:9px}
+#quote-host .recipe-catalog-row:hover {background:var(--j-list-hover)}
+#quote-host .recipe-catalog-row[aria-pressed="true"] {background:var(--j-soft); box-shadow:inset 3px 0 0 var(--j-blue)}
+#quote-host .recipe-catalog-row:focus-visible {outline:2px solid var(--j-blue); outline-offset:-3px}
+#quote-host .recipe-catalog-row::after {
+  content:""; width:6px; height:6px; margin-right:3px;
+  border:solid currentColor; border-width:1.5px 1.5px 0 0; transform:rotate(45deg);
+}
+#quote-host .recipe-catalog-thumb {display:block; width:56px; height:56px; border-radius:6px; object-fit:cover; background:#eeece7}
+#quote-host .recipe-catalog-row strong {font-size:14px; font-weight:650}
+#quote-host .recipe-catalog-row small {display:block; margin-top:3px; font-size:12px; color:var(--j-muted)}
+#quote-host .recipe-catalog-card {overflow:hidden; scroll-margin-top:70px}
+#quote-host .recipe-catalog-back {display:none}
 #quote-host .recipe-product-figure {margin:0;background:#eeece7}
-#quote-host .recipe-product-figure .line-product-image {display:block;width:100%;height:210px;max-width:none;object-fit:contain;border-radius:0;background:#eeece7}
-#quote-host .recipe-product-figure figcaption {padding:8px 16px;color:#696c65;font-size:11px;line-height:1.4;background:#f6f5f1}
+#quote-host .recipe-product-figure .line-product-image {display:block;width:100%;height:clamp(190px,31cqi,320px);max-width:none;object-fit:contain;border-radius:0;background:#eeece7}
+#quote-host .recipe-product-figure figcaption {padding:8px 16px;color:var(--j-muted);font-size:11px;line-height:1.4;background:#f0f6fc}
 #quote-host .recipe-product-content {padding:18px}
 #quote-host .recipe-product-content .line-product-copy {min-width:0}
 #quote-host .recipe-product-content .line-product-copy h4 {font-size:19px;margin:5px 0 9px}
 #quote-host .recipe-product-content .line-product-copy p {line-height:1.55;margin:0 0 15px;overflow-wrap:anywhere}
-#quote-host .recipe-product-content .line-card-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center;justify-content:space-between}
-#quote-host .recipe-product-content .line-variant-choice {width:100%;max-width:none}
+#quote-host .recipe-product-content .line-card-actions {display:flex;flex-flow:row wrap;gap:8px;margin:14px 0 6px;align-items:end}
+#quote-host .recipe-product-content .line-variant-choice {flex:1 1 155px;min-width:0;max-width:none;margin:0}
+#quote-host .recipe-product-content .line-card-actions > button {min-height:44px}
 #quote-host .recipe-product-content .line-variant-choice select {width:100%}
-#quote-host .recipe-product-content .line-product-detail {margin-top:15px;border-top:1px solid #e4e3dd;padding-top:15px}
+#quote-host .recipe-product-content .line-details-toggle,
+#quote-host .recipe-catalog-back {color:#075eab; min-height:34px; padding:5px 2px; border:0; background:transparent; box-shadow:none}
+#quote-host .recipe-product-content .line-product-detail {margin-top:15px;border-top:1px solid var(--j-line);padding-top:15px}
 #quote-host .recipe-product-content .line-variant-summary {display:grid;grid-template-columns:1fr;gap:10px}
 #quote-host .recipe-product-content .line-variant-summary dd {overflow-wrap:anywhere}
 #quote-host .recipe-preview-note {font-size:12px;line-height:1.6;background:#f1f3ec;padding:12px;border-radius:8px;color:#4d5844}
 #quote-host .synthetic-recipe-source {margin-bottom:14px}
 #quote-host .synthetic-recipe-source li {line-height:1.6}
-@media(max-width:760px){#quote-host .recipe-catalog-products{grid-template-columns:1fr}#quote-host .recipe-product-figure .line-product-image{height:190px}}
+@container recipe-catalog (max-width:560px) {
+  #quote-host .recipe-catalog-layout {grid-template-columns:minmax(0,1fr)}
+  #quote-host .recipe-catalog-back {display:inline-flex; margin:3px 12px}
+}

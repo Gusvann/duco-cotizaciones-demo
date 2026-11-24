@@ -47,7 +47,32 @@ export const recipeClient = String.raw`
       return part;
     }catch(error){Object.assign(app,previous);editor();message('No se pudo preparar la receta; no se agregó el artículo.',true);return null;}
   }
-  function lineAction(action,button){if(!recipeCanEdit())return;return recipeBaseLineAction(action,button);}
+  function lineAction(action,button){
+    if(!recipeCanEdit())return;
+    if(action==='line-back-results'){
+      if(lineState().open)focusLine('[data-action="line-select-product"][aria-pressed="true"]');
+      return;
+    }
+    if(action!=='line-select-product')return recipeBaseLineAction(action,button);
+    const state=lineState();
+    if(!state.open||app.step!==1||app.partContinuation||app.breakdownContinuation)return;
+    const product=lineProducts().find(row=>row.id===button.dataset.product);
+    if(!product)return;
+    if(state.productId!==product.id){
+      state.productId=product.id;
+      state.variantId='';
+      state.detailsProductId='';
+      refreshRecipeCatalogChoice(product);
+    }
+    requestAnimationFrame(()=>{
+      const detail=$('#line-catalog-detail'),results=$('#line-catalog-products');
+      if(results?.getBoundingClientRect&&detail?.getBoundingClientRect&&
+          results.getBoundingClientRect().bottom<=detail.getBoundingClientRect().top){
+        $('#line-catalog-product-title')?.focus({preventScroll:true});
+        detail.querySelector('.recipe-catalog-card')?.scrollIntoView({block:'start'});
+      }
+    });
+  }
   function filterLineCatalog(key,value){if(!recipeCanEdit()||!['query','family'].includes(key))return;return recipeBaseFilterLineCatalog(key,value);}
   function partInput(el,repaint){if(!recipeCanEdit())return true;return recipeBasePartInput(el,repaint);}
   function solidWoodOpen(id,componentId='',historicalId=''){if(!recipeCanEdit())return false;return recipeBaseSolidWoodOpen(id,componentId,historicalId);}
@@ -65,13 +90,50 @@ export const recipeClient = String.raw`
   }
   function lineResults(){
     const state=lineState(),normalize=v=>String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
-    const matches=lineProducts().filter(product=>(!state.family||product.family===state.family)&&normalize(product.name+' '+product.family+' '+product.variants.map(v=>v.name+' '+v.materials).join(' ')).includes(normalize(state.query.trim())));
+    const query=normalize(state.query.trim());
+    const matches=lineProducts().filter(product=>(!state.family||product.family===state.family)&&
+      normalize(product.name+' '+product.family+' '+product.variants.map(v=>v.name+' '+v.materials).join(' ')).includes(query));
     if(!matches.length)return '<p class="line-empty" role="status">Sin coincidencias. Prueba otro nombre o familia.</p>';
-    return '<div class="line-explore"><h4>'+(!state.query&&!state.family?'Explorar catálogo':'Resultados')+'</h4><p>Elige una variante antes de agregar el producto.</p></div><div class="line-products recipe-catalog-products">'+matches.map(product=>{const selected=state.productId===product.id&&product.variants.find(v=>v.id===state.variantId),expanded=state.detailsProductId===product.id;return '<article class="line-product recipe-catalog-card '+(selected?'is-selected':'')+'" data-line-product="'+esc(product.id)+'">'+recipeImage(product,selected)+'<div class="recipe-product-content"><div class="line-product-copy"><small>'+esc(product.family)+'</small><h4>'+esc(product.name)+'</h4><p>'+esc(selected?.description||product.description)+'</p></div><div class="line-variant-choice">'+lineVariantSelect(product)+'</div><div class="line-card-actions"><button type="button" class="line-details-toggle" data-action="line-details-toggle" data-product="'+esc(product.id)+'" aria-controls="line-detail-'+esc(product.id)+'" aria-expanded="'+expanded+'">'+(expanded?'Ocultar datos técnicos':'Ver datos técnicos')+'</button>'+lineUseButton(product)+'</div><div class="line-product-detail" id="line-detail-'+esc(product.id)+'" '+(expanded?'':'hidden')+'>'+lineVariantSummary(product)+'</div></div></article>';}).join('')+'</div>';
+    const current=matches.find(product=>product.id===state.productId)||matches[0];
+    const rows=matches.map(product=>'<li><button type="button" class="recipe-catalog-row" data-action="line-select-product" data-product="'+
+      esc(product.id)+'" aria-controls="line-catalog-detail" aria-pressed="'+(current.id===product.id)+'">'+
+      '<img class="recipe-catalog-thumb" src="'+esc(DemoRecipeCatalog.images[product.imageId]||'')+'" alt="" width="56" height="56" decoding="async">'+
+      '<span><strong>'+esc(product.name)+'</strong><small>'+esc(product.family)+'</small></span></button></li>').join('');
+    return '<div class="recipe-catalog-layout"><ul id="line-catalog-products" class="recipe-catalog-products" aria-label="Resultados del catálogo">'+rows+
+      '</ul><div id="line-catalog-detail">'+recipeCatalogDetail(current,state)+'</div></div>';
+  }
+  function recipeCatalogDetail(product,state){
+    const id=esc(product.id);
+    const variant=state.productId===product.id?product.variants.find(row=>row.id===state.variantId):null;
+    const expanded=state.detailsProductId===product.id;
+    return '<article class="recipe-catalog-card" data-line-product="'+id+'" aria-labelledby="line-catalog-product-title">'+
+      '<button type="button" class="quiet recipe-catalog-back" data-action="line-back-results">← Volver a resultados</button>'+
+      recipeImage(product,variant)+
+      '<div class="recipe-product-content"><div class="line-product-copy"><small>'+esc(product.family)+'</small>'+
+      '<h4 id="line-catalog-product-title" tabindex="-1">'+esc(product.name)+'</h4><p>'+esc(variant?.description||product.description)+'</p></div>'+
+      '<div class="line-card-actions"><div class="field line-variant-choice">'+lineVariantSelect(product)+'</div>'+lineUseButton(product)+'</div>'+
+      '<button type="button" class="line-details-toggle" data-action="line-details-toggle" data-product="'+id+
+      '" aria-controls="line-detail-'+id+'" aria-expanded="'+expanded+'">'+(expanded?'Ocultar datos técnicos':'Ver datos técnicos')+'</button>'+
+      '<div class="line-product-detail" id="line-detail-'+id+'" '+(expanded?'':'hidden')+'>'+(expanded?lineVariantSummary(product):'')+'</div></div></article>';
+  }
+  function refreshRecipeCatalogChoice(product){
+    const detail=$('#line-catalog-detail');
+    if(!detail)return;
+    detail.innerHTML=recipeCatalogDetail(product,lineState());
+    quoteRoot.querySelectorAll('[data-action="line-select-product"]').forEach(button=>{
+      button.setAttribute('aria-pressed',String(button.dataset.product===product.id));
+    });
   }
   function lineCatalogPanel(){
     const state=lineState(),families=[...new Set(lineProducts().map(p=>p.family))];
-    return '<section class="line-catalog recipe-catalog" aria-labelledby="line-catalog-title"><div class="line-catalog-head"><div><h3 id="line-catalog-title">Catálogo de productos · simulación</h3><p>Productos y recetas de la referencia local; importes históricos pendientes de validación.</p></div><button type="button" class="quiet" data-action="line-cancel" aria-label="Cerrar catálogo">Cerrar</button></div><div class="line-search"><div class="field"><label for="line-search">Buscar producto</label><input type="search" id="line-search" maxlength="120" placeholder="Nombre, familia o material" value="'+esc(state.query)+'"></div><div class="field"><label for="line-family">Familia</label><select id="line-family"><option value="">Todas las familias</option>'+families.map(f=>'<option value="'+esc(f)+'" '+(state.family===f?'selected':'')+'>'+esc(f)+'</option>').join('')+'</select></div></div><div id="line-results" aria-live="polite">'+lineResults()+'</div></section>';
+    return '<section class="line-catalog recipe-catalog" aria-labelledby="line-catalog-title">'+
+      '<div class="line-catalog-head"><h3 id="line-catalog-title">Catálogo de productos</h3>'+
+      '<button type="button" class="quiet" data-action="line-cancel" aria-label="Cerrar catálogo">Cerrar</button></div>'+
+      '<div class="line-search"><div class="field"><label for="line-search">Buscar producto</label>'+
+      '<input type="search" id="line-search" maxlength="120" placeholder="Nombre, familia o material" value="'+esc(state.query)+'"></div>'+
+      '<div class="field"><label for="line-family">Familia</label><select id="line-family"><option value="">Todas las familias</option>'+
+      families.map(f=>'<option value="'+esc(f)+'" '+(state.family===f?'selected':'')+'>'+esc(f)+'</option>').join('')+
+      '</select></div></div><div id="line-results">'+lineResults()+'</div></section>';
   }
   function recipeDirectoryHtml(item){
     return recipeEntry(item.id)?'':recipeBaseRecipeDirectoryHtml(item);
