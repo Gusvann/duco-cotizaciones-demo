@@ -68,6 +68,39 @@ test('Projects is a usable global navigation entry before a quote is opened',asy
   assert.equal(h.sandbox.__nodes.get('quote-host').hidden,true);
 });
 
+test('Published Asana projects use the compact folio and show only the public fields',async()=>{
+  const h=await harness();
+  const records=h.inspect().records;
+  const local=records.find(record=>record.project);
+  const published={
+    coverage:{from:'2026-10-01',through:'2026-11-24',lists:{project:'2026-11-23'}},
+    projects:[
+      {folio:'2611998',status:'in-progress',createdAt:'2026-11-05',startDate:null,dueDate:'2026-11-21',deliveryDate:'2026-12-02',
+        title:'Detalle ficticio que no debe salir',assignee:'Contacto ficticio que no debe salir',url:'https://asana.example.invalid/private',amount:364335},
+      {folio:'2610997',status:'unknown',createdAt:'2026-10-29',startDate:null,dueDate:null,deliveryDate:null}
+    ]
+  };
+  const standard=h.sandbox.DemoProjectViews.list(records,'projects','',{published});
+  const publicSection=standard.match(/<section\b[^>]*data-public-project-list[\s\S]*?<\/section>/)[0];
+  assert.equal((publicSection.match(/data-public-project-row/g)||[]).length,2);
+  assert.match(publicSection,/>2611998</);
+  assert.match(publicSection,/>2610997</);
+  assert.match(publicSection,/En proceso/);
+  assert.match(publicSection,/Estado sin confirmar/);
+  assert.match(publicSection,/Vencimiento en Asana/);
+  assert.match(publicSection,/Entrega registrada/);
+  assert.doesNotMatch(publicSection,/ficticio|asana\.example|364335|href|data-action/);
+  assert.doesNotMatch(standard,/data-action="project-open"/,'Unstored demonstration projects do not appear in the published list');
+  const withLocal=h.sandbox.DemoProjectViews.list(records,'projects','',{published,hasStoredRecord:id=>id===local.id});
+  assert.match(withLocal,/Proyectos de este navegador/);
+  assert.match(withLocal,new RegExp('data-action="project-open" data-id="'+local.id+'"'));
+  const full=h.sandbox.DemoProjectViews.list(records,'projects','2611998',{published});
+  const withHyphen=h.sandbox.DemoProjectViews.list(records,'projects','2611-998',{published});
+  assert.equal(full.match(/<section\b[^>]*data-public-project-list[\s\S]*?<\/section>/)[0],withHyphen.match(/<section\b[^>]*data-public-project-list[\s\S]*?<\/section>/)[0]);
+  assert.doesNotMatch(full,/>2610997</);
+  assert.doesNotMatch(h.sandbox.DemoProjectViews.list(records,'production','',{published}),/data-public-project-row/);
+});
+
 // Owner correction, 2026-11-05: the process map must not be offered in navigation.
 test('navigation omits the process map on desktop and in the mobile menu',async()=>{
   const h=await harness();

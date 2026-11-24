@@ -14,6 +14,12 @@
 #journey-root .op-caption{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 #journey-root .op-list-wrap .op-list td:first-child .op-open{min-height:40px}
 #journey-root .op-list td{vertical-align:middle}
+#journey-root .op-projects-source{margin:18px 0 0}
+#journey-root .op-projects-browser{margin-top:24px}
+#journey-root .op-projects-source .op-section-head p{margin-top:4px}
+#journey-root .op-projects-source .op-list{min-width:660px}
+#journey-root .op-projects-source .j-list-table .op-list tbody th{font-size:13px;letter-spacing:normal;text-transform:none;font-weight:650;background:transparent;color:var(--j-ink)}
+#journey-root .op-projects-source .j-list-table:focus-visible{outline:2px solid var(--j-blue);outline-offset:2px}
 #journey-root .op-detail{display:grid;gap:20px}
 #journey-root .op-detail-head h2{margin-bottom:0}
 #journey-root .op-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 20px;margin:20px 0}

@@ -19,14 +19,16 @@
     const signed=negative?(whole===0n?-0:-whole):whole;
     return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).formatToParts(signed).map(part=>part.type==='fraction'?fraction:part.value).join('');
   };
+  const dayFormat = new Intl.DateTimeFormat('es-MX',{day:'numeric',month:'short',year:'numeric'});
   const date = value => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return 'Por definir';
     const parsed = new Date(value + 'T12:00:00');
-    return Number.isNaN(parsed.valueOf()) ? 'Por definir' : new Intl.DateTimeFormat('es-MX', {day:'numeric', month:'short', year:'numeric'}).format(parsed);
+    return Number.isNaN(parsed.valueOf()) ? 'Por definir' : dayFormat.format(parsed);
   };
   let clockTick = 0;
   const privateApi=window.DucoPrivateApi;
   const browserStore=!privateApi && window.DemoBrowserStore;
+  const publishedPortfolio=!privateApi && window.location?.protocol!=='file:' && window.DucoPublishedPortfolio;
   const storage=privateApi || browserStore;
   let localUser=null;
   const storageRevisions=new Map();
@@ -40,7 +42,7 @@
   const stages = [{key:'request', label:'Solicitud'}, {key:'quote', label:'Cotizador'}, {key:'review', label:'Revisión'}, {key:'offer', label:'Envío'}, {key:'response', label:'Respuesta'}, {key:'project', label:'Proyecto'}];
   const statuses = {request:'Solicitud', draft:'Borrador', review:'Revisada', sent:'Enviada', waiting:'En espera de aprobación', paused:'Pausada por cliente', accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada', project:'Proyecto',unknown:'Sin clasificar'};
   const profiles = {account:'Account de ejemplo',designer:'Diseño de ejemplo'};
-  const state = {view:'mesa', screen:'list', id:null, search:'', filter:'all', profile:'account', saveOutcome:'success', busy:false, feedback:'', tone:'info', guard:null, menu:false,navGroup:'portfolio',returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}};
+  const state = {view:'mesa', quoteSource:'asana',screen:'list', id:null, search:'', filter:'all', profile:'account', saveOutcome:'success', busy:false, feedback:'', tone:'info', guard:null, menu:false,navGroup:'portfolio',returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}};
   let records = [];
   let importCoverage = null;
   let suppressChanges = false;
@@ -274,6 +276,10 @@
   function log(record, text) { record.history.unshift({at:stamp(), text}); }
 
   const isQuoteRecord = record => record.asana?.kind !== 'project';
+  // The original fixtures remain available to the teaching scenarios. Only new
+  // and previously saved quotes appear in the personal Pages list.
+  const listableQuote = record => isQuoteRecord(record) &&
+    (!publishedPortfolio || !/^DEMO-\d+$/.test(record.id) || storageRevisions.has(record.id));
   const responsibleId = record => record.responsibleId || record.request.accountId || (!record.asana && record.request.account ? 'local:'+record.request.account : '');
   const responsibleName = record => (record.source==='DUCO_LOCAL' ? record.responsibleId : record.request.account || record.asana?.assignee?.name) || 'Sin asignar';
   function filterOptions(options, selected) {
@@ -292,7 +298,7 @@
   function filteredRecords() {
     const query = state.search.trim().toLocaleLowerCase('es-MX');
     const selected = state.responsibleFilter ?? 'all';
-    return records.filter(record => isQuoteRecord(record) && (state.filter === 'all' || status(record) === state.filter) &&
+    return records.filter(record => listableQuote(record) && (state.filter === 'all' || status(record) === state.filter) &&
       (selected==='all' || responsibleId(record)===selected) && (!query || [record.folio,record.id,record.request.title,record.request.client,responsibleName(record),record.request.designer].some(value=>String(value ?? '').toLocaleLowerCase('es-MX').includes(query))));
   }
 
@@ -312,12 +318,78 @@
     return pill(statuses[stage],className)+warning;
   }
 
+  const quoteColumns = [
+    {label:'Por cotizar',keys:['request']},
+    {label:'En preparación',keys:['draft','review','changes']},
+    {label:'Con el cliente',keys:['sent','waiting','paused','rejected']},
+    {label:'Aceptadas',keys:['accepted']},
+    {label:'Proyecto',keys:['project']}
+  ];
+
+  function quoteBoard(items, stageFor, itemMarkup) {
+    const unknown = items.some(item=>stageFor(item)==='unknown');
+    const columns = unknown ? [...quoteColumns,{label:'Sin clasificar',keys:['unknown']}] : quoteColumns;
+    return '<div class="j-board">'+columns.map(column=>{
+      const visible = items.filter(item=>column.keys.includes(stageFor(item)));
+      return '<section class="j-lane" aria-label="'+column.label+'"><div class="j-lane-head"><h2>'+column.label+'</h2><span>'+
+        visible.length+'</span></div>'+(visible.map(itemMarkup).join('')||'<p class="j-empty">Sin expedientes</p>')+'</section>';
+    }).join('')+'</div>';
+  }
+
+  const publishedQuoteStatus = record => Object.hasOwn(statuses,record.status)?record.status:'unknown';
+  function publishedQuoteStateMarkup(record) {
+    const stage=publishedQuoteStatus(record);
+    return pill(statuses[stage],stage==='accepted'||stage==='project'?'good':'');
+  }
+  function publishedQuotesMarkup() {
+    const entries=publishedPortfolio.quotes;
+    const query=state.search.trim().toLocaleLowerCase('es-MX');
+    const compactQuery=portfolio.compactFolio(query);
+    const visible=entries.filter(record=>(state.filter==='all'||publishedQuoteStatus(record)===state.filter)&&
+      (!query||record.folio&&[record.folio.toLocaleLowerCase('es-MX'),portfolio.compactFolio(record.folio).toLocaleLowerCase('es-MX')]
+        .some(folio=>folio.includes(query)||folio.includes(compactQuery))));
+    const filter=filterField('j-status-filter','Estado',[['all','Todos los estados'],...Object.entries(statuses)],state.filter);
+    const search='<label class="j-field j-search"><span>Buscar por folio</span><input id="j-search" class="j-input" type="search" '+
+      'placeholder="Folio de cotización" value="'+escape(state.search)+'"></label>';
+    const controls='<div class="j-toolbar">'+search+filter+'<p class="j-muted j-record-count" role="status">'+visible.length+
+      ' de '+entries.length+' cotizaciones</p></div>';
+    const {from,through,lists}=publishedPortfolio.coverage;
+    const to=lists?.quote||through;
+    const range=from&&to?' · Creadas del '+date(from)+' al '+date(to):'';
+    const coverage='<p class="j-muted j-sub">Corte de Asana'+range+'.</p>';
+    if(state.view==='flujo'){
+      return controls+coverage+quoteBoard(visible,publishedQuoteStatus,record=>
+        '<article class="j-card" data-published-quote><h3>'+escape(record.folio||'Sin folio registrado')+'</h3>'+
+        publishedQuoteStateMarkup(record)+'<p class="j-sub">Creación: '+date(record.createdAt)+'<br>Cotización: '+
+        date(record.quoteDue)+'<br>Entrega: '+date(record.deliveryDate)+'</p></article>');
+    }
+    const rows=visible.map(record=>'<tr data-published-quote><td><strong>'+escape(record.folio||'Sin folio registrado')+'</strong></td><td>'+
+      publishedQuoteStateMarkup(record)+'</td><td>'+date(record.createdAt)+'</td><td>'+date(record.quoteDue)+'</td><td>'+
+      date(record.deliveryDate)+'</td></tr>').join('');
+    return controls+coverage+'<div class="j-table-wrap j-list-table" role="region" aria-label="Tabla de cotizaciones" tabindex="0"><table class="j-table"><caption class="j-sr">Cotizaciones de Asana</caption>'+
+      '<thead><tr><th scope="col">Folio</th><th scope="col">Estado</th><th scope="col">Fecha de creación</th>'+
+      '<th scope="col">Fecha límite de cotización</th><th scope="col">Fecha de entrega</th></tr></thead><tbody>'+
+      (rows||'<tr><td colspan="5" class="j-empty">No hay cotizaciones que coincidan con los filtros.</td></tr>')+'</tbody></table></div>';
+  }
+
   function listMarkup() {
+    const switcher = `<div class="j-switch" role="group" aria-label="Vista de cotizaciones">${button('Mesa de cotizaciones','view',`data-view="mesa" aria-pressed="${state.view === 'mesa'}"`)}${button('Flujo de oportunidades','view',`data-view="flujo" aria-pressed="${state.view === 'flujo'}"`)}</div>`;
+    const sourceSwitcher=publishedPortfolio?'<div class="j-list-switch"><div class="j-switch" role="group" aria-label="Origen de las cotizaciones">'+
+      button('Cotizaciones de Asana','quote-source','data-source="asana" aria-pressed="'+(state.quoteSource==='asana')+'"')+
+      button('Cotizaciones de este navegador','quote-source','data-source="browser" aria-pressed="'+(state.quoteSource==='browser')+'"')+
+      '</div></div>':'';
+    const publicList=publishedPortfolio && state.quoteSource==='asana';
+    const heading='<div class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Portafolio comercial</p>'+
+      '<h1 class="j-split-heading"><span class="j-heading-lead">'+(publicList?'Cotizaciones.':'Tus cotizaciones.')+
+      '</span> <span class="j-heading-emphasis">De la solicitud al proyecto.</span></h1>'+
+      '<p class="j-muted">'+(publicList?'Consulta el estado y las fechas de las cotizaciones publicadas.':'Una solicitud, su cotización y el proyecto que resulta de ella.')+'</p></div>'+
+      button('Nueva solicitud','new-request','',true)+'</div>'+sourceSwitcher+'<div class="j-list-switch">'+switcher+
+      '<span class="j-muted">Dos vistas · los mismos expedientes</span></div>';
+    if(publicList)return heading+publishedQuotesMarkup();
     const visible = filteredRecords();
     const sourceNotice = privateApi && !importCoverage?.lists?.quote
       ? '<p class="j-notice" role="status">La importación de cotizaciones de Asana está pendiente.</p>' : '';
-    const switcher = `<div class="j-switch" role="group" aria-label="Vista de cotizaciones">${button('Mesa de cotizaciones','view',`data-view="mesa" aria-pressed="${state.view === 'mesa'}"`)}${button('Flujo de oportunidades','view',`data-view="flujo" aria-pressed="${state.view === 'flujo'}"`)}</div>`;
-    const quoteRecords = records.filter(isQuoteRecord);
+    const quoteRecords = records.filter(listableQuote);
     const owners = identityOptions(quoteRecords.filter(record=>responsibleId(record)).map(record=>[responsibleId(record),responsibleName(record)]));
     const responsible = [['all','Todos'],['','Sin asignar'],...owners];
     const controls = `<div class="j-toolbar"><label class="j-field j-search"><span>Buscar solicitudes</span><input id="j-search" class="j-input" type="search" placeholder="Nombre, cliente o folio" value="${escape(state.search)}"></label>${filterField('j-status-filter','Estado',[['all','Todos los estados'],...Object.entries(statuses)],state.filter)}${filterField('j-responsible-filter','Responsable de cotización',responsible,state.responsibleFilter ?? 'all')}<p class="j-muted j-record-count" role="status">${visible.length} de ${quoteRecords.length} expedientes</p></div>`;
@@ -326,11 +398,9 @@
     if (state.view === 'mesa') {
       body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${escape(record.id)}"><td>${button(record.request.title,'open',quoteOpen(record))}<div class="j-sub">${escape(record.folio || record.id)} · ${escape(record.request.client)}</div></td><td>${quoteStateMarkup(record)}${record.version ? `<div class="j-sub">Versión ${escape(record.version)}</div>` : ''}</td><td>${escape(responsibleName(record))}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!record.asana && !complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',quoteOpen(record))}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
     } else {
-      const columns = [{label:'Por cotizar', keys:['request']}, {label:'En preparación', keys:['draft','review','changes']}, {label:'Con el cliente', keys:['sent','waiting','paused','rejected']}, {label:'Aceptadas', keys:['accepted']}, {label:'Proyecto', keys:['project']}];
-      if (visible.some(record=>status(record)==='unknown')) columns.push({label:'Sin clasificar',keys:['unknown']});
-      body = `<div class="j-board">${columns.map(column => { const items = visible.filter(record => column.keys.includes(status(record))); return `<section class="j-lane" aria-label="${column.label}"><div class="j-lane-head"><h2>${column.label}</h2><span>${items.length}</span></div>${items.map(record => `<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'open',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`).join('') || '<p class="j-empty">Sin expedientes</p>'}</section>`; }).join('')}</div>`;
+      body = quoteBoard(visible,status,record=>`<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'open',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`);
     }
-    return `<div class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Portafolio comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus cotizaciones.</span> <span class="j-heading-emphasis">De la solicitud al proyecto.</span></h1><p class="j-muted">Una solicitud, su cotización y el proyecto que resulta de ella.</p></div>${button('Nueva solicitud','new-request','',true)}</div><div class="j-list-switch">${switcher}<span class="j-muted">Dos vistas · los mismos expedientes</span></div>${controls}${sourceNotice}${body}`;
+    return heading+controls+sourceNotice+body;
   }
 
   const decimal = value => value === null ? '—' : new Intl.NumberFormat('es-MX',{maximumFractionDigits:2}).format(value);
@@ -457,7 +527,7 @@
     const metrics = kpiMetrics();
     const stat = (kind,label,value,context,key='') => `<button type="button" class="j-kpi-stat" ${chartData(kind,key)}><span>${escape(label)}</span><strong>${escape(value)}</strong><small>${escape(context)}</small></button>`;
     const currentTotal = amountValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,totalCents:metrics.totalCents});
-    return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">Cotizaciones, clientes y tiempos en una misma vista.</p></div></header>${kpiFiltersMarkup(metrics)}<p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${metrics.byType.map(group=>stat('type',group.label,decimal(group.closeDays)+(group.n ? ' días' : ''),'Cierre · '+group.n+' intervalos válidos',group.key)).join('')}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','Proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · ${escape(coverageLabel(metrics))}</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">${!metrics.coverage ? 'Los indicadores muestran los expedientes de esta sesión.' : metrics.coverage.localOnly ? 'El tablero muestra los expedientes guardados en el equipo.' : 'Asana aporta el corte importado. Los expedientes locales se consultan en su período correspondiente.'}</p>`;
+    return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">${publishedPortfolio ? "Indicadores de demostración y cotizaciones de este navegador." : "Cotizaciones, clientes y tiempos en una misma vista."}</p></div></header>${kpiFiltersMarkup(metrics)}<p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${metrics.byType.map(group=>stat('type',group.label,decimal(group.closeDays)+(group.n ? ' días' : ''),'Cierre · '+group.n+' intervalos válidos',group.key)).join('')}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','Proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · ${escape(coverageLabel(metrics))}</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">${!metrics.coverage ? 'Los indicadores muestran los expedientes de esta sesión.' : metrics.coverage.localOnly ? 'El tablero muestra los expedientes guardados en el equipo.' : 'Asana aporta el corte importado. Los expedientes locales se consultan en su período correspondiente.'}</p>`;
   }
   function recordMarkup(record) {
     const projected = portfolio.project([record],clients)[0];
@@ -613,13 +683,15 @@
     const atList = !atKpis && !atOperations && (state.screen === 'list' || !active);
     if(atOperations)for(const record of records)if(record.project)projectOperations(record);
     const operationsTitle={projects:'Proyectos',production:'Producción',deliveries:'Entregas',workflow:'Mapa del proceso'}[state.screen];
-    const operationsBody=atOperations?(state.screen==='workflow'?projectViews.workflow():projectViews.list(records,state.screen,state.projectSearch || '')):'';
+    const operationsBody=atOperations?(state.screen==='workflow'?projectViews.workflow():projectViews.list(records,state.screen,state.projectSearch || '',{
+      published:publishedPortfolio,hasStoredRecord:id=>storageRevisions.has(id)
+    })):'';
     const activeElement = document.activeElement;
     const restoreSearch = ['j-search','j-project-search'].includes(activeElement?.id);
     const selection = restoreSearch ? activeElement.selectionStart : null;
     const sessionControls=privateApi
       ? '<span class="j-demo">COPIA PRIVADA</span>'+button('Cerrar sesión','private-logout')
-      : browserStore ? '<span class="j-demo">DATOS DE PRUEBA</span>'+button('Recargar demo','reset')
+      : browserStore ? '<span class="j-demo">'+(publishedPortfolio?'CORTE PÚBLICO':'DATOS DE PRUEBA')+'</span>'+button(publishedPortfolio?'Recargar':'Recargar demo','reset')
       : '<span class="j-demo">SÓLO EN ESTA SESIÓN</span>'+button('Reiniciar sesión','reset');
     root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${sessionControls}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(crumbFolio(active))}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
     host.hidden = atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
@@ -801,7 +873,20 @@
       }
     }
     else if (action === 'close-menu') closeMenu();
-    else if (action === 'view') { state.view = target.dataset.view; render(); }
+    else if (action === 'view' && ['mesa','flujo'].includes(target.dataset.view)) {
+      state.view = target.dataset.view;
+      render();
+      root.querySelector(`[data-action="view"][data-view="${state.view}"]`)?.focus();
+    }
+    else if (action === 'quote-source') {
+      const source=target.dataset.source;
+      if(!publishedPortfolio||state.screen!=='list'||!['asana','browser'].includes(source)||state.quoteSource===source)return;
+      state.quoteSource=source;
+      state.search='';
+      state.filter='all';
+      render();
+      root.querySelector(`[data-action="quote-source"][data-source="${source}"]`)?.focus();
+    }
     else if (action === 'open') {
       const item=records.find(entry=>entry.id===target.dataset.id);
       if(!item)return;
@@ -914,6 +999,12 @@
       suppressChanges = true;
       try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true}); }
       finally { suppressChanges = false; }
+      if(publishedPortfolio){
+        state.quoteSource='browser';
+        state.search='';
+        state.filter='all';
+        state.responsibleFilter='all';
+      }
       records.push(item); transition('request',id,true);
     } else if (action === 'reset') { state.guard = 'reset'; renderFooter(); }
     else if (action === 'confirm-reset') await reset();
@@ -957,7 +1048,7 @@
     if(captureOperationField(target))return;
     const filterKey = {'j-kpi-period':'period','j-kpi-category':'category','j-kpi-basis':'basis','j-kpi-client':'client','j-kpi-type':'type','j-kpi-customer':'customer'}[target.id];
     if (filterKey) {state.kpis[filterKey]=target.value;render();document.getElementById(target.id)?.focus();return;}
-    if (target.id === 'j-status-filter') { state.filter = target.value; render(); return; }
+    if (target.id === 'j-status-filter') { state.filter = target.value; render(); document.getElementById(target.id)?.focus(); return; }
     if (target.id === 'j-responsible-filter') { state.responsibleFilter=target.value;render();document.getElementById(target.id)?.focus();return; }
     if (!record) return;
     if (target.id === 'j-review-technical') { record.reviewChecks.technical = target.checked; render(); }

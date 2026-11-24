@@ -10,6 +10,14 @@ Interfaz oficial del cotizador seleccionada por el propietario el **5 de noviemb
 
 Mesa y Flujo comparten expedientes con Solicitud, Cotizador, Revisión, Envío, Respuesta y Proyecto. Portafolio incorpora KPIs. El seguimiento de proyectos, planificación, abastecimiento, producción y entrega conserva los ejemplos y contratos locales existentes; esta elección del cotizador no oficializa políticas operativas del ERP.
 
+### Listados públicos de Asana
+
+GitHub Pages presenta **36 proyectos** y **165 cotizaciones** creados entre el 1 de octubre y el 24 de noviembre de 2026, según el calendario de Ciudad de México. El listado público muestra el folio, el estado y las fechas de cada fila. Las diez cotizaciones sin número inicial en el título aparecen como **Sin folio registrado**. La lista de Proyectos presenta el folio compacto y acepta también la búsqueda con guion.
+
+El selector **Cotizaciones de este navegador** abre los borradores locales. Las filas de Asana son de consulta. La importación privada conserva el resto del expediente y los enlaces originales. Los indicadores de valor y los flujos operativos de la demo utilizan sus datos de demostración y los guardados en el navegador.
+
+El artefacto se produce con `node tools/publish-portfolio.mjs RUTA_SQLITE --quote-title-folio`. El modificador usa el número inicial de tres dígitos autorizado para este corte. El generador abre la base en modo lectura y escribe `src/published-portfolio.js`. Antes de publicar, `node tools/verify.mjs` comprueba el esquema público y los formatos de folio, estado y fecha.
+
 Por corrección directa del propietario del 5 de noviembre, «Mapa del proceso» ya no se ofrece en el menú de escritorio ni en el menú móvil. Se conserva el resto de la navegación y del recorrido.
 
 ### Probar una cotización en GitHub Pages

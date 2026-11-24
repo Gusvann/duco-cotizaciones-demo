@@ -71,6 +71,7 @@ test('a matched local Windows profile enters only the quotation role on top-leve
     assert.match(gallery.text,/src="\/private-recipes\.js"/);
     assert.doesNotMatch(gallery.text,/published-recipes\.js/);
     assert.equal((await get('/src/published-recipes.js',headers)).status,404);
+    assert.equal((await get('/src/published-portfolio.js',headers)).status,404);
     const legacy=await get('/src/assets/catalogo-sintetico/SYN-CATALOG-04.jpg',headers);
     assert.equal(legacy.status,200);
     assert.equal(legacy.headers['content-type'],'image/jpeg');

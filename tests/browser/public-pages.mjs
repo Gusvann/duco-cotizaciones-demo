@@ -21,7 +21,7 @@ if(publicURL && publicURL!==official)throw Error('PAGES_TEST_URL must be the off
 const digest=buffer=>createHash('sha256').update(buffer).digest('hex');
 const expectedHash=digest(await fs.readFile(path.join(root,'index.html')));
 const allowedFile=relative=>/^(?:index|catalogo)\.html$/.test(relative) ||
-  /^src\/(?:(?:public-product-catalog|published-recipes)\.js|galeria\.(?:js|css))$/.test(relative) ||
+  /^src\/(?:(?:public-product-catalog|published-recipes|published-portfolio)\.js|galeria\.(?:js|css))$/.test(relative) ||
   /^(?:assets\/catalogo|src\/assets\/catalogo-sintetico)\/(?:thumb\/)?[A-Za-z0-9_.-]+\.(?:webp|jpg|jpeg|png|json)$/.test(relative);
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
 const server=publicURL?null:createServer(async(req,res)=>{
@@ -68,7 +68,11 @@ const action=(p,name,suffix='')=>p.locator('#journey-root [data-action="'+name+'
 const quote=(p,selector)=>p.locator('#quote-host').locator(selector);
 const currentId=p=>p.evaluate(()=>window.DemoJourney.inspect().state.id);
 const record=(p,id)=>p.evaluate(id=>window.DemoJourney.inspect().records.find(r=>r.id===id),id);
-const open=(p,id)=>action(p,'open','[data-id="'+id+'"]').click();
+async function open(p,id){
+  const browserSource=action(p,'quote-source','[data-source="browser"]');
+  if(await browserSource.isVisible()&&await browserSource.getAttribute('aria-pressed')!=='true')await browserSource.click();
+  await action(p,'open','[data-id="'+id+'"]').click();
+}
 const title=(p,value)=>quote(p,'[data-path="name"]').fill(value);
 async function stage(p,name){
   const button=action(p,'stage','[data-screen="'+name+'"]');
@@ -87,6 +91,38 @@ async function caseTest(name,fn){
 let madeId,productItem,confirmed;
 try{
   let p=await start();
+  await caseTest('El corte de Asana muestra solo folios, estados y fechas en ambas listas',async()=>{
+    const quotes=p.locator('[data-published-quote]');
+    assert.equal(await quotes.count(),165);
+    assert.equal(await quotes.filter({hasText:'Sin folio registrado'}).count(),10);
+    assert.equal(await quotes.locator('a, button').count(),0);
+    const folio=await p.evaluate(()=>window.DucoPublishedPortfolio.quotes.find(row=>row.folio!==null).folio);
+    const matching=await p.evaluate(value=>window.DucoPublishedPortfolio.quotes.filter(row=>row.folio===value).length,folio);
+    await p.locator('#j-search').fill(folio);
+    assert.equal(await quotes.count(),matching);
+    await action(p,'view','[data-view="flujo"]').click();
+    assert.equal(await quotes.count(),matching);
+    await p.locator('#j-search').fill('');
+    assert.equal(await quotes.count(),165);
+    await action(p,'view','[data-view="mesa"]').click();
+
+    await action(p,'projects').click();
+    const projects=p.locator('[data-public-project-row]');
+    assert.equal(await projects.count(),36);
+    assert.equal(await projects.locator('a, button').count(),0);
+    const projectFolio=await projects.first().getByRole('rowheader').innerText();
+    assert.match(projectFolio,/^\d{6,8}$/);
+    const search=p.locator('#j-project-search');
+    await search.fill(projectFolio);
+    const matched=await projects.count();
+    assert.ok(matched>0 && matched<36);
+    await search.fill(projectFolio.slice(0,4)+'-'+projectFolio.slice(4));
+    assert.equal(await projects.count(),matched);
+    await p.setViewportSize({width:390,height:844});
+    assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await p.setViewportSize({width:1400,height:980});
+    await p.goto(base);await ready(p);
+  });
   await caseTest('Nueva cotización con madera se recupera después de cerrar Edge',async()=>{
     await action(p,'new-request').click();
     madeId=await currentId(p);

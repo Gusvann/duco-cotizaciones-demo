@@ -27,6 +27,7 @@
   const row = (label, value) => `<div class="op-fact"><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`;
   const portfolio = globalThis.DemoPortfolio;
   const shownFolio = project => portfolio.compactFolio(portfolio.projectFolio(project));
+  const publicStatuses = new Map([['pending','Pendiente'],['in-progress','En proceso'],['completed','Concluido'],['cancelled','Cancelado']]);
   const shownTitle = (project, record) => portfolio.projectTitle({
     ...project, title:project.title || project.baseline?.request?.title || record.request?.title || 'Proyecto'
   });
@@ -69,10 +70,35 @@
     return `<section class="j-panel"><div class="j-panel-head"><div><h2>${escape(options.heading || 'Detalles de Asana')}</h2><p class="j-muted">Copia de consulta</p></div></div><dl class="op-facts">${options.displayFolio ? row('Folio',options.displayFolio) : ''}${sourceFolio ? row('Folio de origen',sourceFolio) : ''}${row('Cliente',request.client || 'Por definir')}${row('Responsable',displayField(source.assignee || request.account))}${row('Estado en Asana',displayField(source.statusLabel || source.status || options.status))}${source.section ? row('Sección',source.section) : ''}${row('Fecha de creación',date(created))}${request.quoteDue ? row('Fecha de cotización',date(request.quoteDue)) : ''}${request.deliveryDate ? row('Fecha de entrega',date(request.deliveryDate)) : ''}${sourceFields(source.fields)}</dl>${description ? `<h3 class="j-spaced">Descripción</h3><p class="op-evidence">${escape(description)}</p>` : ''}${subtasks.length ? `<h3 class="j-spaced">Subtareas</h3><ul>${subtasks.join('')}</ul>` : ''}${links.length ? `<h3 class="j-spaced">Enlaces de origen</h3><ul>${links.map(link=>'<li>'+link+'</li>').join('')}</ul>` : ''}</section>`;
   }
 
-  function list(records, screen = 'projects', search = '') {
+  function publishedProjectsMarkup(publication, query) {
+    const projects = publication.projects;
+    const visible = query ? projects.filter(project => portfolio.projectMatches(project,query)) : projects;
+    const {from,through,lists} = publication.coverage || {};
+    const projectThrough = typeof lists?.project === 'string' ? lists.project : lists?.project?.through || through;
+    const start = portfolio.calendarDate(from);
+    const end = portfolio.calendarDate(projectThrough);
+    const coverage = start && end ? 'Registros creados del '+date(start)+' al '+date(end)+'.' : '';
+    const count = visible.length === projects.length
+      ? visible.length+(visible.length === 1 ? ' proyecto' : ' proyectos')
+      : visible.length+' de '+projects.length+' proyectos';
+    const rows = visible.map(project => {
+      const status = publicStatuses.get(project.status) || 'Estado sin confirmar';
+      return `<tr data-public-project-row><th scope="row">${escape(portfolio.compactFolio(project.folio))}</th><td><span class="op-phase">${status}</span></td><td>${escape(date(project.createdAt))}</td><td>${escape(date(project.startDate))}</td><td>${escape(date(project.dueDate))}</td><td>${escape(date(project.deliveryDate))}</td></tr>`;
+    }).join('');
+    const content = rows
+      ? `<div class="j-table-wrap op-list-wrap j-list-table" role="region" tabindex="0" aria-labelledby="public-project-title"><table class="j-table op-list"><caption class="op-caption">Folio, estado y fechas de los proyectos de Asana</caption><thead><tr><th scope="col">Folio</th><th scope="col">Estado</th><th scope="col">Creación</th><th scope="col">Inicio</th><th scope="col">Vencimiento en Asana</th><th scope="col">Entrega registrada</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="j-muted">${query ? 'Sin coincidencias para el folio.' : 'No hay proyectos publicados en este corte.'}</p>`;
+    return `<section class="op-projects-source" data-public-project-list aria-labelledby="public-project-title"><header class="op-section-head"><div><h2 id="public-project-title">Proyectos de Asana</h2>${coverage ? '<p class="j-muted">'+escape(coverage)+'</p>' : ''}</div><span class="j-muted" role="status">${escape(count)}</span></header>${content}</section>`;
+  }
+
+  function list(records, screen = 'projects', search = '', {published,hasStoredRecord=()=>false} = {}) {
     const mode = ['projects','production','deliveries'].includes(screen) ? screen : 'projects';
     const tab = {projects:'plan',production:'production',deliveries:'delivery'}[mode];
-    const allProjects = projectRows(records);
+    const hasPublication = Array.isArray(published?.projects);
+    const browserRecords = hasPublication
+      ? records.filter(record => !record.asana && !record.project?.asana && (!/^DEMO-\d+$/.test(record.id) || hasStoredRecord(record.id)))
+      : records;
+    const allProjects = projectRows(browserRecords);
     const query = search.trim().toLocaleLowerCase('es-MX');
     const projects = mode === 'projects' && query ? allProjects.filter(record=>portfolio.projectMatches(record.project,query,record.request?.client)) : allProjects;
     const titles = {projects:'Proyectos',production:'Producción',deliveries:'Entregas'};
@@ -81,10 +107,14 @@
       deliveries:'Consulta la preparación, el recibo y el cierre de cada entrega.'
     };
     const count = `<span class="j-muted" role="status">${projects.length} proyecto${projects.length === 1 ? '' : 's'}</span>`;
-    const filter = `<label class="j-field j-search"><span>Buscar proyectos</span><input id="j-project-search" class="j-input" type="search" placeholder="Nombre, cliente o folio" value="${escape(search)}"></label>`;
+    const publishedList = mode === 'projects' && hasPublication;
+    const placeholder = publishedList && !allProjects.length ? 'Folio' : 'Nombre, cliente o folio';
+    const filter = `<label class="j-field j-search"><span>Buscar proyectos</span><input id="j-project-search" class="j-input" type="search" placeholder="${placeholder}" value="${escape(search)}"></label>`;
     const heading = mode === 'projects'
-      ? `<header class="j-head op-projects-head"><div class="j-section-statement"><p class="j-eyebrow">Seguimiento operativo</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus proyectos.</span> <span class="j-heading-emphasis">Del plan a la entrega.</span></h1></div><div class="op-projects-list-meta">${filter}${count}</div></header>`
+      ? `<header class="j-head op-projects-head"><div class="j-section-statement"><p class="j-eyebrow">Seguimiento operativo</p><h1 class="j-split-heading"><span class="j-heading-lead">${publishedList ? 'Proyectos.' : 'Tus proyectos.'}</span> <span class="j-heading-emphasis">Del plan a la entrega.</span></h1></div><div class="op-projects-list-meta">${filter}${publishedList ? '' : count}</div></header>`
       : `<header class="op-page-head"><div><h2>${titles[mode]}</h2><p class="j-muted">${captions[mode]}</p></div>${count}</header>${scope()}`;
+    const publishedMarkup = publishedList ? publishedProjectsMarkup(published,query) : '';
+    if (publishedList && !projects.length) return heading+publishedMarkup;
     if (!projects.length) return `${heading}<section class="j-panel op-empty"><h3>${query && allProjects.length ? 'Sin coincidencias' : 'Aún no hay proyectos'}</h3></section>`;
     const rows = projects.map(record => {
       const project = record.project;
@@ -103,7 +133,8 @@
       const open = `<button type="button" class="j-btn op-open" data-action="project-open" data-id="${escape(record.id)}" data-project="${escape(project.id)}" data-revision="${escape(ops?.revision ?? '')}" data-tab="${tab}">${escape(title)}</button>`;
       return `<tr><td>${open}<div class="j-sub">${escape(shownFolio(project))} · ${escape(client)}</div></td><td>${escape(owner)}<div class="j-sub">${escape(source ? 'Asana' : extra)}</div></td><td>${escape(date(due))}</td><td><span class="op-phase${ops?.closed ? ' op-phase-closed' : ''}">${escape(source ? source.statusLabel || source.status || source.section || 'En consulta' : summary?.phase || 'Sin plan')}</span><div class="j-sub">${escape(source ? 'Copia de consulta' : note)}</div></td><td>${escape(source ? tasks.length+' subtareas' : progress)}</td></tr>`;
     }).join('');
-    return `${heading}<div class="j-table-wrap op-list-wrap${mode === 'projects' ? ' j-list-table' : ''}"><table class="j-table op-list"><caption class="op-caption">${titles[mode]} de esta sesión</caption><thead><tr><th scope="col">Proyecto / cliente</th><th scope="col">Responsable / ${mode === 'deliveries' ? 'recibo' : 'ruta'}</th><th scope="col">Fecha objetivo</th><th scope="col">Estado</th><th scope="col">${mode === 'projects' ? 'Tareas' : titles[mode]}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const table = `<div class="j-table-wrap op-list-wrap${mode === 'projects' ? ' j-list-table' : ''}"><table class="j-table op-list"><caption class="op-caption">${publishedList ? 'Proyectos de este navegador' : titles[mode]+' de esta sesión'}</caption><thead><tr><th scope="col">Proyecto / cliente</th><th scope="col">Responsable / ${mode === 'deliveries' ? 'recibo' : 'ruta'}</th><th scope="col">Fecha objetivo</th><th scope="col">Estado</th><th scope="col">${mode === 'projects' ? 'Tareas' : titles[mode]}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return heading+publishedMarkup+(publishedList ? `<section class="op-projects-browser" aria-labelledby="browser-project-title"><header class="op-section-head"><h2 id="browser-project-title">Proyectos de este navegador</h2>${count}</header>${table}</section>` : table);
   }
 
   function planMarkup(record, ops, draft) {

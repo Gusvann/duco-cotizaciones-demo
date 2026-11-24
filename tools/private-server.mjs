@@ -80,6 +80,7 @@ export function createPrivateServer({store,port,publicHtml,privateJs,checkQuote=
   }
   const html=publicHtml.replace("connect-src 'none'","connect-src 'self'")
     .replace('<script src="src/published-recipes.js"></script>','')
+    .replace('<script src="src/published-portfolio.js"></script>','')
     .replace('</head>','<script src="/private-recipes.js"></script><script src="/private-client.js"></script></head>');
   return createServer(async (req,res)=>{
     try {

@@ -34,8 +34,14 @@ function portfolioRecord(id,netCents,clientId='a'){
     versions:[{version:1,quoteVersionId:'opaque-'+id,clientId,category:'horeca',commercialType:'line',sentAt:'2026-10-03',snapshot:{quote:{id,versionId:'opaque-'+id},request,summary:{priceCents:netCents}},response:{result:'accepted',version:1,at:'2026-10-06'}}]};
 }
 
-async function harness({mobile=false,portfolioFixtures=false,privateFixture=null}={}){
+async function harness({mobile=false,portfolioFixtures=false,privateFixture=null,publishedFixture=null}={}){
   const sandbox=vm.createContext({structuredClone,queueMicrotask,URL});
+  if(publishedFixture){
+    sandbox.location={protocol:'https:'};
+    sandbox.crypto={randomUUID:()=> '00000000-0000-4000-8000-000000000000'};
+    sandbox.DucoPublishedPortfolio=structuredClone(publishedFixture);
+    sandbox.DemoBrowserStore={initial:async()=>[],put:async(_record,_snapshot,revision)=>({revision:revision+1})};
+  }
   if (privateFixture) {
     sandbox.privateWrites=[];
     sandbox.DucoPrivateApi={
@@ -111,6 +117,42 @@ async function harness({mobile=false,portfolioFixtures=false,privateFixture=null
   };
   return {sandbox,root,footer,click,field,key,inspect,metrics,setPortfolioFixtures,Q:sandbox.DemoQuote,app:sandbox.__client.app};
 }
+
+test('public Asana quote list supports Mesa and Flujo by folio and status without exposing details or changing KPI records',async()=>{
+  const publishedFixture={
+    revision:'2026-11-24',coverage:{from:'2026-10-01',through:'2026-11-24',lists:{quote:'2026-11-24'}},projects:[],
+    quotes:[
+      {folio:'2699',status:'accepted',createdAt:'2026-10-03',quoteDue:'2026-10-05',deliveryDate:null,
+        title:'Título privado ficticio',amount:9999,contact:'persona@example.test'},
+      {folio:null,status:'missing',createdAt:'2026-11-17',quoteDue:null,deliveryDate:'2026-11-30'}
+    ]
+  };
+  const h=await harness({publishedFixture});
+  const count=()=>[...h.root.innerHTML.matchAll(/data-published-quote\b/g)].length;
+  const demoRecords=h.inspect().records;
+  assert.equal(count(),2);
+  assert.match(h.root.innerHTML,/Sin folio registrado/);
+  assert.match(h.root.innerHTML,/Sin clasificar/);
+  assert.doesNotMatch(h.root.innerHTML,/data-action="open"|Título privado ficticio|persona@example\.test|9999|Responsable de cotización/);
+  await h.field('j-status-filter','accepted');
+  assert.equal(count(),1);
+  await h.click('view',{view:'flujo'});
+  assert.equal(count(),1);
+  assert.match(h.root.innerHTML,/<article class="j-card" data-published-quote>/);
+  await h.field('j-search','090909',{type:'input'});
+  assert.equal(count(),0);
+  await h.field('j-search','2699',{type:'input'});
+  assert.equal(count(),1);
+  await h.click('quote-source',{source:'browser'});
+  assert.equal(count(),0);
+  assert.doesNotMatch(h.root.innerHTML,/Cliente ficticio Alba|Consola modular de muestra/);
+  assert.deepEqual(h.inspect().records,demoRecords);
+  await h.click('quote-source',{source:'asana'});
+  assert.equal(count(),2);
+  await h.click('new-request');
+  assert.equal(h.inspect().state.quoteSource,'browser');
+  assert.equal(h.inspect().state.screen,'request');
+});
 
 test('offline session presents its lifetime and recovery controls without internal testing labels',async()=>{
   const h=await harness();

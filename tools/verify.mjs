@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import vm from 'node:vm';
 import {build} from './build.mjs';
+import {validatePublicPortfolio} from './publish-portfolio.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 assert.ok(build()===html,'HTML must be reproducible from the reviewed local source only');
@@ -34,6 +35,12 @@ for(const photo of photos){
  }
 }
 assert.match(html,/connect-src 'none'/);assert.match(html,/frame-src 'none'/);assert.match(html,/form-action 'none'/);
+const publicPortfolio=fs.readFileSync(path.join(root,'src/published-portfolio.js'),'utf8');
+assert.match(html,/<script src="src\/published-portfolio\.js"><\/script>/);
+const portfolioSandbox={};
+vm.runInNewContext(publicPortfolio,portfolioSandbox);
+const publishedPortfolio=validatePublicPortfolio(portfolioSandbox.DucoPublishedPortfolio);
+assert.ok(publishedPortfolio.projects.length&&publishedPortfolio.quotes.length,'Both approved lists must be present');
 const catalogSource=fs.readFileSync(path.join(root,'src/public-product-catalog.js'),'utf8');
 assert.ok(html.includes(catalogSource),'The gallery and the quote must use the same public catalogue');
 const sandbox=vm.createContext({});

@@ -25,7 +25,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const mount='/duco-cotizaciones-demo/';
 let upgrade=false;
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.jpg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
-const allowed=/^(?:(?:index|catalogo)\.html|src\/(?:public-product-catalog|published-recipes|galeria)\.(?:js|css)|(?:assets\/catalogo|src\/assets\/catalogo-sintetico)\/(?:thumb\/)?[-a-z\d]+\.(?:jpg|png|webp))$/i;
+const allowed=/^(?:(?:index|catalogo)\.html|src\/(?:public-product-catalog|published-recipes|published-portfolio|galeria)\.(?:js|css)|(?:assets\/catalogo|src\/assets\/catalogo-sintetico)\/(?:thumb\/)?[-a-z\d]+\.(?:jpg|png|webp))$/i;
 const server=publishedURL?null:createServer(async(req,res)=>{
   const pathname=new URL(req.url,'http://127.0.0.1').pathname;
   const file=pathname.slice(mount.length)||'index.html';
@@ -115,6 +115,8 @@ try{
     upgrade=true;
     page=await context.newPage();
     await openHome(page,currentRelease);
+    const browserSource=action(page,'quote-source','[data-source="browser"]');
+    if(await browserSource.isVisible())await browserSource.click();
     assert.equal(await page.evaluate(()=>window.DemoRecipeCatalog.products.flatMap(product=>product.variants).length),135);
     await action(page,'open','[data-id="'+oldId+'"]').click();
     await quote(page,'.steps [data-step="1"]').click();
