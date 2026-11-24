@@ -15,6 +15,12 @@ const sessionAge = 8*60*60*1000;
 const contentLimit = 8*1024*1024;
 const now = () => Date.now();
 const secureHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'};
+const privateGallery = new Map([
+  ['/catalogo.html',['catalogo.html','text/html; charset=utf-8']],
+  ['/src/galeria.css',['src/galeria.css','text/css; charset=utf-8']],
+  ['/src/galeria.js',['src/galeria.js','text/javascript; charset=utf-8']],
+  ['/src/public-product-catalog.js',['src/public-product-catalog.js','text/javascript; charset=utf-8']]
+]);
 
 function same(a,b) {
   const x=Buffer.from(a||''), y=Buffer.from(b||'');
@@ -73,6 +79,7 @@ export function createPrivateServer({store,port,publicHtml,privateJs,checkQuote=
     return {'Set-Cookie':'duco_local='+id+'; Path=/; HttpOnly; SameSite=Strict; Max-Age='+sessionAge/1000};
   }
   const html=publicHtml.replace("connect-src 'none'","connect-src 'self'")
+    .replace('<script src="src/published-recipes.js"></script>','')
     .replace('</head>','<script src="/private-recipes.js"></script><script src="/private-client.js"></script></head>');
   return createServer(async (req,res)=>{
     try {
@@ -114,8 +121,14 @@ export function createPrivateServer({store,port,publicHtml,privateJs,checkQuote=
       }
       if(write&&!same(req.headers['x-duco-csrf'],auth.csrf)) throw new LocalError(403,'La sesión no autorizó la escritura.');
       const {user}=auth;
-      if(!write&&requestPath==='/') return respond(res,200,'text/html; charset=utf-8',
-        html.replace("script-src 'unsafe-inline'","script-src 'unsafe-inline' 'self'"));
+      if(!write&&requestPath==='/')return respond(res,200,'text/html; charset=utf-8',html);
+      const gallery=privateGallery.get(requestPath);
+      if(!write&&gallery){
+        const [filename,mime]=gallery;
+        const source=await fs.promises.readFile(path.join(root,filename),'utf8');
+        return respond(res,200,mime,requestPath==='/catalogo.html'
+          ?source.replace('src/published-recipes.js','/private-recipes.js'):source);
+      }
       if(!write&&requestPath==='/private-client.js')return respond(res,200,'text/javascript; charset=utf-8',privateJs);
       if(!write&&requestPath==='/private-recipes.js'){
         const data=store.source('recipeUpdates',{rows:[],products:[]});

@@ -118,7 +118,7 @@ export const recipeClient = String.raw`
     if(!variant)return '<p class="meta">Selecciona una variante para consultar su imagen, medidas y receta.</p>';
     if(!variant.recipeId)return recipeBaseLineVariantSummary(product);
     const rec=DemoRecipeCatalog.recipe(variant.recipeId),fields=[['Artículo',variant.articleLabel],['SKU de muestra',variant.sku],['Descripción',variant.description],['Medidas terminadas',rec.finishedDimensions],['Material',variant.materials],['Acabados',variant.finishes],['Receta',rec.wood.length+' componente'+(rec.wood.length===1?'':'s')+' de madera · '+rec.hardware.length+' herrajes'+(rec.fabrication?' · Tableros ('+rec.boards.length+') · Herrería ('+rec.metal.length+')':'')]];
-    const note=rec.syntheticPricing?'Despiece y tarifas ficticias para probar la cotización.':'Receta de la referencia local. Madera y CNC siguen pendientes de validación; los importes históricos no confirman costos vigentes.';
+    const note=rec.syntheticPricing?'Despiece y tarifas ficticias para probar la cotización.':'Despiece de fabricación con tarifas históricas editables. Verifica su vigencia antes de cerrar una cotización.';
     return '<dl class="line-variant-summary">'+fields.map(([label,value])=>'<div><dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl><p class="recipe-preview-note">'+note+'</p>'+expandedCatalogReference(rec);
   }
   function lineResults(){
@@ -159,7 +159,7 @@ export const recipeClient = String.raw`
   }
   function lineCatalogPanel(){
     const state=lineState(),families=[...new Set(lineProducts().map(p=>p.family))];
-    const gallery=globalThis.DemoPublicRecipes&&!globalThis.DucoPrivateApi?'<a class="quiet" href="catalogo.html" target="_blank" rel="noopener">Ver galería</a>':'';
+    const gallery=globalThis.DemoPublicRecipes?'<a class="quiet" href="catalogo.html" target="_blank" rel="noopener">Ver galería</a>':'';
     return '<section class="line-catalog recipe-catalog" aria-labelledby="line-catalog-title">'+
       '<div class="line-catalog-head"><h3 id="line-catalog-title">Catálogo de productos</h3>'+gallery+
       '<button type="button" class="quiet" data-action="line-cancel" aria-label="Cerrar catálogo">Cerrar</button></div>'+

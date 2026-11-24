@@ -49,6 +49,34 @@ for(const row of catalog.rows){
   assert.ok(catalog.assets[row.id].url && catalog.assets[row.id].thumbnail);
 }
 assert.equal(photoIds.size,0);
+const releasedSource=fs.readFileSync(path.join(root,'src/published-recipes.js'),'utf8');
+const gallery=fs.readFileSync(path.join(root,'catalogo.html'),'utf8');
+for(const page of [html,gallery])assert.match(page,/<script src="src\/published-recipes\.js"/);
+assert.doesNotMatch(releasedSource,/https?:\/\/|[A-Z]:\\\\|@[\w.-]+\.[A-Za-z]{2}|\.xlsx|\.pdf|F0[34]-P\d+|AL[C]?SEA|STARBUCKS|github_pat_|BEGIN [A-Z ]*PRIVATE KEY|"(?:commercialReference|commercialNotes|salePrice|originalWorkbookTotals|supplier|sha256|sku)"\s*:/i);
+vm.runInContext(releasedSource,sandbox);
+const released=sandbox.DucoPublishedRecipes;
+assert.equal(released.rows.length,catalog.rows.length);
+assert.equal(released.products.length,catalog.products.length);
+assert.deepEqual([...released.rows.map(row=>row.publicVisualKey)].sort(),[...catalog.rows.map(row=>row.id)].sort());
+sandbox.location={protocol:'https:'};
+vm.runInContext(fs.readFileSync(path.join(root,'src/recipe-catalog.js'),'utf8'),sandbox);
+const active=sandbox.DemoRecipeCatalog;
+assert.equal(active.recipes.length,released.rows.length);
+assert.equal(new Set(active.recipes.map(value=>value.id)).size,released.rows.length);
+for(const row of released.rows){
+ assert.ok(row.publicationSource.workbook&&row.publicationSource.sheet,'Each recipe has a manufacturing source');
+ const recipe=active.recipe('R-'+row.id);
+ assert.equal(recipe.referenceTotals.amount,row.referenceTotals.amount);
+ assert.ok(active.recipe('R-'+row.publicVisualKey).syntheticPricing,'Older drafts still resolve their demonstration recipe');
+ assert.ok(active.variant(row.productId,row.publicVisualKey),'Older draft line origins still resolve');
+ for(const quantity of ['1','2']){
+  let id=0;
+  const article=active.instantiate(recipe.id,prefix=>prefix+'-'+(++id),quantity);
+  assert.equal(article.wood.length,row.wood.length);
+  assert.equal(article.materials.length,row.hardware.length+row.boards.length+row.metal.length);
+  assert.equal(article.processes.length,row.maquilas.length);
+ }
+}
 const demoStore=fs.readFileSync(path.join(root,'src/public-store.js'),'utf8');
 assert.ok(html.includes(demoStore),'Browser persistence adapter is compiled');
 assert.doesNotMatch(html.replace(demoStore,''),/\bindexedDB\b/);

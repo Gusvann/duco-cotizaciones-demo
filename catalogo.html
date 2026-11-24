@@ -8,6 +8,7 @@
   <title>Catálogo de productos · Astil</title>
   <link rel="stylesheet" href="src/galeria.css">
   <script src="src/public-product-catalog.js" defer></script>
+  <script src="src/published-recipes.js" defer></script>
   <script src="src/galeria.js" defer></script>
 </head>
 <body>
@@ -23,8 +24,14 @@
     <article id="detail" aria-labelledby="name" hidden>
       <h2 id="name"></h2>
       <label>Variante<select id="variant"></select></label>
+      <a class="recipe-jump" href="#recipe">Consultar receta</a>
       <figure><img id="photo" alt="" decoding="async" width="800" height="600"><figcaption id="caption"></figcaption></figure>
-      <dl><div><dt>Medidas terminadas</dt><dd id="dimensions"></dd></div><div><dt>Material</dt><dd id="material"></dd></div></dl>
+      <dl><div><dt>Medidas terminadas</dt><dd id="dimensions"></dd></div><div><dt>Material</dt><dd id="material"></dd></div><div id="finish-line" hidden><dt>Acabado</dt><dd id="finish"></dd></div></dl>
+      <details id="recipe" open>
+        <summary>Receta de fabricación</summary>
+        <p id="recipe-source" class="recipe-meta"></p>
+        <div id="recipe-sections"></div>
+      </details>
     </article>
   </div>
 </main>

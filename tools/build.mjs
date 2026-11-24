@@ -46,7 +46,7 @@ export function build(){
  if(!remainder)throw Error('QUOTE_BODY_MISSING');
  const [body,scripts]=remainder.split('<!-- QUOTE_SCRIPTS -->');
  if(!scripts)throw Error('QUOTE_SCRIPTS_MISSING');
- const csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src 'self' data:; connect-src 'none'; frame-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'";
+ const csp="default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline'; font-src data:; img-src 'self' data:; connect-src 'none'; frame-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'";
  const output=`<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>Astil · Cotizador</title>
 ${styles.replace('Public synthetic derivative:','Local derivative:').replace('No documentary fixture or server modules.','Selected D91 reference recipes; no source workbooks or server modules.')}
@@ -66,6 +66,7 @@ ${read('request-form.css')}
 <script>${read('demo-phone.js')}</script>
 <script>globalThis.DemoRecipeImages=Object.freeze(${JSON.stringify(recipeImages())});</script>
 <script>${read('public-product-catalog.js')}</script>
+<script src="src/published-recipes.js"></script>
 <script>${read('recipe-catalog.js')}</script>
 <script>${read('quote-issues.js')}</script>
 ${scripts}

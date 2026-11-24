@@ -21,7 +21,7 @@ if(publicURL && publicURL!==official)throw Error('PAGES_TEST_URL must be the off
 const digest=buffer=>createHash('sha256').update(buffer).digest('hex');
 const expectedHash=digest(await fs.readFile(path.join(root,'index.html')));
 const allowedFile=relative=>/^(?:index|catalogo)\.html$/.test(relative) ||
-  /^src\/(?:public-product-catalog\.js|galeria\.(?:js|css))$/.test(relative) ||
+  /^src\/(?:(?:public-product-catalog|published-recipes)\.js|galeria\.(?:js|css))$/.test(relative) ||
   /^(?:assets\/catalogo|src\/assets\/catalogo-sintetico)\/(?:thumb\/)?[A-Za-z0-9_.-]+\.(?:webp|jpg|jpeg|png|json)$/.test(relative);
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
 const server=publicURL?null:createServer(async(req,res)=>{
@@ -94,7 +94,7 @@ try{
     await stage(p,'quote');
     await quote(p,'[data-action="line-open"]').click();
     await quote(p,'[data-action="line-select-product"][data-product="SYN-NUBE"]').click();
-    await quote(p,'[data-line-variant="SYN-NUBE"]').selectOption('SYN-NUBE-C');
+    await quote(p,'[data-line-variant="SYN-NUBE"]').selectOption('PUB-SYN-NUBE-C');
     await quote(p,'[data-action="line-use"][data-product="SYN-NUBE"]').click();
     const quantity=quote(p,'.header-quantity-control input');
     await quantity.fill('2');await quantity.press('Tab');
@@ -137,10 +137,16 @@ try{
     }
     const review=()=>quote(p,'.steps [data-step="4"]').click();
     const issue=expression=>quote(p,'[data-action="goto-issue"]').filter({hasText:expression});
-    for(const text of [/IVA de compra de TUERCA/i,/IVA de compra de Tzalam/i,/IVA de Preparación/i]){
-      await review();await issue(text).click();
+    const purchaseTax=/^Completa el IVA|IVA de compra de/i;
+    await review();
+    const taxFields=await issue(purchaseTax).count();
+    assert.ok(taxFields>0);
+    for(let index=0;index<taxFields;index++){
+      await issue(purchaseTax).first().click();
       const tax=quote(p,'[data-row-editor] input:focus');await tax.fill('0');await tax.press('Tab');
+      await review();
     }
+    assert.equal(await issue(purchaseTax).count(),0);
     // The production sources already carry the line costs. Explicitly exclude these four extras.
     for(const topic of ['Materiales','Servicios externos','Acabados','Personal']){
       await review();await issue(new RegExp('Define quién cubre '+topic,'i')).click();
@@ -251,8 +257,9 @@ try{
     await gallery.setViewportSize({width:390,height:844});
     await gallery.locator('#search').fill('florencia');
     assert.equal(await rows.count(),1);
-    await select.selectOption('SYN-NUBE-C');
+    await select.selectOption('PUB-SYN-NUBE-C');
     assert.match(await gallery.locator('#name').innerText(),/Florencia/i);
+    assert.ok(await gallery.locator('#recipe [data-recipe-group="wood"]').isVisible());
     await gallery.locator('#photo').evaluate(img=>img.decode());
     assert.ok(await gallery.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     await gallery.getByRole('link',{name:'Volver al cotizador'}).click();await ready(gallery);

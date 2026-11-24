@@ -33,20 +33,24 @@
       wood,hardware:selected.hardware.map(row=>({...row,...(definition.id==='SYN-BOLONIA-R'&&row.name==='TUERCA INSERTO'?{unit:'PZA'}:{}),quantity:row.quantityPerProduct}))};
   });
   const expansion = globalThis.DemoRecipeExpansion;
-  const corrected = globalThis.DucoPrivateRecipeUpdates;
+  const published = globalThis.location?.protocol !== 'file:' && globalThis.DucoPublishedRecipes;
+  const corrected = globalThis.DucoPrivateRecipeUpdates || published;
   if (expansion && (expansion.length !== 27 || new Set(expansion.map(row => row.id)).size !== 27)) throw Error('La ampliación del catálogo está incompleta.');
   const incoming = new Map((publicCatalog?.rows || expansion || []).map(row => [row.id, row]));
   for (const row of corrected?.rows || []) {
     if(row.publicVisualKey && row.publicVisualKey!==row.id)incoming.delete(row.publicVisualKey);
     incoming.set(row.id, row);
   }
-  for (const row of incoming.values()) {
-    const updated = {
+  function catalogDefinition(row) {
+    return {
     id: row.id, productId: row.productId, name: row.variant, reference: row,
     label: row.variant, species: row.wood[0]?.woodKind || '', price: row.economics.wood[0]?.unitPrice || '',
     size: ['Largo','Ancho','Alto'].map(key => row.finishedSpecs[key]), wood: row.wood,
     hardware: row.hardware.map(component => ({...component, quantity:component.quantityPerProduct}))
     };
+  }
+  for (const row of incoming.values()) {
+    const updated = catalogDefinition(row);
     const previous = definitions.findIndex(d => d.id === row.id);
     if (previous < 0) definitions.push(updated);
     else definitions[previous] = updated;
@@ -77,19 +81,29 @@
       images[definition.id]=image(definition); imageKinds[definition.id]='SVG';
     }
   }
-  const recipes=definitions.map(d=>{
+  function catalogRecipe(d){
     const source=d.reference,economics=source.economics;
     return {id:'R-'+d.id,variantId:d.id,productId:d.productId,source:SOURCE,accredited:false,quality:'LOCAL_REFERENCE_NOT_PRODUCTION_VALIDATED',
       description:source.description,finishDescription:source.finishDescription,finishedDimensions:d.size.join(' × ')+' cm',woodKind:d.species,syntheticPricing:source.syntheticPricing===true,illustratedTone:publicCatalog?.rows.find(row=>row.id===(source.publicVisualKey||d.id))?.illustratedTone||null,
       previewUnitPrice:d.price,wasteRate:source.woodWastePercent,wood:d.wood,boards:source.boards||[],metal:source.metal||[],workshopDefaults:source.workshopDefaults||null,fabrication:source.fabrication||null,hardware:d.hardware,processes:source.maquilas||[],observations:d.id==='SYN-BOLONIA-R'?[{name:'TUERCA INSERTO',quantity:'4',unit:'PZA',status:'Unidad corregida por indicación del usuario; referencia original conservada.'}]:source.observations||[],
-      ...(source.commercialNotes ? {commercialNotes:source.commercialNotes, referenceTotals:source.referenceTotals} : {}),
+      ...(source.commercialNotes ? {commercialNotes:source.commercialNotes} : {}),
+      ...(source.referenceTotals ? {referenceTotals:source.referenceTotals} : {}),
+      ...(source.publicationSource ? {publicationSource:source.publicationSource} : {}),
       documentary:{basis:'ONE_ARTICLE',currency:'UNVERIFIED',financialConfirmed:false,cncMinutesPerMeter:economics.parameters?.cncMinutesPerMeter?.value??null,
         sections:[{key:'hardware',title:'Insumos / herrajes',rows:economics.hardware},{key:'wood',title:'Madera · magnitud observada en Excel',rows:economics.wood},
           {key:'consumables',title:'Otros materiales · consumo, no cantidad de compra',rows:economics.consumables},
           {key:'processes',title:'Procesos y jornadas · sin activar tarifas',rows:[...economics.processes,...economics.dayLabor]},
           ...(economics.additional?.length ? [{key:'additional',title:'Tableros y herrería',rows:economics.additional}] : [])]},
-      limits:'Referencia local D91; moneda, impuestos y vigencia de los importes históricos sin acreditar. Madera y CNC siguen pendientes. Primer y acabado final diferidos.'};
-  });
+      limits:'Referencia de fabricación. Consulta la moneda, los impuestos y la vigencia de cada tarifa antes de cerrar una cotización.'};
+  }
+  const recipes=definitions.map(catalogRecipe);
+  // Preserve the reference amounts used in the browser's already-saved demonstration articles.
+  const previousDefinitions=published && !globalThis.DucoPrivateRecipeUpdates
+    ? publicCatalog.rows.map(catalogDefinition) : [];
+  const previousDemoRecipes=new Map(previousDefinitions.map(definition=>{
+    const recipe=catalogRecipe(definition);
+    return [recipe.id,recipe];
+  }));
   descriptions['SYN-BOLONIA']=expansion?'Mesa Bolonia con cubierta de madera maciza y estructura metálica.':'Mesa Bolonia con cubierta de Encino rojo, bajo cubierta de tablero y estructura metálica.';
   descriptions['SYN-BENT-LEGS']=expansion?'Mesa auxiliar redonda con cuatro patas de acero doblado y acabado grafito RAL 7021.':'Mesa auxiliar redonda de Encino rojo con cuatro patas de acero doblado y acabado grafito RAL 7021.';
   const productNames=publicCatalog?[]:[['SYN-NUBE','Mesa Florencia','Mesas'],['SYN-PRISMA',expansion?'Cubierta de madera':'Cubierta redonda de madera','Cubiertas'],['SYN-BOLONIA','Bolonia','Mesas'],['SYN-BENT-LEGS','Bent Legs','Mesas']];
@@ -100,17 +114,30 @@
     else productNames.push([product.id,product.name,product.family]);
     descriptions[product.id]=product.description;
   }
+  function recipe(id) { return recipes.find(row=>row.id===id)||previousDemoRecipes.get(id)||null; }
+  function catalogVariant(definition,name) {
+    const {id,productId,label,reference,species,size}=definition;
+    const selected=recipe('R-'+id),isExpansion=!!reference.commercialNotes;
+    const articleLabel=(isExpansion||selected.publicationSource)&&!label.startsWith(name)?name+' · '+label:label;
+    const fixturePrefixes={'SYN-NUBE':'FLORENCIA','SYN-BOLONIA':'BOLONIA','SYN-BENT-LEGS':'BENT-LEGS'};
+    const fixtureSku='DEMO-'+(fixturePrefixes[productId]||'CUBIERTA')+'-'+definition.name.toUpperCase().replace(/ /g,'-');
+    const sku=reference.sku||(selected.publicationSource?id:isExpansion?id.replace('SYN-CATALOG-','REF-'):fixtureSku);
+    return {id,name:definition.name,articleLabel,description:selected.description,unit:'Pieza',materials:reference.materialsLabel||species,
+      finishes:selected.finishDescription,specs:specs(...size),recipeId:selected.id,imageId:id,sku};
+  }
   const products=productNames.map(([id,name,family])=>{
     const options=definitions.filter(d=>d.productId===id);
-    return {id,name,family,description:descriptions[id],unit:'Pieza',imageId:options[0].id,clientId:'SYNTHETIC_ANY_CLIENT',variants:options.map(d=>{
-      const selected=recipes.find(r=>r.variantId===d.id),isExpansion=!!d.reference.commercialNotes;
-      return {id:d.id,name:d.name,articleLabel:isExpansion?name+' · '+d.label:d.label,description:selected.description,unit:'Pieza',
-        materials:d.reference.materialsLabel||d.species,finishes:selected.finishDescription,specs:specs(...d.size),recipeId:selected.id,imageId:d.id,
-        sku:d.reference.sku||(isExpansion?d.id.replace('SYN-CATALOG-', 'REF-'):'DEMO-'+(id==='SYN-NUBE'?'FLORENCIA-':id==='SYN-BOLONIA'?'BOLONIA-':id==='SYN-BENT-LEGS'?'BENT-LEGS-':'CUBIERTA-')+d.name.toUpperCase().replace(/ /g,'-'))};
-    })};
+    return {id,name,family,description:descriptions[id],unit:'Pieza',imageId:options[0].id,clientId:'SYNTHETIC_ANY_CLIENT',
+      variants:options.map(definition=>catalogVariant(definition,name))};
   });
-  function recipe(id) { return recipes.find(row=>row.id===id)||null; }
-  function variant(productId,id) { return products.find(row=>row.id===productId)?.variants.find(row=>row.id===id)||null; }
+  function variant(productId,id) {
+    const product=products.find(row=>row.id===productId);
+    if(!product)return null;
+    const current=product.variants.find(row=>row.id===id);
+    if(current)return current;
+    const previous=previousDefinitions.find(row=>row.id===id&&row.productId===productId);
+    return previous?catalogVariant(previous,product.name):null;
+  }
   function scaled(quantity,multiplier) {
     const parse=value=>{if(typeof value!=='string'||!/^\d+(?:\.\d{1,3})?$/.test(value))throw Error('Cantidad sintética inválida.');const [a,b='']=value.split('.');return BigInt(a)*1000n+BigInt(b.padEnd(3,'0'));};
     const product=parse(quantity)*parse(multiplier);
@@ -143,7 +170,7 @@
       const id=uid('MAT'),groupId=uid('GRP');
       groups.push({id:groupId,type:'board',woodKind:'',unit:'pieza',lengthUnit:'cm',woodWasteRate:'',specification:''});
       materials.push({id,groupId,type:'board',section:'boards',name:board.name,quantity:board.quantityPerProduct,unit:'pieza',measureSource:'own',length:board.length,width:board.width,lengthUnit:board.lengthUnit,
-        thickness:board.thickness,substrate:board.substrate,coating:board.coating,woodKind:'',specification:'',purchaseQuantity:'',purchaseUnit:'Hoja',unitPrice:board.unitPrice,taxRate:'',economicReviewed:false,purchaseQuality:'pending',basis:'Precio por hoja de referencia de la receta.',supplier:board.supplier,reference:'',detail:clone(board.detail)});
+        thickness:board.thickness,substrate:board.substrate,coating:board.coating,woodKind:'',specification:'',purchaseQuantity:'',purchaseUnit:'Hoja',unitPrice:board.unitPrice,taxRate:'',economicReviewed:false,purchaseQuality:'pending',basis:'Precio por hoja de referencia de la receta.',supplier:board.supplier||'',reference:'',detail:clone(board.detail)});
       boardMeta.push({id,sheetAreaM2:board.sheetAreaM2,wasteRate:board.wasteRate});
     }
     for(const metal of rec.metal){

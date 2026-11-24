@@ -43,6 +43,7 @@ test('a matched local Windows profile enters only the quotation role on top-leve
     assert.throws(()=>store.linkWindows(sid,account,'incorrecta'),{status:403});
     assert.equal((await get('/api/initial',navigate)).status,401);
     assert.equal((await get('/private-recipes.js',navigate)).status,401);
+    assert.equal((await get('/catalogo.html',navigate)).status,401);
     assert.equal((await get('/src/assets/catalogo-sintetico/SYN-CATALOG-04.jpg')).status,401);
     assert.equal((await get('/')).headers['set-cookie'],undefined);
     assert.equal((await get('/acceso',navigate)).headers['set-cookie'],undefined);
@@ -65,6 +66,11 @@ test('a matched local Windows profile enters only the quotation role on top-leve
     assert.equal(src.headers['cache-control'],'no-store');
     assert.ok(!src.text.includes('</script>'));
     const headers={cookie:cookie.split(';')[0]};
+    const gallery=await get('/catalogo.html',headers);
+    assert.equal(gallery.status,200);
+    assert.match(gallery.text,/src="\/private-recipes\.js"/);
+    assert.doesNotMatch(gallery.text,/published-recipes\.js/);
+    assert.equal((await get('/src/published-recipes.js',headers)).status,404);
     const legacy=await get('/src/assets/catalogo-sintetico/SYN-CATALOG-04.jpg',headers);
     assert.equal(legacy.status,200);
     assert.equal(legacy.headers['content-type'],'image/jpeg');

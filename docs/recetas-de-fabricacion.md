@@ -50,7 +50,9 @@ El cotizador suma los importes a su precisión de origen y redondea al presentar
 
 ## Catálogo de prueba del 24 de noviembre de 2026
 
-La galería y el selector de artículos comparten la identidad de cada variante, su ilustración y sus medidas terminadas. Las recetas públicas usan partidas y tarifas ficticias para practicar la captura, el escalado y la conversión. La edición privada carga por separado los despieces de fabricación y sus tarifas históricas.
+La galería y el selector de artículos comparten 135 variantes del corte de fabricación del 24 de noviembre de 2026. En GitHub Pages se consultan despieces, consumos, operaciones, tarifas e importes históricos junto con la hoja y las referencias disponibles. Las cotizaciones nuevas reciben una copia del despiece publicado. Los borradores anteriores recuperan la receta de demostración con que se crearon.
+
+La proyección de fabricación se genera con `node tools/publish-recipes.mjs RUTA_EXTRACCIÓN`. La salida `src/published-recipes.js` conserva las unidades, los decimales y los importes en cero. La procedencia identifica el libro por número e incluye los rangos y páginas de corrección disponibles. El respaldo de trabajo conserva la correspondencia con los libros originales.
 
 Las 34 ilustraciones de la primera serie mantienen su identificador. Las siguientes tienen una foto WebP y una miniatura WebP; sus hashes se comprueban en el manifiesto de imágenes. Una variante conserva su fotografía al cambiar el precio o la cantidad cotizada. Los tonos de tapicería representativos se identifican en la ficha.
 

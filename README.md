@@ -15,7 +15,7 @@ Por corrección directa del propietario del 5 de noviembre, «Mapa del proceso»
 ### Probar una cotización en GitHub Pages
 
 1. Abre **Nueva solicitud**, completa los datos de ejemplo y entra a **Artículos → Agregar producto → Producto de línea**. El catálogo permite elegir entre 135 variantes de 12 productos. La geometría, el material y el canto ayudan a identificar la ilustración.
-2. Edita cantidades o despieces y pulsa **Guardar borrador**. Una vez confirmado el guardado, puedes cerrar la pestaña y abrir el expediente desde Mesa en el mismo perfil del navegador.
+2. Consulta los despieces y tarifas de fabricación en **Ver galería** o aplica la variante. Edita cantidades o despieces y pulsa **Guardar borrador**. Una vez confirmado, puedes cerrar la pestaña y abrir el expediente desde Mesa en el mismo perfil del navegador.
 3. Completa los datos comerciales y las dos revisiones, registra el envío de prueba y la aceptación de esa misma versión. **Convertir en proyecto** crea la ficha en **Portafolio → Proyectos**. La ficha conserva la versión aceptada y su importe.
 4. Los cambios de la prueba se guardan en IndexedDB en el navegador que los creó. Un segundo perfil comienza con los expedientes ficticios de muestra. Borrar los datos del sitio también borra las pruebas de ese perfil.
 
@@ -51,7 +51,7 @@ La pantalla usa «Formulario continuo». Los datos de cliente y responsables se 
 
 La vista privada guarda borradores, versiones y proyectos en **DucoCotizador** dentro de AppData. El archivo HTML que se puede publicar conserva las pruebas de demostración y las recetas documentadas. La vista privada arranca con los datos importados y los expedientes que se hayan guardado en el equipo.
 
-El catálogo de trabajo se importa con `node tools/private-server.mjs import --recipes RUTA_JSON`. El archivo contiene las colecciones `products` y `rows`. Cada fila identifica la variante y su producto, el despiece, los consumos, las operaciones y las referencias históricas. Una revisión reutiliza el identificador de la variante. El importador comprueba el conjunto antes de sustituirlo en la base local. La página carga estas recetas al abrirse con una sesión autorizada. El HTML distribuible contiene únicamente el catálogo de demostración.
+El catálogo de trabajo se importa con `node tools/private-server.mjs import --recipes RUTA_JSON`. El archivo contiene las colecciones `products` y `rows`. Cada fila identifica la variante y su producto, el despiece, los consumos, las operaciones y las referencias históricas. Una revisión reutiliza el identificador de la variante. El importador comprueba el conjunto antes de sustituirlo en la base local. El cotizador y la galería privados leen esa base durante una sesión autorizada.
 
 En los insumos que se compran en una unidad distinta de la de consumo, la ficha conserva ambas unidades. Si la superficie de compra depende del lote, la cantidad de lienzos se captura cuando se conoce su medida. Los consumos por pieza siguen disponibles durante la cotización.
 
@@ -92,7 +92,7 @@ En GitHub Pages, los borradores confirmados y los proyectos convertidos persiste
 
 ## Captura y recetas
 
-La [guía de recetas de fabricación](docs/recetas-de-fabricacion.md) documenta los cortes de fabricación anteriores. En la demo pública, los despieces y las tarifas son ficticios. En el cotizador privado se usan los componentes y estimaciones de la receta importada.
+La galería y el cotizador en Pages consultan **135 recetas reales** de 12 productos. Las fichas muestran componentes, cantidades por artículo, operaciones, tarifas históricas y referencias de hoja. Los borradores previamente guardados conservan su receta de demostración. La [guía de recetas de fabricación](docs/recetas-de-fabricacion.md) documenta las fuentes y los cortes anteriores.
 
 - Madera maciza presenta seis subtotales para la cantidad solicitada. Suma los importes conocidos antes del redondeo. Si faltan tarifas aplicables, el costo se identifica como parcial. Los herrajes se agregan una vez al costo del artículo.
 - En mano de obra, una tarifa vacía queda pendiente y una tarifa de cero representa un trabajo sin cargo. Al completar los seis rubros aplicables desaparece «parcial» del costo de madera. Cada tabla admite desplazamiento horizontal dentro de la vista móvil.
@@ -107,7 +107,7 @@ La [guía de recetas de fabricación](docs/recetas-de-fabricacion.md) documenta 
 - Tableros y Herrería presentan los rubros como el despiece de Madera maciza. En P8 y P9, las filas 58–95 corresponden al tablero y sus operaciones. Las filas 98–126 separan las láminas por superficie, los perfiles por longitud y los trabajos posteriores. Cada importe se asigna una vez a su rubro. Las tarifas capturadas en piezas sin fórmula de receta se identifican como tarifas y conservan su tratamiento económico original.
 - La ficha de Bolonia identifica la madera de la cubierta y muestra su estructura metálica en la ilustración de la variante.
 - El costo base de tablero deriva de área × precio por hoja ÷ área de hoja × (1 + desperdicio). La cantidad comercial escala una sola vez antes del redondeo. Base calculada y compra confirmada siguen siendo conceptos distintos.
-- La demo pública presenta importes de prueba. En la instalación privada, los precios históricos de las recetas importadas se pueden usar como estimaciones editables. Su procedencia se conserva por separado de la vigencia comercial y de los datos fiscales de compra. Las recetas usan identificadores internos mientras se verifica el SKU. Los libros originales y las extracciones privadas se conservan fuera del repositorio.
+- Los precios históricos de fabricación son estimaciones editables. Su procedencia se conserva por separado de la vigencia comercial y de los datos fiscales de compra. El conjunto público identifica cada libro mediante un número de referencia e indica la hoja y los rangos o páginas de corrección disponibles. Los expedientes de muestra siguen siendo ficticios.
 - Los campos ausentes o inválidos siguen siendo distintos de cero. Las referencias de procesos y CNC no activan tarifas financieras ni completan un costo pendiente por mostrarse en pantalla. Primer y acabado final productivos conservan su alcance diferido.
 - Las imágenes del catálogo son ilustraciones; no fotografías verificadas del producto.
 
@@ -149,9 +149,10 @@ $env:DEMO_BROWSER_CHANNEL = 'msedge'
 Remove-Item Env:DEMO_TEST_FILTER -ErrorAction SilentlyContinue
 node tests/acceptance.mjs
 node tests/browser/public-pages.mjs
+node tests/browser/published-recipes.mjs
 ```
 
-Con `PAGES_TEST_URL=https://gusvann.github.io/duco-cotizaciones-demo/`, la segunda prueba usa Pages y comprueba que el navegador recibió el HTML de esta versión. Utiliza un perfil temporal y datos ficticios.
+Con `PAGES_TEST_URL=https://gusvann.github.io/duco-cotizaciones-demo/`, las dos pruebas HTTP usan el sitio publicado. Usan perfiles temporales y expedientes ficticios para verificar guardado y consulta.
 
 Los recorridos de edición usan la cantidad en la cabecera, el desplegable **Datos del artículo** y los controles **Confirmar cambios** y **Descartar** de la pieza. La aceptación por HTTP comprueba el guardado y la reapertura en el mismo perfil de Edge, la conversión y las imágenes del catálogo.
 
