@@ -14,7 +14,9 @@
       "width": 1254,
       "height": 1254,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
-      "referenceIllustration": "mesa-florencia-tzalam.png"
+      "referenceIllustration": "mesa-florencia-tzalam.png",
+      "thumbnail": "thumb/SYN-NUBE-C.webp",
+      "thumbnailSha256": "847f936ce2374d217b47993decdbec46366643f8e2a06db5a0d5ebc759513692"
     },
     {
       "id": "SYN-NUBE-O",
@@ -24,7 +26,9 @@
       "width": 1254,
       "height": 1254,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
-      "referenceIllustration": "mesa-florencia-encino-rojo.png"
+      "referenceIllustration": "mesa-florencia-encino-rojo.png",
+      "thumbnail": "thumb/SYN-NUBE-O.webp",
+      "thumbnailSha256": "caeec5e6a260d69a50d330aa7a78a0e51916ce66d452f2ae9e570b36d89eacd3"
     },
     {
       "id": "SYN-PRISMA-C",
@@ -34,7 +38,9 @@
       "width": 1254,
       "height": 1254,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
-      "referenceIllustration": "cubierta-tzalam.png"
+      "referenceIllustration": "cubierta-tzalam.png",
+      "thumbnail": "thumb/SYN-PRISMA-C.webp",
+      "thumbnailSha256": "96f70c2c29fc1d792f65b3f75502a01ae5f733cd50e2021ed2a1b5afb9588d45"
     },
     {
       "id": "SYN-PRISMA-O",
@@ -44,7 +50,9 @@
       "width": 1254,
       "height": 1254,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
-      "referenceIllustration": "cubierta-encino-blanco.png"
+      "referenceIllustration": "cubierta-encino-blanco.png",
+      "thumbnail": "thumb/SYN-PRISMA-O.webp",
+      "thumbnailSha256": "65c34b83f9336ef30c9b703801995b143b03e5b3483ad03ab457bcc2cb5d176d"
     },
     {
       "id": "SYN-PRISMA-G",
@@ -54,7 +62,9 @@
       "width": 1254,
       "height": 1254,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
-      "referenceIllustration": "cubierta-encino-rojo.png"
+      "referenceIllustration": "cubierta-encino-rojo.png",
+      "thumbnail": "thumb/SYN-PRISMA-G.webp",
+      "thumbnailSha256": "840c6f54f19a2d7788d7d86233c1eb91fe27bbd41ca07eb83a9120440158a3c2"
     },
     {
       "id": "SYN-BENT-LEGS-R",
@@ -64,7 +74,9 @@
       "width": 768,
       "height": 768,
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
-      "referenceIllustration": "Bent Legs · Encino rojo"
+      "referenceIllustration": "Bent Legs · Encino rojo",
+      "thumbnail": "thumb/SYN-BENT-LEGS-R.webp",
+      "thumbnailSha256": "1833366989e2f5fc0025f9fc848b6a24fc258b22b613bca8894d75150a97b457"
     },
     {
       "id": "SYN-BOLONIA-R",
@@ -76,7 +88,225 @@
       "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
       "referenceIllustration": "Bolonia · Encino rojo",
       "createdOn": "2026-11-23",
-      "prompt": "Use case: product-mockup. Generate one square, photorealistic furniture catalog photo of Mesa Bolonia as described by its recipe. A low round table, approximately 70 cm in diameter and 50 cm high. Solid natural red oak round top with subtle warm grain, satin finish, approximately 38 mm thickness, clean straight edge lightly eased. Four slim straight 19 mm square-tube steel legs in matte graphite black RAL 7021, connected by a slim cross brace. The discreet support plate sits immediately below the wooden top. Keep the frame slim, practical and symmetrical, use plausible welded joints. Center the whole table with every foot inside a comfortable margin, three-quarter view from just above table height, on a pale warm-gray seamless studio backdrop with soft daylight and natural contact shadows. Looks like a professionally photographed real piece of furniture. No props, people, text, watermarks or logos."
+      "prompt": "Use case: product-mockup. Generate one square, photorealistic furniture catalog photo of Mesa Bolonia as described by its recipe. A low round table, approximately 70 cm in diameter and 50 cm high. Solid natural red oak round top with subtle warm grain, satin finish, approximately 38 mm thickness, clean straight edge lightly eased. Four slim straight 19 mm square-tube steel legs in matte graphite black RAL 7021, connected by a slim cross brace. The discreet support plate sits immediately below the wooden top. Keep the frame slim, practical and symmetrical, use plausible welded joints. Center the whole table with every foot inside a comfortable margin, three-quarter view from just above table height, on a pale warm-gray seamless studio backdrop with soft daylight and natural contact shadows. Looks like a professionally photographed real piece of furniture. No props, people, text, watermarks or logos.",
+      "thumbnail": "thumb/SYN-BOLONIA-R.webp",
+      "thumbnailSha256": "d802f8e0f5274947ba4b2122de0a35c77def16eeae3592d26ff1b87c4751cd00"
+    },
+    {
+      "id": "SYN-CATALOG-01",
+      "file": "SYN-CATALOG-01.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "95c499c001c91ab1aaa3e990a728d71e74cd4128bf4051cc0f5b8844ed5a3cb6",
+      "thumbnail": "thumb/SYN-CATALOG-01.webp",
+      "thumbnailSha256": "6e3b54f4604f27bdba12456a942dc82cd532b82b15d02f9af4a3eda46365934d"
+    },
+    {
+      "id": "SYN-CATALOG-02",
+      "file": "SYN-CATALOG-02.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "b06471bb9741354c1c23e888332f02782a604e03bf07e8d68ed741003efdcd3a",
+      "thumbnail": "thumb/SYN-CATALOG-02.webp",
+      "thumbnailSha256": "ab1897e304a3133cc4e4d41eebabe8ddccf07a038186cebeeaf79cdc72beb330"
+    },
+    {
+      "id": "SYN-CATALOG-03",
+      "file": "SYN-CATALOG-03.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "2f3a6b3df5fbc12005a6e3d436a58599fdd905dcfa59e415dcdbef8000123d64",
+      "thumbnail": "thumb/SYN-CATALOG-03.webp",
+      "thumbnailSha256": "acc083a3b4a1b306927616e583d7fdaa9c0df0e322d088afff000bb791915367"
+    },
+    {
+      "id": "SYN-CATALOG-04",
+      "file": "SYN-CATALOG-04.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "b9a2bbdbde59e1c02f7d0602c524460f92a22389875805d3944bba9ba4632b39",
+      "thumbnail": "thumb/SYN-CATALOG-04.webp",
+      "thumbnailSha256": "3a125e09347b8aaf434606e412cd58daf7895bf3fcbf9f3e6b68b1997bc8ae63"
+    },
+    {
+      "id": "SYN-CATALOG-05",
+      "file": "SYN-CATALOG-05.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "1bc5b4835d86e7e9663d51d9e32086a82bd1cb2d6ea8b9fbb3b01641b921b29a",
+      "thumbnail": "thumb/SYN-CATALOG-05.webp",
+      "thumbnailSha256": "f734539ff16bc5d711904ffa254cfc351381f038e88eb9fff63a8b8ff5792f77"
+    },
+    {
+      "id": "SYN-CATALOG-06",
+      "file": "SYN-CATALOG-06.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "bf40a4953141383bf77dd8c6ee4720f3458f547f4695f943fbd44cc51b74097e",
+      "thumbnail": "thumb/SYN-CATALOG-06.webp",
+      "thumbnailSha256": "417f5fa023984ea7651619be406be8f0db99175a0375f7331f02e27f44a55db2"
+    },
+    {
+      "id": "SYN-CATALOG-07",
+      "file": "SYN-CATALOG-07.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "93ba38e037c939dcded56dcbb9bc29f713368e3d16990e52419d69deb6886922",
+      "thumbnail": "thumb/SYN-CATALOG-07.webp",
+      "thumbnailSha256": "03d5a5c09b08274d552be1658ad231f6745ac4877e9253f658ebb787a32b8792"
+    },
+    {
+      "id": "SYN-CATALOG-08",
+      "file": "SYN-CATALOG-08.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "6188dc7054f1020160dcc2bbd0e2344c40c3820c76d26a13be99dce7640f992a",
+      "thumbnail": "thumb/SYN-CATALOG-08.webp",
+      "thumbnailSha256": "3a3d01fc07c925f76b6d772231f9ad4b87357f8e6a405561fa4f0b391a74bd37"
+    },
+    {
+      "id": "SYN-CATALOG-09",
+      "file": "SYN-CATALOG-09.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "7989a4bb175e06dbecf299f71a6d614928c1190b8c4a9789113147574681298c",
+      "thumbnail": "thumb/SYN-CATALOG-09.webp",
+      "thumbnailSha256": "aac4159ba2f3b5a9b78fabdd0330166c7ba1d7f1c023c48aadabd888b00ebd5b"
+    },
+    {
+      "id": "SYN-CATALOG-10",
+      "file": "SYN-CATALOG-10.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "e4a3ee263fc81696279e864f8d2054c3411e805c22f89cf387a233d25fe965cb",
+      "thumbnail": "thumb/SYN-CATALOG-10.webp",
+      "thumbnailSha256": "ae232f2c6ade59c7398cc37a1e0d317f94c6b4efb07c04983a383e9fd9c2e330"
+    },
+    {
+      "id": "SYN-CATALOG-11",
+      "file": "SYN-CATALOG-11.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "00e913c7a275fb8c783f6ed7469c2a6c22aefd3ccb1fe7ac14dc4665a89ad176",
+      "thumbnail": "thumb/SYN-CATALOG-11.webp",
+      "thumbnailSha256": "963f6cdf346ba7c6adf691a7cd3ae412116fd5780483cda545d412fd57bc81a7"
+    },
+    {
+      "id": "SYN-CATALOG-12",
+      "file": "SYN-CATALOG-12.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "d172bd43301547dd3e632efc7c8a8d07d77e355004da6e8930457ac28faddf92",
+      "thumbnail": "thumb/SYN-CATALOG-12.webp",
+      "thumbnailSha256": "1fd320c750681706c84b7345ba71b65befe5961359ce3a4f00f64c315e566e21"
+    },
+    {
+      "id": "SYN-CATALOG-13",
+      "file": "SYN-CATALOG-13.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "d19f6a075c39c1eec2d9538390bf204d75d04993c65525f993db209f97b5f8f7",
+      "thumbnail": "thumb/SYN-CATALOG-13.webp",
+      "thumbnailSha256": "15db061f8aabac4967e05763f94ae80476a1435c5ef5cd7dba7f9c8447c9587c"
+    },
+    {
+      "id": "SYN-CATALOG-14",
+      "file": "SYN-CATALOG-14.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "0ed46e8e5c01200fc28d926d10808014d157cc1e7287c400f8a35f6bf1be0414",
+      "thumbnail": "thumb/SYN-CATALOG-14.webp",
+      "thumbnailSha256": "1d5abb6871b2cc92b492c7976bbffc40d3a7b67d8b15ba2eef10b827271a14cf"
+    },
+    {
+      "id": "SYN-CATALOG-15",
+      "file": "SYN-CATALOG-15.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "6421345977a6291ce8a172386b5d244be4d763cc9a529fe4df6ed43b106cc887",
+      "thumbnail": "thumb/SYN-CATALOG-15.webp",
+      "thumbnailSha256": "c83b1e4664de696f5c0d062e7d48f9e09afa463db97261f1c5fc8b2a22638857"
+    },
+    {
+      "id": "SYN-CATALOG-16",
+      "file": "SYN-CATALOG-16.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "95f3d2e642e622d9140badacc97a13599970956cf419de596c7a38b95cd40825",
+      "thumbnail": "thumb/SYN-CATALOG-16.webp",
+      "thumbnailSha256": "727413ff2d0c5d2381559d9764339efc92b9fd0a687894a47c8e2b8d72cc8117"
+    },
+    {
+      "id": "SYN-CATALOG-17",
+      "file": "SYN-CATALOG-17.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "27dc7114388599997bf37512cda5130fc4789e317846708b3c4b49f52c8666f7",
+      "thumbnail": "thumb/SYN-CATALOG-17.webp",
+      "thumbnailSha256": "56706a5aca5f90eb5ebce25223bf1dbfc8182a144aa629d675e4a614736bc846"
+    },
+    {
+      "id": "SYN-CATALOG-18",
+      "file": "SYN-CATALOG-18.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "1d18d425a1bc4e37fb03776d99c46034c4969f157d799e4105fe6f5b95684149",
+      "thumbnail": "thumb/SYN-CATALOG-18.webp",
+      "thumbnailSha256": "baed936b9824c6ca15b36ad9df68644475b118c316b82945d53753fe767b2260"
+    },
+    {
+      "id": "SYN-CATALOG-19",
+      "file": "SYN-CATALOG-19.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "2d5c674824e202b5671124658a1271ee4e3dbaa9eb0bb64c8252f384b9465169",
+      "thumbnail": "thumb/SYN-CATALOG-19.webp",
+      "thumbnailSha256": "57f96e66a7a25016f13582330089844e25a01a3eda701108de01fb83e642027d"
+    },
+    {
+      "id": "SYN-CATALOG-20",
+      "file": "SYN-CATALOG-20.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "56fc1f427aa5f645e89a7c94251a24da82fb1684da78016d1b5c74a842f84379",
+      "thumbnail": "thumb/SYN-CATALOG-20.webp",
+      "thumbnailSha256": "93bf97fed448372c3e58c20a6afcc3c11d5ce301b02881adb870d9c856d55c28"
+    },
+    {
+      "id": "SYN-CATALOG-21",
+      "file": "SYN-CATALOG-21.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "eadea68a3f509f08f962932b3692ad3c3563edb183b3150981154d1c7965654f",
+      "thumbnail": "thumb/SYN-CATALOG-21.webp",
+      "thumbnailSha256": "3b00878ca376417f42aa9e7c7e667761c0b4431dda5ac9e7fb3c5c30c8ab7168"
+    },
+    {
+      "id": "SYN-CATALOG-22",
+      "file": "SYN-CATALOG-22.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "59c0d0e3a0e2794063b4e0b0f9b147fe2f6d88a0477bd2e99bbd9b73854e9191",
+      "thumbnail": "thumb/SYN-CATALOG-22.webp",
+      "thumbnailSha256": "7000f37dea574cc8545119377affb5701ff1c5b2bf6a4669f5dac604a82a0267"
+    },
+    {
+      "id": "SYN-CATALOG-23",
+      "file": "SYN-CATALOG-23.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "ab20a144c83d6588773aefa7b9fb560e7605f41f06591a4c8e56f668c10025f7",
+      "thumbnail": "thumb/SYN-CATALOG-23.webp",
+      "thumbnailSha256": "f7524dc5aa6aca8248206bd33d10f4d3cff758021315123cd6366b9a1f426bae"
+    },
+    {
+      "id": "SYN-CATALOG-24",
+      "file": "SYN-CATALOG-24.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "7b00af7c45aaf0149e431604320e432311402727ffd42a5b6594ac4c2737d59c",
+      "thumbnail": "thumb/SYN-CATALOG-24.webp",
+      "thumbnailSha256": "2d142dcb9c7954df631ea6cd2cd45cc005cdf11d1da6edc1946c506dac10fddb"
+    },
+    {
+      "id": "SYN-CATALOG-25",
+      "file": "SYN-CATALOG-25.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "3006996772a41d9503969d7423cc400b5c74de91c3448aead1327b732598664c",
+      "thumbnail": "thumb/SYN-CATALOG-25.webp",
+      "thumbnailSha256": "57b00d18ff29a4022f4abafa9a9d06355d10672c498dd8b824aefb017f3fe8a6"
+    },
+    {
+      "id": "SYN-CATALOG-26",
+      "file": "SYN-CATALOG-26.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "81fb982329e51360ad0d8cb966daf1d07c73b5e9d2107f09fd9d6e2e63b746de",
+      "thumbnail": "thumb/SYN-CATALOG-26.webp",
+      "thumbnailSha256": "acd0ef867a62844dbb9c1f57a3ae3a91118fbf007735cbeeaafc27a5c8162fdb"
+    },
+    {
+      "id": "SYN-CATALOG-27",
+      "file": "SYN-CATALOG-27.jpg",
+      "kind": "AI_GENERATED_SYNTHETIC_ILLUSTRATION",
+      "sha256": "93fc00a88d6ceb33746c4831aebe6bdc36050216e2000f37604eae4d4fe81bfe",
+      "thumbnail": "thumb/SYN-CATALOG-27.webp",
+      "thumbnailSha256": "7afb8e23a3e8f5c47333fcd5163f7e761194992ec544624ec40f1fa0e37e3e12"
     }
   ]
 }

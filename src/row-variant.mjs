@@ -24,7 +24,11 @@ function installRowVariant(boardCalculator,createCosts) {
       const input='<input id="'+esc(id)+'" inputmode="decimal" maxlength="40" data-fab-cost-field="'+esc(key)+'" data-cost-family="'+esc(family)+'" data-cost-item="'+esc(itemId)+'" value="'+esc(formatRate(key,value))+'"'+(disabled?' disabled':'')+'>';
       return '<div class="field"><label for="'+esc(id)+'">'+esc(label)+'</label>'+(fabricationMoney(key)?'<span class="break-money-input"><span aria-hidden="true">$</span>'+input+'</span>':input)+'</div>';
     }).join('');
-    return controls?'<div class="fabrication-inputs">'+controls+'</div>':'';
+    const operations=(settings?.operations||[]).filter(op=>op.panel===panel).map(op=>{
+      const control=(key,label)=>'<label class="field" for="'+esc('fab-op-'+itemId+'-'+family+'-'+op.id+'-'+key)+'"><span>'+esc(label)+'</span><input id="'+esc('fab-op-'+itemId+'-'+family+'-'+op.id+'-'+key)+'" inputmode="decimal" maxlength="40" data-fab-operation="'+esc(op.id)+'" data-fab-cost-field="'+key+'" data-cost-family="'+esc(family)+'" data-cost-item="'+esc(itemId)+'" value="'+esc(key==='rate'?formatRate('documentRate',op.rate):op.quantity)+'"'+(disabled?' disabled':'')+'></label>';
+      return '<div class="fabrication-estimated-operation"><h6>'+esc(op.name)+'</h6><div class="fabrication-inputs">'+control('quantity','Cantidad por artículo · '+op.unit)+control('rate','Tarifa estimada · $/'+op.unit)+'</div></div>';
+    }).join('');
+    return (controls?'<div class="fabrication-inputs">'+controls+'</div>':'')+operations;
   }
   function fabricationPanel(item,family,key,number,label,body,active,populated,settings){
     const saved=app.breakdownUi.panels||{},stateKey=item.id+'|'+key;
@@ -55,7 +59,8 @@ function installRowVariant(boardCalculator,createCosts) {
         return readField(item.id,m.id,'material','detail.'+rateKey,(m.name||'Pieza')+' · $/'+unit,formatRate(rateKey,m.detail?.[rateKey]??''));
       }).join('')+'</div>':'';
       const body=rates+(key==='board-stock'?boardPieces:list)+(key==='board-stock'?'':editing(key))+(add?'<div class="fab-detail-actions">'+add+'</div>':'');
-      const inputs=(board?hasBoards:hasProfiles)?settings?.[category]:null;
+      const datedCategory=settings?.[category];
+      const inputs=(board?hasBoards||Number(datedCategory?.integrationDays)>0:hasProfiles||steel.length>0)||datedCategory?.operations?.length?datedCategory:null;
       return fabricationPanel(item,category,key,number,label,body,active,
         (key==='board-stock'||physical)&&materials.length>0,inputs);
     };
@@ -87,19 +92,22 @@ function installRowVariant(boardCalculator,createCosts) {
     if(!charged.length&&included)return 'Incluido';
     const result=fabrication.sum(charged),cents=boardCalculator.cents(result.amount);
     if(cents===null)return 'Pendiente';
-    return boardMoney(cents)+(result.partial?' · parcial':charged.some(line=>line[3]==='provisional')?' · por validar':'');
+    return boardMoney(cents)+(result.partial?' · parcial':charged.some(line=>line[3]==='provisional')?' · estimado':'');
   }
   function updateFabrication(event){
     const target=event.target,key=target?.dataset?.fabCostField,family=target?.dataset?.costFamily,id=target?.dataset?.costItem;
-    if(!key||id!==app.openPartId||!recipeCanEdit()||!Object.hasOwn(fabrication.fields,family)||!Object.hasOwn(fabrication.fields[family],key))return;
-    const settings=fabricationSettings(id);
+    if(!key||id!==app.openPartId||!recipeCanEdit()||!Object.hasOwn(fabrication.fields,family))return;
+    const settings=fabricationSettings(id)?.[family];
     if(!settings)return;
+    const operationId=target.dataset.fabOperation;
+    const entry=operationId?settings.operations?.find(operation=>operation.id===operationId):settings;
+    if(!entry||!(operationId?['quantity','rate'].includes(key):Object.hasOwn(fabrication.fields[family],key)))return;
     let value=String(target.value).slice(0,40);
-    const monetary=fabricationMoney(key);
+    const monetary=key==='rate'||fabricationMoney(key);
     if(monetary){try{value=moneyInputValue(value);}catch{/* Keep invalid text editable and mark its cost pending. */}}
-    settings[family][key]=value;
+    entry[key]=value;
     target.setAttribute?.('aria-invalid',String(value!==''&&!boardCalculator.dec(value,monetary?2:6,monetary?100000000:1000000)));
-    if(event.type==='change')target.value=formatRate(key,value);
+    if(event.type==='change')target.value=formatRate(monetary?'documentRate':key,value);
     app.dirty=true;refreshFamilyTotals(id);articleHeaderRefresh(id);
   }
   quoteRoot.addEventListener('input',updateFabrication);
@@ -244,7 +252,7 @@ function installRowVariant(boardCalculator,createCosts) {
         for(const family of families)totals[family].count++;
         for(const m of materials){
           if(m.section!=='metal-sheet'&&m.section!=='metal-tube')continue;
-          if(m.section==='metal-tube'&&settings&&materials.length===1&&!conflictIds.has(purchase))continue;
+          if((m.section==='metal-tube'||m.section==='metal-sheet'&&m.detail?.paintFaces!==undefined)&&settings&&materials.length===1&&!conflictIds.has(purchase))continue;
           for(const [key,field] of [['metal-work','laborPrice'],['metal-finish','paintPrice']])
             recordPanel(key,m.name,null,math.dec(m.detail?.[field],2,100000000)?'rate':'missing-rate');
         }
@@ -255,7 +263,7 @@ function installRowVariant(boardCalculator,createCosts) {
         }
         const family=[...families][0],cost=costs.get(id('M',purchase));
         const material=materials[0];
-        if(settings&&materials.length===1&&(material.section==='boards'||material.section==='metal-tube')){
+        if(settings&&materials.length===1&&(material.section==='boards'||material.section==='metal-tube'||material.section==='metal-sheet'&&material.detail?.paintFaces!==undefined)){
           const physical=boardMaterial(item,material),basis=family==='boards'?boardBasis(itemId,material.id):null;
           const lines=fabrication.piece(physical,basis,settings[family]);
           capture(family,lines.map(([name,value,panel])=>[material.name+' · '+name,value,panel]));
@@ -268,11 +276,16 @@ function installRowVariant(boardCalculator,createCosts) {
         if(panels.size===1)recordNative(material,cents,provisional?'provisional':'');
         else for(const part of materials)recordNative(part,null);
       }
-      for(const family of sections.keys())capture(family,fabrication.overhead(family,settings[family]));
+      for(const family of ['boards','metal']){
+        const familySettings=settings?.[family];
+        if(!familySettings||!sections.has(family)&&!familySettings.operations?.length&&!(family==='boards'&&Number(familySettings.integrationDays)>0))continue;
+        if(!sections.has(family))totals[family].count++;
+        capture(family,fabrication.overhead(family,familySettings));
+      }
       for(const process of row.processes){
         const total=totals[articleStudyFamily(process.section)];total.count++;
         if(process.source?.kind==='included'){
-          const included=process.source.reviewed&&row.materials.some(material=>material.id===process.source.includedInMaterialId);
+          const included=row.materials.some(material=>material.id===process.source.includedInMaterialId);
           recordNative(process,null,included?'included':'');
           if(included)total.included=true;
           else total.missing++;
@@ -306,14 +319,30 @@ function installRowVariant(boardCalculator,createCosts) {
         if(total.exact){const cents=math.cents(total.exact);if(cents===null)return [key,{text:'Fuera de rango',title:'El costo excede el importe admitido.'}];total.cents=Number(cents);}
         if(!total.count&&!total.missing)return [key,{complete:true,text:QuotePdf.money(0),title:'Sin conceptos capturados.'}];
         if(total.missing&&!total.known)return [key,{byPanel,text:'Pendiente',title:'Hay conceptos sin importe o relaciones por resolver.'}];
-        const suffix=total.missing?' · parcial':total.base?' · base':total.provisional?' · por validar':total.included&&!total.known?' · incluido':'';
-        const title=total.missing?'Importe parcial; hay conceptos o relaciones pendientes.':total.preview?'Costo calculado de madera maciza.':total.provisional?'Importe capturado, sujeto a validación.':total.included?'Los procesos incluidos no se suman otra vez.':'Importe capturado del rubro.';
+        const suffix=total.missing?' · parcial':total.base?' · base':total.provisional?' · estimado':total.included&&!total.known?' · incluido':'';
+        const title=total.missing?'Importe parcial; hay conceptos o relaciones pendientes.':total.preview?'Costo calculado de madera maciza.':total.provisional?'Estimación con los importes capturados.':total.included?'Los procesos incluidos no se suman otra vez.':'Importe capturado del rubro.';
         return [key,{exact:total.exact,lines:sections.get(key),byPanel,complete:!total.missing&&!total.provisional&&!total.base,cents:total.known?total.cents:null,workshop:total.preview,text:QuotePdf.money(total.cents)+suffix,title}];
       }));
     }catch(_){return unknown();}
   }
   function familyOutput(itemId,key,value){
     return '<output data-rv-family-total="'+esc(key)+'" data-rv-article="'+esc(itemId)+'" aria-live="polite" title="'+esc(value.title)+'">'+esc(value.text)+'</output>';
+  }
+  function articleEstimate(itemId) {
+    const row=breakdownRow(itemId);
+    const wood=solidWoodEnabled()?solidWoodEntries(itemId,true):[];
+    const groups=familyTotals(itemId);
+    const amounts=Object.values(groups).map(group=>group.cents).filter(Number.isSafeInteger);
+    const cents=amounts.reduce((sum,value)=>sum+value,0);
+    const hasWork=wood.length>0||!!row?.materials.length||!!row?.processes.length;
+    const hasCanonicalWood=row?.materials.some(material=>material.type==='wood'||material.section==='wood')||
+      row?.processes.some(process=>articleStudyFamily(process.section)==='wood');
+    return {
+      hasWork,
+      complete:Object.values(groups).every(group=>group.complete===true),
+      cents:amounts.length&&Number.isSafeInteger(cents)?cents:null,
+      extraWood:wood.length?(hasCanonicalWood?null:groups.wood.cents??null):0
+    };
   }
   const nativeHeaderCost=articleHeaderRead;
   articleHeaderRead=function(id){
@@ -381,13 +410,19 @@ function installRowVariant(boardCalculator,createCosts) {
   }
   function supplyDetails(state,value) {
     const provider=takeRegion(state,'<section class="break-provider','section'),enabled=!!provider&&scopeEconomics('Fabricación'),linked=!!value.providerId;
-    let field=breakdownField('supplier','Proveedor (opcional)',value.supplier,{max:200});
-    if(!enabled||linked)field=field.replace('<input ','<input readonly aria-readonly="true" ');
+    const privateLookup=typeof globalThis.DucoPrivateApi?.suppliers==='function';
+    let field=breakdownField('supplier',privateLookup?'Proveedor seleccionado':'Proveedor (opcional)',value.supplier,{max:200});
+    if(!enabled||linked||privateLookup)field=field.replace('<input ','<input readonly aria-readonly="true" placeholder="Por definir" ');
     const change=enabled&&linked?'<button type="button" class="quiet" data-break-action="rv-change-linked-provider">Cambiar proveedor</button>':'';
     const notice=!enabled?'<small>La captura de proveedor está pendiente para esta responsabilidad.</small>':linked?'<small>El proveedor está vinculado a este componente.</small>':'';
-    const additional=(linked?provider:'')+state.html;
-    const hasControls=/data-(?:break-field|break-group-field|break-action|general-field|tech-field)=/.test(additional);
-    return '<div class="rv-provider-line">'+field+change+notice+'</div>'+(hasControls?'<details class="rv-purchase-extra"><summary>Otros datos de compra</summary>'+additional+'</details>':'');
+    const purchaseTax=enabled&&!state.html.includes('data-break-field="taxRate"')?breakdownField('taxRate','IVA de compra %',value.taxRate,{number:true}):'';
+    const purchaseValidity=enabled&&!state.html.includes('data-break-field="validUntil"')?breakdownField('validUntil','Vigencia del precio',value.validUntil,{max:10}).replace('type="text"','type="date"'):'';
+    const nativeControls=state.html;
+    const hasNativeControls=/data-(?:break-field|break-group-field|break-action|general-field|tech-field)=/.test(nativeControls);
+    const additional=purchaseTax+purchaseValidity+(hasNativeControls?nativeControls:'');
+    const providerLookup=enabled&&(privateLookup&&!linked||value.serviceId)?provider:'';
+    const clear=enabled&&privateLookup&&!linked&&value.supplier?'<button type="button" class="quiet" data-break-action="rv-clear-provider">Dejar por definir</button>':'';
+    return '<div class="rv-provider-line">'+field+change+clear+notice+'</div>'+providerLookup+(additional?'<div class="tech-form-grid rv-purchase-fields">'+additional+'</div>':'');
   }
   function rowEditor(original, wood) {
     const draft = app.breakdownEditor;
@@ -446,9 +481,11 @@ function installRowVariant(boardCalculator,createCosts) {
     const priceOptions=wood?'<details class="rv-wood-price-options" data-solid-exceptions'+(value.adjustment?' open':'')+'><summary>Ajustar precio</summary>'+reason+'<div class="rv-wood-price-actions">'+(reset?renameButton(reset,'Restablecer'):'')+(group?renameButton(group,'Compartir precio'):'')+'</div></details>':'';
     const material=wood?species+(historical?historical.replace('class="note"','class="rv-wood-legacy"'):''):'';
     const row=wood ? woodGrid(concept,woodQuantityCell(draft.itemId,value,quantity,unit,woodResult),material,thickness,measures,price+priceOptions,cnc,amount) : supply ? supplyGrid(type||pending('Tipo de insumo'),concept,sku,quantity,unit,price,amount) : grid(concept,quantity,unit,price,amount);
-    const options=supply?supplyDetails(state,value):type+state.html;
+    const serviceTax=process&&value.section==='maquilas'&&value.source?.kind==='manual'&&scopeEconomics('Fabricación')&&!state.html.includes('data-break-field="source.taxRate"')
+      ?breakdownField('source.taxRate','IVA del servicio %',value.source.taxRate,{number:true}):'';
+    const options=supply?supplyDetails(state,value):type+serviceTax+state.html;
     const actions=wood?'<div class="rv-wood-confirm"><button type="button" class="quiet" data-break-action="wood-confirm">Confirmar cambios</button><button type="button" class="quiet" data-break-action="wood-discard">Descartar</button></div>':footer;
-    return '<div class="rv-edit" data-row-editor="' + esc(value.id) + '">' + row + (wood?'':details(draft.itemId,value.id,options,false,supply)) + error + actions + '</div>';
+    return '<div class="rv-edit" data-row-editor="' + esc(value.id) + '">' + row + (supply?supplyConsumption(draft.itemId,value):'') + (wood?'':details(draft.itemId,value.id,options,false,supply)) + error + actions + '</div>';
   }
   breakdownEditorHtml = function () { return rowEditor(nativeEditor(),false); };
   solidWoodEditorHtml = function () { return rowEditor(nativeWoodEditor(),true); };
@@ -458,17 +495,23 @@ function installRowVariant(boardCalculator,createCosts) {
       if(original?.section==='boards'){
         const basis=breakdownClone(boardBasis(itemId,original.id)),result=await nativeBreakdownAction(button),draft=app.breakdownEditor;
         if(partSameContext(context)&&draft?.isNew&&draft.itemId===itemId&&draft.value.section==='boards'&&draft.value.id!==original.id){
-          solidWoodState(itemId).boardSettings[draft.value.id]=basis;editor();
+          (solidWoodState(itemId).boardSettings||=Object.create(null))[draft.value.id]=basis;editor();
         }
         return result;
       }
     }
-    if(button.dataset.breakAction!=='rv-change-linked-provider')return nativeBreakdownAction(button);
+    if(!['rv-change-linked-provider','rv-clear-provider'].includes(button.dataset.breakAction))return nativeBreakdownAction(button);
     const draft=app.breakdownEditor,value=draft?.value;
-    if(!recipeCanEdit()||app.busy||app.operation||!draft||!['component','purchase'].includes(draft.kind)||value?.section!=='supplies'||!value.providerId||draft.itemId!==app.openPartId||draft.owner!==app.user?.email||draft.quoteId!==app.q.id||draft.versionId!==app.q.versionId||app.partDraft?.itemId!==draft.itemId||!partSameContext(app.partDraft.context))return false;
+    if(!recipeCanEdit()||app.busy||app.operation||!draft||!['component','purchase'].includes(draft.kind)||value?.section!=='supplies'||draft.itemId!==app.openPartId||draft.owner!==app.user?.email||draft.quoteId!==app.q.id||draft.versionId!==app.q.versionId||app.partDraft?.itemId!==draft.itemId||!partSameContext(app.partDraft.context))return false;
+    if(button.dataset.breakAction==='rv-clear-provider'){
+      if(value.providerId)return false;
+      value.supplier='';draft.providerOptions=[];draft.providerQuery='';draft.providerSearch=null;
+      rowSessionAutosave.schedule();editor();return true;
+    }
+    if(!value.providerId)return false;
     if(!window.confirm('Cambiar el proveedor desvinculará el proveedor y su servicio de este componente. Los cambios se aplican sólo al confirmar el componente. ¿Continuar?'))return false;
     value.providerId='';value.serviceId='';value.serviceName='';
-    editor();requestAnimationFrame(()=>quoteRoot.querySelector('[data-break-field="supplier"]')?.focus({preventScroll:true}));
+    editor();requestAnimationFrame(()=>quoteRoot.querySelector('[data-break-provider-query], [data-break-field="supplier"]')?.focus({preventScroll:true}));
     return true;
   };
   solidWoodRefresh = function () {
@@ -488,7 +531,7 @@ function installRowVariant(boardCalculator,createCosts) {
       field.dataset.rvMissing=String(missing);input.setAttribute('aria-invalid',String(missing));
     });
     const family=quoteRoot.querySelector('.solid-wood-f-total>span');
-    if(family&&!family.dataset.rvFamilyTotal){const summary=solidWoodSummary(draft.itemId);family.textContent=solidWoodMoney(summary.articleCosts.woodCost)+' · '+(summary.quality==='PENDING'?'Pendiente':'Por validar');}
+    if(family&&!family.dataset.rvFamilyTotal){const summary=solidWoodSummary(draft.itemId);family.textContent=solidWoodMoney(summary.articleCosts.woodCost)+' · '+(summary.quality==='PENDING'?'Pendiente':'Estimado');}
     refreshFamilyTotals(draft.itemId);
     articleHeaderRefresh(draft.itemId);
   };
@@ -506,7 +549,7 @@ function installRowVariant(boardCalculator,createCosts) {
     const totalAt=html.indexOf('<output class="solid-wood-f-total">');
     if(totalAt>=0){
       const total=articleStudyElement(html,totalAt,'output');
-      const readable=total.html.replace(/ · (?:PREVIEW|ESTIMATED)(?=<)/g,' · Por validar').replace(/ · PENDING(?=<)/g,' · Pendiente');
+      const readable=total.html.replace(/ · (?:PREVIEW|ESTIMATED)(?=<)/g,' · Estimado').replace(/ · PENDING(?=<)/g,' · Pendiente');
       html=html.slice(0,totalAt)+readable+html.slice(total.end);
     }
     const legacy=row.materials.some(material=>material.section==='wood'||material.type==='wood'||row.groups.some(group=>group.id===material.groupId&&group.type==='wood'));
@@ -528,7 +571,7 @@ function installRowVariant(boardCalculator,createCosts) {
     try {
       if(process && value.source?.kind==='included'){
         const linked=breakdownRow(item.id).materials.some(material=>material.id===value.source.includedInMaterialId);
-        return value.source.reviewed&&linked?'Incluido':'Inclusión pendiente';
+        return linked?'Incluido':'Inclusión pendiente';
       }
       if(process && value.source?.kind==='tariff'){
         const id='CST_MFG_'+D.sha256(item.id+'|P_'+value.id).slice(0,32),entry=costMap?.get(id);
@@ -544,9 +587,12 @@ function installRowVariant(boardCalculator,createCosts) {
   function hasPurchasePrice(value){try{return value.unitPrice!==''&&value.purchaseQuantity!==''&&D.decimal(value.unitPrice,2)>=0&&D.decimal(value.purchaseQuantity,3)>0;}catch(_){return false;}}
   const boardSubstrates=['MDF','Triplay','Sábana','MDP','Triplay flexible','MDF Flexible','Lisapol','MDF de color','Acrílico','Aglomerado','MDF melamínico','Superficie sólida','Otro'];
   const boardCoatings=['Encino rojo','Encino blanco','Tzalam','Nogal','Fresno','Rosa morada','Pino','Teca nacional','Teca Brasileña','Parota','Huanacaxtle','Cedro rojo','Tornillo','Laminado plástico','Vinil','Melamina','Otro'];
-  function boardBasis(itemId,id){
-    const local=solidWoodState(itemId),saved=recipeEntry(itemId)?.boards?.find(row=>row.id===id),settings=(local.boardSettings||=Object.create(null));
-    return settings[id]||=saved?{sheetAreaM2:saved.sheetAreaM2,wasteRate:saved.wasteRate}:{sheetAreaM2:'',wasteRate:''};
+  function boardBasis(itemId,id,persist=false){
+    const local=solidWoodState(itemId),saved=recipeEntry(itemId)?.boards?.find(row=>row.id===id);
+    if(local.boardSettings?.[id])return local.boardSettings[id];
+    const basis=saved?{sheetAreaM2:saved.sheetAreaM2,wasteRate:saved.wasteRate}:{sheetAreaM2:'',wasteRate:''};
+    if(persist)(local.boardSettings||=Object.create(null))[id]=basis;
+    return basis;
   }
   function boardMaterial(item,value){
     if(value.measureSource!=='part')return value;
@@ -588,13 +634,18 @@ function installRowVariant(boardCalculator,createCosts) {
   function profileEditor(draft){
     const item=partViewQuote().items.find(row=>row.id===draft.itemId),m=draft.value,d=m.detail||{};
     const field=(key,label,value)=>breakdownField(key,label,value,{number:true});
+    const purchase=scopeEconomics('Fabricación')?'<details class="rv-board-options"><summary>Datos de compra</summary><div class="rv-board-options-grid">'+
+      breakdownField('purchaseUnit','Unidad de compra',m.purchaseUnit,{values:breakdownDetailChoices(detailUnits,m.purchaseUnit)})+
+      field('purchaseQuantity','Cantidad de compra',m.purchaseQuantity)+field('taxRate','IVA de compra %',m.taxRate)+
+      breakdownField('validUntil','Vigencia del precio',m.validUntil,{max:10}).replace('type="text"','type="date"')+
+      '</div>'+(globalThis.DucoPrivateApi?.suppliers?breakdownProviderFields(m,{compact:true}):'')+'</details>':'';
     return '<div class="rv-edit" data-row-editor="'+esc(m.id)+'"><div class="tech-form-grid">'+
       breakdownField('name','Perfil',m.name)+field('quantity','Piezas por artículo',m.quantity)+requiredPieces(item,m)+
       field('length','Largo del desarrollo',m.length)+breakdownField('lengthUnit','Unidad de longitud',m.lengthUnit,{values:['mm','cm','m']})+
       field('detail.sideACm','Lado A o diámetro · cm',d.sideACm)+field('detail.sideBCm','Lado B · cm',d.sideBCm)+
       field('detail.kgPerMl','Peso · kg/m',d.kgPerMl)+field('unitPrice','Precio de material · $/kg',m.unitPrice)+
       field('detail.laborPrice','Precio de mano de obra · $/kg',d.laborPrice)+field('detail.paintPrice','Precio de pintura · $/m',d.paintPrice)+
-      '</div>'+(draft.error?'<p class="error" role="alert">'+esc(draft.error)+'</p>':'')+'</div>';
+      '</div>'+purchase+(draft.error?'<p class="error" role="alert">'+esc(draft.error)+'</p>':'')+'</div>';
   }
   function metalEditor(original,draft){
     const state={html:original},sheet=draft.value.section==='metal-sheet';
@@ -629,8 +680,9 @@ function installRowVariant(boardCalculator,createCosts) {
       breakdownField('lengthUnit','Unidad de medidas',value.lengthUnit,{values:[['','—'],['cm','cm'],['mm','mm'],['m','m']]})+
       breakdownField('unitPrice','Precio por hoja',value.unitPrice,{number:true})+setting('sheetAreaM2','Área por hoja · m²')+setting('wasteRate','Desperdicio %')+
       breakdownField('purchaseUnit','Unidad de compra',value.purchaseUnit,{values:breakdownDetailChoices(detailUnits,value.purchaseUnit)})+breakdownField('purchaseQuantity','Cantidad de compra',value.purchaseQuantity,{number:true})+breakdownField('taxRate','IVA %',value.taxRate,{number:true})+
-      breakdownField('supplier','Proveedor (opcional)',value.supplier,{max:200})+breakdownField('detail.notes','Nota',value.detail?.notes,{max:500})+
-      '</div></details>'+(draft.error?'<p class="error" role="alert">'+esc(draft.error)+'</p>':'')+'<span class="rv-announcement" data-row-autosave-status role="status" aria-live="polite"></span></div>';
+      breakdownField('validUntil','Vigencia del precio',value.validUntil,{max:10}).replace('type="text"','type="date"')+breakdownField('detail.notes','Nota',value.detail?.notes,{max:500})+
+      '</div>'+(scopeEconomics('Fabricación')&&globalThis.DucoPrivateApi?.suppliers?breakdownProviderFields(value,{compact:true}):breakdownField('supplier','Proveedor (opcional)',value.supplier,{max:200}))+'</details>'+
+      (draft.error?'<p class="error" role="alert">'+esc(draft.error)+'</p>':'')+'<span class="rv-announcement" data-row-autosave-status role="status" aria-live="polite"></span></div>';
   }
   function refreshBoard(){
     const draft=app.breakdownEditor;if(draft?.value.section!=='boards'||draft.kind!=='component')return;
@@ -642,10 +694,19 @@ function installRowVariant(boardCalculator,createCosts) {
   for(const type of ['input','change'])quoteRoot.addEventListener(type,event=>{
     const node=event.target,draft=app.breakdownEditor,key=node?.dataset?.boardSetting;
     if(key&&['sheetAreaM2','wasteRate'].includes(key)&&draft?.kind==='component'&&draft.value.section==='boards'&&draft.value.id===node.dataset.boardId&&draft.itemId===app.openPartId&&recipeCanEdit()){
-      boardBasis(draft.itemId,draft.value.id)[key]=String(node.value).slice(0,40);
+      const value=String(node.value).slice(0,40);
+      if(boardBasis(draft.itemId,draft.value.id)[key]!==value)boardBasis(draft.itemId,draft.value.id,true)[key]=value;
     }
     if(draft?.value.section==='boards')refreshBoard();
   });
+  function supplyConsumption(itemId,value) {
+    if(!value.unit||value.quantity==null||value.quantity===''||value.unit===value.purchaseUnit)return '';
+    const source=recipeEntry(itemId)?.hardware?.find(entry=>entry.id===value.id);
+    const documented=source?.consumptionUnit===value.unit&&source.unit===value.purchaseUnit;
+    const hide=value.purchaseUnit==='Lienzo'&&value.unit==='dm²';
+    if(!documented&&!hide)return '';
+    return '<small class="meta">'+esc(value.quantity)+' '+esc(value.unit)+' de consumo por artículo</small>';
+  }
   function closedRow(item, value, kind, costMap) {
     if(kind==='material'&&value.section==='boards')return boardRow(item,value);
     const wood=kind==='wood', process=kind==='process', supply=!wood&&!process&&value.section==='supplies', f=(key,label,v,select=false)=>readField(item.id,value.id,kind,key,label,v,select);
@@ -669,11 +730,12 @@ function installRowVariant(boardCalculator,createCosts) {
     if(wood)return row;
     const detailLabel=supply?'Proveedor':process?'Proveedor / SKU y detalles':'Proveedor / SKU';
     const detailButton='<button type="button" class="quiet rv-detail-trigger" data-row-details="'+esc(kind)+'" data-row-item="'+esc(item.id)+'" data-row-id="'+esc(value.id)+'">'+detailLabel+'</button>';
-    return row+detailButton;
+    const consumption=supply?supplyConsumption(item.id,value):'';
+    return row+consumption+detailButton;
   }
   function nativeStatus(html) {
     const start=html.indexOf('<span class="article-panel-cost-state"');
-    return start<0?'':articleStudyElement(html,start,'span').html.replace('Costo preview','Costo por validar').replace('Preview local; no es costo financiero confirmado.','Costo pendiente de validar.');
+    return start<0?'':articleStudyElement(html,start,'span').html;
   }
   function materialOrProcess(item, value, kind, costMap, nativeHtml, shared=false) {
     const draft=app.breakdownEditor, active=!!(draft && draft.itemId===item.id && draft.value?.id===value.id && (kind==='material'?['component','purchase'].includes(draft.kind):draft.kind==='process'));
@@ -682,7 +744,7 @@ function installRowVariant(boardCalculator,createCosts) {
     const body=active?breakdownEditorHtml():closedRow(item,value,kind,costMap);
     if(kind==='material'&&value.section==='boards')return '<article class="fab-detail-line article-panel-record rv-row rv-board-row" data-record-id="'+esc(value.id)+'" data-record-kind="material">'+body+'<div class="rv-board-actions"><button type="button" class="quiet" data-break-action="duplicate-component" data-id="'+esc(value.id)+'">Duplicar</button>'+remove+'</div></article>';
     const priced=kind==='material'&&(value.section==='supplies'&&hasPurchasePrice(value)||value.section==='metal-tube'&&!!fabricationSettings(item.id));
-    const status='<div class="rv-row-status">'+(priced?'':nativeStatus(nativeHtml))+(shared?'<small>Compra compartida: se suma una sola vez.</small>':'')+(!priced&&referenceItem(item.id)?'<small>Referencia pendiente de validar.</small>':'')+'</div>';
+    const status='<div class="rv-row-status">'+(priced?'':nativeStatus(nativeHtml))+(shared?'<small>Compra compartida: se suma una sola vez.</small>':'')+'</div>';
     const metal=kind==='material'&&['metal-sheet','metal-tube'].includes(value.section);
     return '<article class="fab-detail-line article-panel-record rv-row'+(metal?' fabrication-metal-row':'')+'" data-record-id="'+esc(value.id)+'" data-record-kind="'+kind+'">'+body+status+'<div class="rv-row-actions">'+(active?'':metal?edit.replace('rv-redundant-edit','fabrication-edit'):edit)+remove+'</div></article>';
   }
@@ -770,7 +832,7 @@ function installRowVariant(boardCalculator,createCosts) {
       quoteRoot.querySelector('[data-fab-panel="variant-row-detail-'+CSS.escape(id)+'"] > summary')?.focus({preventScroll:true});
     });
   });
-  return {refreshFamilyTotals,fabricationFamilies};
+  return {refreshFamilyTotals,fabricationFamilies,articleEstimate};
 }
 
 function once(source, before, after, label) {
@@ -811,7 +873,7 @@ export function extendRowVariant(source) {
   source=source.slice(0,familiesStart)+'    const {boards,metal}=localRows.fabricationFamilies({item,row,family,boardPieces,activePanel,materialCard,processCard,editing,addMaterial,addProcess});\n'+source.slice(familiesEnd);
   source=once(source,"'board-cnc':'board-labor','board-finish':'board-other'","'board-cnc':'board-cnc','board-finish':'board-finish'",'fabrication editor sections');
   source=once(source,"const variant='panel'; // User-approved article architecture, independent of candidate interiors.","const variant='desglose'; // Local row variant: expandable families.",'article accordion');
-  source=once(source,"folds:{general:true,supplies:true,wood:false}","folds:{general:false,supplies:true,wood:true}",'initial accordion state');
+  source=once(source,"folds:{general:true,supplies:true,wood:false}","folds:{general:false,supplies:true,wood:false}",'initial accordion state');
   source=once(source,"const summary=s=>'<span class=\"article-study-section-name\">'+esc(s.label)+'</span><small>'+esc(s.summary)+'</small>';",
     "const summary=s=>'<span class=\"article-study-section-name\">'+esc(s.label)+'</span>'+(s.key==='general'?'':'<span class=\"rv-family-meta\"><small class=\"rv-family-count\">'+esc(s.count)+' '+(s.count===1?'concepto':'conceptos')+'</small><output data-rv-family-total=\"'+esc(s.key)+'\" data-rv-article=\"'+safeId+'\" aria-live=\"polite\">Sin evaluar</output></span>');",'family counts and totals');
   source=once(source,"if(profile==='current')return output;","if(profile==='current'||!output.includes('data-article-study=\"panel\"'))return output;",'alternate profile');

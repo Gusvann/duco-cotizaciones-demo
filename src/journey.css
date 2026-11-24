@@ -84,6 +84,8 @@
 #journey-root .j-pill{display:inline-flex;padding:5px 8px;border-radius:4px;font-size:11px;background:var(--j-soft);color:var(--j-blue);line-height:1.4;white-space:nowrap}
 #journey-root .j-pill.warn{background:var(--j-warn-bg);color:var(--j-warn)}
 #journey-root .j-pill.good{background:var(--j-good-bg);color:var(--j-good)}
+#journey-root .j-aging{display:flex;align-items:center;gap:6px;margin-top:5px;color:#992a38;font-size:12px;font-weight:650}
+#journey-root .j-aging::before{content:"";flex:0 0 7px;height:7px;border-radius:50%;background:currentColor}
 #journey-root .j-toolbar{display:flex;gap:10px 14px;align-items:end;flex-wrap:wrap;margin:0 0 12px}
 #journey-root .j-toolbar .j-search{min-width:260px;max-width:440px;flex:1}
 #journey-root .j-record-count{padding:0 0 10px;margin-left:auto}
@@ -182,11 +184,12 @@
 #journey-root .j-nav-submenu .j-nav-link:hover{background:#ffffff10;color:#fff}
 #journey-root .j-kpi-toolbar{display:flex;gap:16px;flex-wrap:wrap;padding:18px 20px;background:var(--j-paper);border:1px solid var(--j-line);border-radius:8px}
 #journey-root .j-kpi-toolbar .j-field{flex:1;min-width:190px}
+#journey-root .j-kpi-toolbar select,#journey-root #j-responsible-filter{max-width:100%}
 #journey-root .j-kpi-filter-scope{margin-top:10px}
 #journey-root .j-kpi-tabs{display:flex;gap:24px;border-bottom:1px solid var(--j-line);margin:25px 0 20px;overflow-x:auto}
 #journey-root .j-kpi-tabs button{white-space:nowrap;background:transparent;border:0;border-bottom:3px solid transparent;padding:11px 0;font-size:13px;font-weight:600;color:var(--j-muted)}
 #journey-root .j-kpi-tabs [aria-selected=true]{color:var(--j-blue);border-bottom-color:var(--j-blue)}
-#journey-root .j-kpi-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+#journey-root .j-kpi-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:15px}
 #journey-root .j-kpi-stat{background:var(--j-paper);border:1px solid var(--j-line);border-radius:8px;padding:20px;text-align:left;display:flex;flex-direction:column;gap:9px;min-width:0;color:var(--j-ink)}
 #journey-root .j-kpi-stat:first-child{background:linear-gradient(135deg,#073b72,#0f74d9);color:#fff;border-color:#0f74d9}
 #journey-root .j-kpi-stat>span{font-size:12px;min-height:20px}

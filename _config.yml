@@ -1,0 +1,11 @@
+# The public cotizador and catalogue are built before publication.
+exclude:
+  - tools
+  - tests
+  - docs
+  - artifacts
+  - README.md
+  - src/cotizador.html
+  - src/private-client.js
+  - src/recipe-reference.js
+  - src/recipe-expansion.js

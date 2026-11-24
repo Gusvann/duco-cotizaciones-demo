@@ -1,1 +1,9 @@
 artifacts/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.xlsx
+*.xlsm
+*.csv
+.env
+.env.local

@@ -29,7 +29,7 @@ function harness(){
   const sandbox=vm.createContext({structuredClone,queueMicrotask,document,crypto:{randomUUID},TextEncoder,TextDecoder,requestAnimationFrame:callback=>{callback();return 1;},cancelAnimationFrame(){},setTimeout(){return 1;},clearTimeout(){},CSS:{escape:String},location:{href:'about:blank',search:''},navigator:{},matchMedia:()=>({matches:false})});
   vm.runInContext(`globalThis.window=globalThis;globalThis.addEventListener=()=>{};globalThis.confirm=()=>true;
     for(const key of ['fetch','XMLHttpRequest','WebSocket','localStorage','sessionStorage','indexedDB'])Object.defineProperty(globalThis,key,{get(){throw new Error('Forbidden API: '+key);}});`,sandbox);
-  for(const file of ['src/recipe-reference.js','src/recipe-catalog.js','src/country-codes.js','src/demo-phone.js'])vm.runInContext(read(file),sandbox,{filename:file});
+  for(const file of ['src/recipe-reference.js','src/recipe-catalog.js','src/quote-issues.js','src/country-codes.js','src/demo-phone.js'])vm.runInContext(read(file),sandbox,{filename:file});
   for(const [index,script] of scripts.entries())vm.runInContext(script,sandbox,{filename:'client-'+index+'.js'});
   vm.runInContext(read('src/quote-bridge.js'),sandbox,{filename:'quote-bridge.js'});
   const c=sandbox.__client,Q=sandbox.DemoQuote;

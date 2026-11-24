@@ -161,7 +161,7 @@ function installSessionAutosave() {
     const data=event.target?.dataset||{};
     if(data.solidField||data.breakField||data.breakGroupField||/^items\./.test(data.path||''))schedule();
   });
-  return {flush,cancel};
+  return {flush,cancel,schedule};
 }
 function replaceOnce(source,before,after,name){
   if(source.split(before).length!==2)throw Error('Session capture anchor changed: '+name);

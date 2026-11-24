@@ -9,23 +9,55 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 assert.ok(build()===html,'HTML must be reproducible from the reviewed local source only');
 assert.match(html,/<title>Astil · Cotizador<\/title>/,'The selected interface is the official quotation frontend, without a variant label');
-// Scan executable/readable text, excluding only the manifest-listed synthetic PNGs
-// whose bytes and hashes the build validates. Random base64 is not business text.
+// Images ship as site assets. Verify each manifest entry against the actual file.
 const imageDirectory=path.join(root,'src/assets/catalogo-sintetico');
 const imageManifest=JSON.parse(fs.readFileSync(path.join(imageDirectory,'manifest.json'),'utf8'));
-let publicText=html;
+const publicText=html;
 for(const asset of imageManifest.assets){
- const embedded='data:image/png;base64,'+fs.readFileSync(path.join(imageDirectory,asset.file)).toString('base64');
- assert.equal(publicText.split(embedded).length,2,'Each verified synthetic image must occur exactly once');
- publicText=publicText.replace(embedded,'VERIFIED_SYNTHETIC_PNG');
+ assert.ok(html.includes('src/assets/catalogo-sintetico/'+asset.file));
+ assert.equal(createHash('sha256').update(fs.readFileSync(path.join(imageDirectory,asset.file))).digest('hex'),asset.sha256);
+ assert.equal(asset.thumbnail,'thumb/'+asset.id+'.webp');
+ assert.equal(createHash('sha256').update(fs.readFileSync(path.join(imageDirectory,asset.thumbnail))).digest('hex'),asset.thumbnailSha256);
+}
+const photoDirectory=path.join(root,'assets/catalogo');
+const photos=JSON.parse(fs.readFileSync(path.join(photoDirectory,'manifest.json'),'utf8')).assets;
+assert.equal(photos.length,101);assert.equal(new Set(photos.map(photo=>photo.id)).size,101);
+assert.equal(new Set(photos.map(photo=>photo.sha256)).size,101);
+for(const photo of photos){
+ assert.match(photo.id,/^v-[a-f0-9]{16}$/);
+ assert.ok(html.includes(photo.id),'Each shipped photo has a public variant');
+ assert.equal(photo.kind,'AI_GENERATED_SYNTHETIC_ILLUSTRATION');
+ assert.equal(photo.file,photo.id+'.webp');assert.equal(photo.thumbnail,'thumb/'+photo.file);
+ for(const [filename,hash] of [[photo.file,photo.sha256],[photo.thumbnail,photo.thumbnailSha256]]){
+  const bytes=fs.readFileSync(path.join(photoDirectory,filename));
+  assert.equal(bytes.subarray(8,12).toString(),'WEBP');assert.equal(createHash('sha256').update(bytes).digest('hex'),hash);
+ }
 }
 assert.match(html,/connect-src 'none'/);assert.match(html,/frame-src 'none'/);assert.match(html,/form-action 'none'/);
-assert.doesNotMatch(html,/<iframe\b|\b(?:sessionStorage|localStorage|indexedDB|XMLHttpRequest|WebSocket|sendBeacon|SpreadsheetApp|DriveApp|UrlFetchApp)\b|\bfetch\s*\(|google\.script|window\.google/);
+const catalogSource=fs.readFileSync(path.join(root,'src/public-product-catalog.js'),'utf8');
+assert.ok(html.includes(catalogSource),'The gallery and the quote must use the same public catalogue');
+const sandbox=vm.createContext({});
+vm.runInContext(catalogSource,sandbox);
+const catalog=sandbox.DemoPublicRecipes;
+assert.equal(catalog.products.length,12);
+assert.equal(catalog.rows.length,135);
+const photoIds=new Set([...imageManifest.assets,...photos].map(asset=>asset.id));
+assert.equal(photoIds.size,135);
+for(const row of catalog.rows){
+  assert.ok(photoIds.delete(row.id),'Each variant must have its own distinct verified photo');
+  assert.equal(row.syntheticPricing,true);
+  assert.ok(catalog.assets[row.id].url && catalog.assets[row.id].thumbnail);
+}
+assert.equal(photoIds.size,0);
+const demoStore=fs.readFileSync(path.join(root,'src/public-store.js'),'utf8');
+assert.ok(html.includes(demoStore),'Browser persistence adapter is compiled');
+assert.doesNotMatch(html.replace(demoStore,''),/\bindexedDB\b/);
+assert.doesNotMatch(html,/<iframe\b|\b(?:sessionStorage|localStorage|XMLHttpRequest|WebSocket|sendBeacon|SpreadsheetApp|DriveApp|UrlFetchApp)\b|\bfetch\s*\(|google\.script|window\.google/);
 // The standard SVG namespace identifies inline SVG; it is not a fetched resource.
 // Exempt only this exact xmlns value. Every other HTTP(S) URL remains forbidden.
 const resourceText=html.replaceAll('xmlns="http://www.w3.org/2000/svg"','xmlns="INLINE_SVG_NAMESPACE"');
 assert.doesNotMatch(resourceText,/https?:\/\//i,'All fonts/images/scripts must be embedded');
-assert.match(html,/globalThis\.DemoRecipeImages=Object\.freeze/,'Synthetic catalog images must be embedded');
+assert.match(html,/globalThis\.DemoRecipeImages=Object\.freeze/,'Catalog photos must have a local registry');
 const countrySandbox={};
 vm.runInNewContext(fs.readFileSync(path.join(root,'src/country-codes.js'),'utf8'),countrySandbox);
 const countries=countrySandbox.DemoCountries;
@@ -43,4 +75,4 @@ const staticIds=[...html.slice(0,html.indexOf('<script')).matchAll(/\bid="([^"]+
 assert.equal(new Set(staticIds).size,staticIds.length,'Static DOM IDs unique');
 assert.ok(ids.includes('journey-root')&&ids.includes('quote-host'));
 for(const file of ['cotizador-clasico/index.html','fabricacion/index.html'])assert.ok(fs.existsSync(path.join(root,file)),file+' preserved');
-console.log(JSON.stringify({status:'PASS_LOCAL_STATIC',sha256:createHash('sha256').update(html).digest('hex'),checks:['deterministic','official quotation title','inline syntax','standalone assets','245 geographic calling codes and licenses','CSP','no storage/network/server API','selected references without private source locators or credentials','legacy demos preserved'],limits:['Static checks; browser acceptance separate','No backend or production validation','Commercial validity of reference prices requires separate review']}));
+console.log(JSON.stringify({status:'PASS_LOCAL_STATIC',sha256:createHash('sha256').update(html).digest('hex'),checks:['deterministic','official quotation title','inline syntax','135 verified same-origin images','245 geographic calling codes and licenses','CSP','IndexedDB confined to demo store','no external API','no private source locators or credentials in the public bundle','legacy demos preserved']}));

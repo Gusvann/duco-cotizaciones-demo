@@ -86,11 +86,15 @@ async function list() {
 const inspect = () => page.evaluate(() => window.DemoJourney.inspect());
 const quoteSummary = id => page.evaluate(id => window.DemoQuote.summary(id), id);
 const quote = selector => page.locator('#quote-host').locator(selector);
-async function article(section = 'general') {
-  await quote('[data-action="step"][data-step="1"]').first().click();
-  const trigger = quote('[data-action="toggle-part"]').first();
+async function openDetails(details) {
+  if (!await details.evaluate(element => element.open)) await details.locator(':scope > summary').click();
+}
+async function openFirstArticle(section) {
+  const article = quote('.part-accordion').first();
+  const trigger = article.locator('[data-action="toggle-part"]');
   if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
-  await quote(`[data-article-section="${section}"]`).click();
+  if (section) await openDetails(article.locator(`[data-article-fold="${section}"]`));
+  return article;
 }
 const record = async id => (await inspect()).records.find(value => value.id === id);
 async function save(outcome = 'success') {
@@ -148,6 +152,73 @@ async function test(name, run) {
 }
 
 try {
+  await test('Avisos por etapa llevan al precio del producto correcto sin adelantar impuestos ni duplicar pagos',async()=>{
+    await open('DEMO-101');
+    await stage('quote');
+    await quote('[data-action="line-add"]').click();
+    await quote('[data-action="line-open"]').click();
+    await catalogRow('SYN-BOLONIA').click();
+    const product=quote('[data-line-product="SYN-BOLONIA"]');
+    await product.locator('select').selectOption('SYN-BOLONIA-R');
+    await product.locator('[data-action="line-use"]').click();
+    const article=quote('.part-accordion').filter({hasText:'Bolonia'}).last();
+    await article.getByRole('button',{name:/Aumentar cantidad/}).click();
+    assert.equal(await page.locator('#j-blockers').count(),0);
+    assert.doesNotMatch(await quote('#workspace').innerText(),/completa el impuesto|revisa la calidad|confirma la cobertura|pagos deben sumar/i);
+    await quote('.steps [data-step="4"]').click();
+    const warnings=quote('.pending-list button[data-action="goto-issue"]');
+    const tax=warnings.filter({hasText:/impuesto/i}).filter({hasText:/Bolonia/i});
+    assert.equal(await tax.count(),1);
+    assert.doesNotMatch((await warnings.allTextContents()).join(' '),/deben sumar exactamente|revisa la calidad|confirma la cobertura/i);
+    await tax.click();
+    assert.equal(await quote('.steps [data-step="3"]').getAttribute('aria-current'),'step');
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.path),'items.1.tax');
+  });
+  await test('Guardar y continuar conserva un borrador con precio de venta pendiente',async()=>{
+    await open('DEMO-101');
+    await stage('quote');
+    await quote('.steps [data-step="3"]').click();
+    const price=quote('[data-path="items.0.unitPrice"]');
+    await price.fill('');
+    await price.press('Tab');
+    await action('list').filter({visible:true}).first().click();
+    assert.equal(await action('save-and-leave').isEnabled(),true);
+    await action('save-and-leave').click();
+    await page.waitForFunction(()=>window.DemoJourney.inspect().state.screen==='list');
+    const saved=await page.evaluate(()=>window.DemoQuote.snapshot('DEMO-101'));
+    assert.equal(saved.quote.items[0].unitPrice,'');
+    assert.equal(saved.summary.complete,false);
+    assert.equal(saved.summary.priceCents,null);
+  });
+  await test('Revisión abre el IVA del herraje exacto y el porcentaje del empaque del pedido', async()=>{
+    await action('new-request').click();
+    await quote('.panel-actions [data-action="step"][data-step="1"]').click();
+    await quote('[data-action="line-open"]').click();
+    await catalogRow('SYN-BENT-LEGS').click();
+    const product=quote('[data-line-product="SYN-BENT-LEGS"]');
+    await product.locator('select').selectOption('SYN-BENT-LEGS-R');
+    await product.locator('[data-action="line-use"]').click();
+    await quote('[data-header-increment]').click();
+    await quote('.steps [data-step="4"]').click();
+    const hardware=quote('[data-action="goto-issue"]').filter({hasText:/IVA de compra de TUERCA INSERTO/i});
+    await hardware.click();
+    let selected=quote('[data-row-editor] [data-break-field="taxRate"]:focus');
+    assert.equal(await selected.count(),1);
+    assert.equal(await selected.locator('xpath=ancestor::*[@data-row-editor]').locator('[data-break-field="specification"]').inputValue(),'TUERCA INSERTO');
+    await selected.fill('0');
+    await selected.press('Tab');
+    await quote('.steps [data-step="4"]').click();
+    assert.equal(await hardware.count(),0);
+    await quote('.steps [data-step="2"]').click();
+    await quote('[data-general-action="edit"][data-topic="Empaque"]').first().click();
+    await quote('[data-general-field="rate"]').fill('');
+    await quote('.general-editor [data-break-action="save-editor"]').click();
+    await quote('.steps [data-step="4"]').click();
+    await quote('[data-action="goto-issue"]').filter({hasText:/porcentaje de empaque/i}).click();
+    selected=quote('.general-editor [data-general-field="rate"]:focus');
+    assert.equal(await selected.count(),1);
+    assert.equal(await selected.inputValue(),'');
+  });
   await test('Bent Legs tiene imagen, receta editable y totales precisos para una y dos mesas',async()=>{
     await action('new-request').click();
     await quote('.panel-actions [data-action="step"][data-step="1"]').click();
@@ -156,38 +227,40 @@ try {
     const product=quote('[data-line-product="SYN-BENT-LEGS"]');
     await product.locator('select').selectOption('SYN-BENT-LEGS-R');
     await product.locator('img').evaluate(img=>img.decode());
-    assert.ok(await product.locator('img').evaluate(img=>img.complete&&img.naturalWidth>500&&img.src.startsWith('data:image/png;')));
+    assert.ok(await product.locator('img').evaluate(img=>img.complete&&img.naturalWidth>500&&new URL(img.src).pathname.endsWith('/src/assets/catalogo-sintetico/SYN-BENT-LEGS-R.png')));
     await product.screenshot({path:path.join(artifacts,'bent-legs-catalogo.png')});
     await product.locator('[data-action="line-use"]').click();
     const qty=quote('.header-quantity-control input'),total=quote('[data-article-cost-status]');
     if(await qty.inputValue()!=='1')await quote('[data-header-increment]').click();
-    assert.match(await total.innerText(),/3,153\.65/);
+    // Synthetic unit: wood 178.86 + CNC 18 + metal 244.50733 + supplies 353 + assembly 160.
+    assert.match(await total.innerText(),/954\.37/);
     await quote('[data-header-increment]').click();
-    assert.equal(await qty.inputValue(),'2');assert.match(await total.innerText(),/6,307\.31/);
+    assert.equal(await qty.inputValue(),'2');assert.match(await total.innerText(),/1,908\.74/);
     const metal=quote('.article-study-fold').filter({has:page.locator('[data-fab-cost-field="rollingQty"]')});
     if(!await metal.evaluate(el=>el.open))await metal.locator(':scope > summary').click();
     const rolling=metal.locator('[data-fab-panel="metal-other"]');
     if(!await rolling.evaluate(el=>el.open))await rolling.locator(':scope > summary').click();
     const bends=metal.locator('[data-fab-cost-field="rollingQty"]');
     await page.setViewportSize({width:390,height:760});
-    await bends.fill('0');assert.match(await total.innerText(),/5,227\.31/);
-    await bends.fill('6');await bends.press('Tab');assert.match(await total.innerText(),/6,307\.31/);
+    await bends.fill('0');assert.match(await total.innerText(),/1,848\.74/);
+    await bends.fill('2');await bends.press('Tab');assert.match(await total.innerText(),/1,908\.74/);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));
     await quote('[data-header-decrement]').click();await total.scrollIntoViewIfNeeded();
-    assert.match(await total.innerText(),/3,153\.65/);
+    assert.match(await total.innerText(),/954\.37/);
     await capture({path:path.join(artifacts,'bent-legs-movil.png')});
   });
-  await test('Tableros y herrería muestran despiece de Excel en escritorio y móvil',async()=>{
+  await test('Tableros y herrería muestran el despiece de prueba en escritorio y móvil',async()=>{
     await action('new-request').click();
     await quote('.panel-actions [data-action="step"][data-step="1"]').click();
     await quote('[data-action="line-open"]').click();
-    await catalogRow('SYN-BENT-LEGS').click();
-    const product=quote('[data-line-product="SYN-BENT-LEGS"]');
-    await product.locator('select').selectOption('SYN-BENT-LEGS-R');
+    await catalogRow('SYN-BOLONIA').click();
+    const product=quote('[data-line-product="SYN-BOLONIA"]');
+    await product.locator('select').selectOption('SYN-BOLONIA-R');
     await product.locator('[data-action="line-use"]').click();
     if(await quote('.header-quantity-control input').inputValue()!=='1')await quote('[data-header-increment]').click();
     const fold=key=>quote('[data-article-fold="'+key+'"]');
-    for(const [family,expected] of [['boards','517.10'],['metal','1,451.05']]){
+    // The public exercise uses a 0.20 m² board and an independently priced steel assembly.
+    for(const [family,expected] of [['boards','60.00'],['metal','244.51']]){
       const panel=fold(family);
       if(!await panel.evaluate(el=>el.open))await panel.locator(':scope > summary').click();
       assert.ok((await panel.locator(':scope > summary').innerText()).includes(expected));
@@ -203,7 +276,7 @@ try {
     await quote('[data-fab-panel="board-cnc"] > summary').click();
     await quote('[data-fab-cost-field="cncRate"]').fill('0');
     assert.match(await quote('[data-capture-subtotal="board-cnc"]').innerText(),/0\.00/);
-    assert.match(await fold('boards').locator(':scope > summary').innerText(),/382\.10/);
+    assert.match(await fold('boards').locator(':scope > summary').innerText(),/48\.00/);
   });
   await test('Bolonia permite editar calibre y peso de lámina junto al despiece de perfiles',async()=>{
     await action('new-request').click();
@@ -213,7 +286,7 @@ try {
     const product=quote('[data-line-product]').filter({has:page.locator('option[value="SYN-BOLONIA-R"]')});
     await product.locator('[data-line-variant]').selectOption('SYN-BOLONIA-R');
     await product.locator('img').evaluate(img=>img.decode());
-    assert.ok(await product.locator('img').evaluate(img=>img.naturalWidth>500&&img.src.startsWith('data:image/png;')));
+    assert.ok(await product.locator('img').evaluate(img=>img.naturalWidth>500&&new URL(img.src).pathname.endsWith('/src/assets/catalogo-sintetico/SYN-BOLONIA-R.png')));
     assert.match(await product.locator('figcaption').innerText(),/IA/);
     await captureFamily(product,'bolonia-catalogo.png');
     await product.locator('[data-action="line-use"]').click();
@@ -221,12 +294,13 @@ try {
     const metal=quote('[data-article-fold="metal"]');
     if(!await metal.evaluate(el=>el.open))await metal.locator(':scope > summary').click();
     const sheet=metal.locator('[data-fab-panel="metal-sheet"]');
-    assert.match(await sheet.innerText(),/0\.4356/);assert.match(await sheet.innerText(),/5\.445/);
+    assert.match(await sheet.innerText(),/Área · m²\s+0\.2\b/);
+    assert.match(await sheet.innerText(),/Peso · kg\s+2\b/);
     await captureFamily(metal,'vista-herreria-bolonia.png');
     await sheet.locator('[data-row-field="gauge"]').click();
     const editor=sheet.locator('[data-row-editor]');
-    assert.equal(await editor.locator('[data-break-field="gauge"]').inputValue(),'16');
-    assert.equal(await editor.locator('[data-break-field="detail.kgPerM2"]').inputValue(),'12.5');
+    assert.equal(await editor.locator('[data-break-field="gauge"]').inputValue(),'14');
+    assert.equal(await editor.locator('[data-break-field="detail.kgPerM2"]').inputValue(),'10');
     await editor.locator('[data-break-field="width"]').fill('70');
     await editor.locator('[data-break-field="width"]').press('Tab');
     await sheet.locator('summary').first().click();
@@ -244,6 +318,17 @@ try {
     const wood=quote('[data-article-fold="wood"]');
     const labor=wood.locator('[data-fab-panel="workshop-labor"]'),table=labor.locator('.workshop-table-scroll');
     const tariff=table.locator('[data-workshop-field="labor.assembly.rate"]');
+    await openDetails(wood);
+    const consumables=wood.locator('[data-fab-panel="workshop-other"]');
+    await openDetails(consumables);
+    // The public Florencia exercise carries one cut of 180 cm per article.
+    assert.equal(await consumables.locator('[data-workshop-live="cnc-length"]').innerText(),'1.8 m');
+    const cncRate=consumables.locator('[data-workshop-field="other.cnc.price"]');
+    const recipeRate=await cncRate.inputValue();
+    await cncRate.fill('');
+    assert.equal(await consumables.locator('[data-workshop-live="cnc-length"]').innerText(),'1.8 m');
+    assert.equal(await consumables.locator('[data-workshop-live="cnc-amount"] strong').innerText(),'Pendiente');
+    await cncRate.fill(recipeRate);
     async function expand(fold,open){
       if(await fold.evaluate(el=>el.open)!==open)await fold.locator(':scope > summary').click();
     }
@@ -660,8 +745,10 @@ try {
 
   await test('Recorrido completo conserva snapshot y convierte una sola vez', async () => {
     await open('DEMO-101');
+    await quote('#j-commercial-type').selectOption('line');
     await fillRequest('title','Mostrador modular inventado');
     await fillRequest('quoteDue','2026-11-03');
+    assert.equal(await quote('#j-commercial-type').inputValue(),'line');
     await stage('quote');
     await save();
     assert.match(await page.locator('#j-feedback').innerText(), /guardado durante esta sesión/i);
@@ -673,6 +760,7 @@ try {
     await approveAndSend();
     const sent = await record('DEMO-101');
     assert.equal(sent.versions.length, 1);
+    assert.equal(sent.versions[0].commercialType,'line');
     const frozen = structuredClone(sent.versions[0].snapshot);
     const offer = await page.locator('#j-commercial-offer').innerText();
     assert.doesNotMatch(offer, /costo|margen|utilidad|indirecto|merma/i);
@@ -770,7 +858,9 @@ try {
     assert.equal(changed.request.deliveryDate, '2026-12-09');
     assert.equal(await page.evaluate(() => window.__client.app.q.deliveryDate), '2026-12-09');
     assert.equal(await stageControl('review').isEnabled(), false, 'Delivery is part of canonical scope; stale coverage approvals must remain invalid');
-    assert.match((await quoteSummary('DEMO-101')).blockers.join(' '), /confirma la cobertura/i);
+    assert.ok((await quoteSummary('DEMO-101')).workflowIssues.some(issue =>
+      issue.code === 'SCOPE_IMPACT' || (issue.code === 'NEED_UNRESOLVED' && issue.target.field === 'confirm')),
+      'Changed delivery must identify the affected scope decision');
     await list();
     const mesa = await page.locator('[data-record-id="DEMO-101"]').innerText();
     assert.match(mesa, /3 nov 2026/);
@@ -805,20 +895,22 @@ try {
     assert.equal(initial.priceCents, 600000);
     assert.equal(initial.taxCents, 96000);
     assert.equal(initial.totalCents, 696000);
-    await article();
-    await quote('[data-path="items.0.quantity"]').fill('3');
-    assert.equal((await quoteSummary('DEMO-101')).hasPending, true);
-    assert.equal((await quoteSummary('DEMO-101')).priceCents, 600000, 'Applied quote must remain unchanged while buffer is pending');
-    await quote('[data-action="part-apply"]').click();
+    const article = await openFirstArticle();
+    const quantity = article.locator('.part-header-quantity input');
+    assert.equal(await quantity.inputValue(), '2');
+    await article.getByRole('button', { name: /^Aumentar cantidad de / }).click();
+    assert.equal(await quantity.inputValue(), '3');
     const applied = await quoteSummary('DEMO-101');
     assert.equal(applied.hasPending, false);
     assert.equal(applied.priceCents, 900000);
     assert.equal(applied.taxCents, 144000);
     assert.equal(applied.totalCents, 1044000);
     assert.equal(applied.costCents, 279741, 'Declared total purchases and provider total must not be multiplied again');
-    assert.equal(applied.savedRevision, 0, 'Apply must not save');
+    assert.equal(applied.savedRevision, 0, 'The header retains the capture without saving a snapshot');
+    assert.equal(await page.evaluate(() => window.DemoQuote.snapshot('DEMO-101')), null);
     await save();
     assert.equal((await quoteSummary('DEMO-101')).saveState, 'success');
+    assert.equal(await page.evaluate(() => window.DemoQuote.snapshot('DEMO-101').summary.totalCents), 1044000);
     await list();
     assert.match(await page.locator('[data-record-id="DEMO-101"]').innerText(), /10,440\.00/);
     await action('view', '[data-view="flujo"]').click();
@@ -828,24 +920,45 @@ try {
   await test('Captura automática, corrección y cambio de expediente mantienen buffers aislados', async () => {
     await open('DEMO-101');
     await stage('quote');
-    const originalName = await page.evaluate(() => window.__client.app.q.items[0].description);
-    await article();
-    await quote('[data-path="items.0.quantity"]').fill('1.2345');
-    assert.equal((await quoteSummary('DEMO-101')).hasPending, true);
-    await quote('[data-action="part-discard"]').click();
+    const article = await openFirstArticle('general');
+    const quantity = article.locator('.part-header-quantity input');
+    const description = article.getByRole('textbox', { name: 'Nombre del artículo', exact: true });
+    const originalName = await description.inputValue();
+    const originalQuantity = await quantity.inputValue();
+    const originalPrice = (await quoteSummary('DEMO-101')).priceCents;
+    const editedName = 'Artículo aplicado de prueba';
+    const invalidQuantity = '100001';
+    const back = page.locator('#journey-footer').getByRole('button', { name: 'Volver a cotizaciones', exact: true });
+
+    await quantity.fill('1.2345');
+    assert.equal(await quantity.inputValue(), originalQuantity, 'The piece quantity field rejects fractional input');
     assert.equal((await quoteSummary('DEMO-101')).hasPending, false);
-    assert.equal(await page.evaluate(() => window.__client.app.q.items[0].description), originalName);
-    await article();
-    await quote('[data-path="items.0.description"]').fill('Artículo aplicado de prueba');
+    // Whole numbers can be typed beyond the limit and must stay pending until corrected.
+    await quantity.fill(invalidQuantity);
+    assert.equal(await quantity.getAttribute('aria-invalid'), 'true');
+    const pending = await quoteSummary('DEMO-101');
+    assert.equal(pending.hasPending, true);
+    assert.equal(pending.priceCents, originalPrice, 'An invalid quantity cannot change the applied price');
+    await article.getByRole('button', { name: 'Descartar captura pendiente', exact: true }).click();
+    assert.equal((await quoteSummary('DEMO-101')).hasPending, false);
+    assert.equal(await quantity.inputValue(), originalQuantity);
+    assert.equal(await description.inputValue(), originalName);
+
+    await description.fill(editedName);
     await stage('request');
+    assert.equal((await inspect()).state.screen, 'request');
     assert.equal((await quoteSummary('DEMO-101')).hasPending, false, 'Valid capture is retained automatically before navigation');
     assert.equal(await action('apply-and-leave').count(), 0);
     await stage('quote');
-    await quote('[data-path="items.0.quantity"]').fill('1.2345');
-    await stage('request');
+    await openFirstArticle('general');
+    assert.equal(await description.inputValue(), editedName);
+    await quantity.fill(invalidQuantity);
+    await back.click();
     assert.equal(await action('discard-and-leave').isVisible(), true, 'Invalid numeric input requires correction or explicit discard');
+    assert.equal((await inspect()).state.screen, 'quote');
+    assert.equal(await action('apply-and-leave').count(), 0);
     await page.setViewportSize({ width: 390, height: 900 });
-    const dialog = page.locator('#journey-footer .j-dialog');
+    const dialog = page.getByRole('alertdialog', { name: 'Hay datos por corregir' });
     const bounds = await dialog.boundingBox();
     assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 391 && bounds.y + bounds.height <= 901, 'Pending-capture dialog must remain inside the mobile viewport');
     const dialogButtons = dialog.locator('button:not(:disabled)');
@@ -856,77 +969,116 @@ try {
     await action('stay').click();
     await page.setViewportSize({ width: 1440, height: 1000 });
     assert.equal((await quoteSummary('DEMO-101')).hasPending, true);
-    await quote('[data-path="items.0.quantity"]').fill('2');
-    await stage('request');
+    assert.equal(await quantity.inputValue(), invalidQuantity, 'Continuing to edit retains the value that needs correction');
+    await quantity.fill(originalQuantity);
+    await back.click();
+    assert.equal(await action('keep-and-leave').isVisible(), true, 'A corrected draft can be retained without saving');
     assert.equal(await action('apply-and-leave').count(), 0);
-    if (await action('keep-and-leave').isVisible()) await action('keep-and-leave').click();
+    await action('keep-and-leave').click();
+    assert.equal((await inspect()).state.screen, 'list');
     assert.equal((await quoteSummary('DEMO-101')).hasPending, false);
-    await stage('quote');
-    assert.equal(await page.evaluate(() => window.__client.app.q.items[0].description), 'Artículo aplicado de prueba');
-    assert.equal((await quoteSummary('DEMO-101')).dirty, true, 'Automatic local capture is not a confirmed quote snapshot');
-    await save();
-    await stage('request');
-    await list();
+    assert.equal(await page.evaluate(() => window.DemoQuote.snapshot('DEMO-101')), null);
     await open('DEMO-102');
     await stage('quote');
-    assert.notEqual(await page.evaluate(() => window.__client.app.q.items[0].description), 'Artículo aplicado de prueba');
-    await stage('request');
+    await openFirstArticle('general');
+    assert.equal(await description.inputValue(), 'Objeto de muestra con madera pendiente');
     await list();
     await open('DEMO-101');
     await stage('quote');
-    assert.equal(await page.evaluate(() => window.__client.app.q.items[0].description), 'Artículo aplicado de prueba');
+    await openFirstArticle('general');
+    assert.equal(await description.inputValue(), editedName);
+    assert.equal(await quantity.inputValue(), originalQuantity);
+    assert.equal((await quoteSummary('DEMO-101')).dirty, true, 'Automatic local capture is not a confirmed quote snapshot');
+    await save();
+    assert.equal(await page.evaluate(() => window.DemoQuote.snapshot('DEMO-101')?.quote.items[0].description), editedName);
   });
 
-  await test('Madera F y CNC conservan preview, subeditor y bloqueo sin inventar costo cero', async () => {
+  await test('Madera maciza confirma o descarta la pieza y mantiene el costo de CNC pendiente', async () => {
     await open('DEMO-102');
     await stage('quote');
     const before = await quoteSummary('DEMO-102');
     assert.equal(before.complete, false);
-    assert.match(before.blockers.join(' '), /Madera:.*pendientes/);
+    assert.match(before.saveBlockers.join(' '), /captura de madera.*guardar/i);
     await save();
     assert.notEqual((await quoteSummary('DEMO-102')).saveState, 'success');
-    await article('wood');
-    const footerLayout = await quote('[data-solid-action="edit"]').first().evaluate(button => {
-      const article = button.closest('article');
-      const footer = button.closest('footer');
-      if (!article || !footer) return null;
-      const a = article.getBoundingClientRect(), f = footer.getBoundingClientRect();
-      return { article: {x:a.x,y:a.y,right:a.right,bottom:a.bottom}, footer: {x:f.x,y:f.y,right:f.right,bottom:f.bottom}, position: getComputedStyle(footer).position };
-    });
-    assert.ok(footerLayout, 'Wood action footer must belong to its article');
-    assert.equal(footerLayout.position, 'static', 'Inert PDF CSS must not position the component action footer');
-    assert.ok(footerLayout.footer.x >= footerLayout.article.x - 1 && footerLayout.footer.right <= footerLayout.article.right + 1 && footerLayout.footer.y >= footerLayout.article.y - 1 && footerLayout.footer.bottom <= footerLayout.article.bottom + 1, 'Component action footer must stay inside its article');
-    await quote('[data-solid-action="edit"]').first().click();
-    assert.equal(await quote('[data-solid-field="woodKind"]').inputValue(), await page.evaluate(() => window.__client.app.breakdownEditor.solidWoodF.woodKind), 'The displayed wood selection must match the priced preview input');
-    await quote('[data-solid-field="cnc.length"]').fill('101');
-    await quote('[data-solid-field="cnc.repetitions"]').fill('3');
-    assert.match(await quote('[data-solid-live="cncApplication"]').innerText(), /sin aplicar/i);
-    await quote('[data-break-action="cancel-editor"]').click();
-    await quote('[data-solid-action="edit"]').first().click();
-    assert.equal(await quote('[data-solid-field="cnc.length"]').inputValue(), '');
-    await quote('[data-solid-field="cnc.length"]').fill('101');
-    await quote('[data-solid-field="cnc.repetitions"]').fill('3');
-    await quote('[data-solid-action="apply-cnc"]').click();
-    const cnc = await quote('[data-solid-live="cncApplication"]').innerText();
-    assert.match(cnc, /6[.,]06 m lineales/);
-    assert.match(cnc, /costo pendiente/i);
-    assert.doesNotMatch(cnc, /\$\s*0(?:[.,]00)?/);
+    const article = await openFirstArticle('wood');
+    const wood = article.locator('[data-article-fold="wood"]');
+    await openDetails(wood.locator('[data-fab-panel="workshop-dimensions"]'));
+    const table = wood.getByRole('region', { name: 'Tabla de piezas de madera' });
+    const piece = table.locator('article[data-record-kind="wood"]');
+    const edit = piece.getByRole('button', { name: 'Editar Pieza inventada', exact: true });
+    const editor = piece.locator('[data-row-editor]');
+    const decision = editor.locator('[data-solid-field="cnc.decision"]');
+    const width = editor.locator('[data-solid-field="width"]');
+    const confirm = editor.getByRole('button', { name: 'Confirmar cambios', exact: true });
+    const discard = editor.getByRole('button', { name: 'Descartar', exact: true });
+    const consumables = wood.locator('[data-fab-panel="workshop-other"]');
+    await openDetails(consumables);
+    const cncLength = consumables.locator('[data-workshop-live="cnc-length"]');
+    const cncAmount = consumables.locator('[data-workshop-live="cnc-amount"] strong');
+    assert.equal(await cncLength.innerText(), 'Pendiente');
+    assert.equal(await cncAmount.innerText(), 'Pendiente');
+    assert.equal(await consumables.locator('[data-workshop-field="other.cnc.price"]').inputValue(), '');
+    assert.ok(await edit.evaluate(button => {
+      const actions = button.closest('.rv-row-actions');
+      if (!actions) return false;
+      const row = button.closest('article').getBoundingClientRect(), bounds = actions.getBoundingClientRect();
+      return getComputedStyle(actions).position !== 'fixed' && bounds.left >= row.left - 1 && bounds.right <= row.right + 1 &&
+        bounds.top >= row.top - 1 && bounds.bottom <= row.bottom + 1;
+    }), 'The edit controls stay inside their own piece row');
+
+    await edit.click();
+    assert.equal(await editor.locator('[data-solid-field="woodKind"]').inputValue(), 'Pino');
+    assert.equal(await width.inputValue(), '36');
+    assert.equal(await decision.inputValue(), 'yes');
+    assert.equal(await editor.locator('[data-solid-field="cnc.length"], [data-solid-field="cnc.repetitions"], [data-solid-action="apply-cnc"]').count(), 0);
+    await width.fill('40');
+    await decision.selectOption('no');
+    assert.equal(await cncLength.innerText(), '0 m', 'The local preview reflects the explicit choice No');
+    assert.equal(await cncAmount.innerText(), 'Pendiente', 'A zero cutting length does not confirm a zero cost');
+    assert.equal((await quoteSummary('DEMO-102')).hasPending, true, 'A wood choice requires piece confirmation');
+
     await page.setViewportSize({ width: 390, height: 900 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Wood editor must fit mobile width');
-    for (const selector of ['[data-solid-action="apply-cnc"]', '[data-break-action="cancel-editor"]']) {
-      const box = await quote(selector).boundingBox();
-      assert.ok(box && box.width >= 90, `Mobile action ${selector} must remain legible instead of stacking one character per line`);
+    for (const control of [confirm, discard]) {
+      await control.scrollIntoViewIfNeeded();
+      assert.ok(await control.evaluate(button => {
+        const scroller = button.closest('.rv-table-scroll').getBoundingClientRect();
+        const bounds = button.getBoundingClientRect();
+        const label = document.createRange();
+        label.selectNodeContents(button);
+        return bounds.left >= scroller.left - 1 && bounds.right <= scroller.right + 1 && label.getClientRects().length === 1;
+      }), 'Each wood action is reachable and fits on a single line in the mobile table');
     }
     await capture({ path: path.join(artifacts, 'wood-editor-mobile.png'), fullPage: true });
+    await discard.click();
+    assert.equal(await piece.locator('[data-row-field="width"]').inputValue(), '36');
+    assert.equal(await cncLength.innerText(), 'Pendiente', 'Discard restores the earlier CNC decision and missing cutting data');
+    assert.equal((await quoteSummary('DEMO-102')).hasPending, false);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await quote('[data-break-action="save-editor"]').click();
-    await quote('[data-action="part-apply"]').click();
+
+    await edit.click();
+    assert.equal(await decision.inputValue(), 'yes');
+    await width.fill('40');
+    await decision.selectOption('no');
+    await confirm.click();
+    assert.equal(await piece.locator('[data-row-field="width"]').inputValue(), '40');
+    assert.equal(await piece.locator('[data-row-field="cnc.decision"]').inputValue(), 'No');
+    assert.equal(await cncLength.innerText(), '0 m', 'Confirm retains the choice after closing the piece editor');
+    await edit.click();
+    await decision.selectOption('yes');
+    await confirm.click();
+    assert.equal(await piece.locator('[data-row-field="cnc.decision"]').inputValue(), 'Sí');
+    assert.equal(await cncLength.innerText(), 'Pendiente');
+    assert.equal(await cncAmount.innerText(), 'Pendiente');
+
     const after = await quoteSummary('DEMO-102');
     assert.equal(after.hasPending, false);
     assert.equal(after.complete, false);
     assert.equal(after.costCents, before.costCents, 'CNC without tariff must not change confirmed cost');
     await save();
     assert.notEqual((await quoteSummary('DEMO-102')).saveState, 'success');
+    assert.equal(await page.evaluate(() => window.DemoQuote.snapshot('DEMO-102')), null);
     assert.equal(await stageControl('review').isEnabled(), false);
     await capture({ path: path.join(artifacts, 'wood-pending.png'), fullPage: true });
   });
@@ -1022,7 +1174,21 @@ try {
     const detail=catalog.locator('.recipe-catalog-card');
     const use=detail.locator('[data-action="line-use"]');
     const bolonia=catalogRow('SYN-BOLONIA');
-    assert.equal(await rows.count(),4);
+    assert.equal(await rows.count(),12);
+    const familyVariants={Mesas:18,Cubiertas:36,Pedestales:8,Asientos:73};
+    let variants=0;
+    for (const [family,expected] of Object.entries(familyVariants)) {
+      await catalog.locator('#line-family').selectOption(family);
+      let count=0;
+      for (const row of await rows.all()) {
+        await row.click();
+        count+=await detail.locator('select option:not([value=""])').count();
+      }
+      assert.equal(count,expected,`Variantes de ${family}`);
+      variants+=count;
+    }
+    assert.equal(variants,135);
+    await catalog.locator('#line-family').selectOption('');
     const desktopRow=await rows.first().elementHandle();
     await bolonia.press('Enter');
     assert.ok(await desktopRow.evaluate(el=>el.isConnected),'Selecting a product keeps the list in place');
@@ -1075,7 +1241,7 @@ try {
     assert.equal(await detail.count(),0);
     await search.clear();
     await catalog.locator('#line-family').selectOption('Cubiertas');
-    assert.equal(await rows.count(),1);
+    assert.equal(await rows.count(),2);
     assert.equal(await detail.getAttribute('data-line-product'),'SYN-PRISMA');
     assert.equal(await use.isEnabled(),false);
     await search.press('Escape');

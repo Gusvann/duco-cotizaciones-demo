@@ -13,15 +13,119 @@ const metrics=(records,filters={},clients=CLIENTS)=>plain(api.compute(records,fi
 const ids=rows=>rows.map(row=>row.id).sort();
 const group=(rows,key)=>rows.find(row=>row.key===key);
 const CLIENTS={a:{name:'Cliente ficticio Alfa',firstSaleAt:'2025-05-01'},b:{name:'Cliente ficticio Beta',firstSaleAt:'2026-10-01'},c:{name:'Cliente ficticio Gamma',firstSaleAt:null}};
+test('source sales without dated acceptance remain visible in coverage without inflating a month',()=>{
+  const source={id:'AS-QUOTE-FICTICIO',source:'ASANA_IMPORT',request:{title:'Venta ficticia'},
+    importedStatus:'project',clientId:'c',category:'architecture',asana:{kind:'quote',createdAt:'2026-10-25',
+      commercial:{requestedAt:'2026-10-22',acceptedAt:null,netCents:null}}};
+  const filters={period:'october',category:'architecture',client:'c',customer:'unknown',
+    coverage:{from:'2026-10-01',through:'2026-11-24',lists:{quote:'2026-11-24'}}};
+  const results=metrics([source],filters);
+  assert.deepEqual(ids(results.undatedSales),[source.id]);
+  assert.equal(results.eligible.length,0);
+  assert.equal(results.monthlySales[0].count,0);
+  assert.equal(metrics([source],{...filters,period:'november'}).undatedSales.length,0);
+  assert.equal(metrics([source],{...filters,customer:'new'}).undatedSales.length,0);
+});
 function record(id,{netCents=10000,acceptedAt='2026-10-06',requestedAt='2026-10-01',firstSentAt='2026-10-03',poAt='2026-10-07',clientId='a',category='horeca',commercialType='line',...rest}={}){
   const request={title:'Caso sintético '+id,client:CLIENTS[clientId]?.name||'Cliente sin historial',need:'Necesidad inventada'};
   const versions=acceptedAt===null?[]:[{version:1,quoteVersionId:id+'-V1',clientId,category,commercialType,sentAt:firstSentAt,snapshot:{quote:{id,versionId:id+'-V1',revision:1},request:structuredClone(request),summary:{priceCents:netCents,taxCents:1600,totalCents:11600,costCents:4000}},response:{result:'accepted',version:1,at:acceptedAt}}];
   return {id,request,version:1,clientId,category,commercialType,requestedAt,firstSentAt,poAt,acceptedVersion:acceptedAt===null?null:1,versions,project:null,...rest};
 }
 
-test('seven approved families, seven categories, and fixed inclusive periods',()=>{
+test('client, commercial type and recurrence compose across monthly details and timing denominators',()=>{
+  const sameNames={...CLIENTS,a:{...CLIENTS.a,name:'Cuenta homónima'},b:{...CLIENTS.b,name:'Cuenta homónima'}};
+  const values=[
+    record('DEMO-SALES-LINE',{clientId:'a',netCents:15075}),
+    record('DEMO-SALES-PROJECT',{clientId:'a',commercialType:'project',netCents:45000}),
+    record('DEMO-SALES-NEW',{clientId:'b',netCents:100000}),
+    record('DEMO-SALES-UNKNOWN',{clientId:'c',netCents:null}),
+  ];
+  const selected=metrics(values,{period:'october',client:'a',type:'line',customer:'recurring'},sameNames);
+  assert.deepEqual(ids(selected.eligible),['DEMO-SALES-LINE']);
+  assert.deepEqual(ids(selected.cohort),['DEMO-SALES-LINE']);
+  assert.equal(selected.byType.find(row=>row.key==='line').n,1);
+  assert.equal(selected.byType.find(row=>row.key==='project').n,0);
+  const bar=selected.monthlySales[0];
+  assert.equal(bar.totalCents,15075);
+  assert.deepEqual(ids(bar.clients[0].rows),['DEMO-SALES-LINE']);
+  const unknown=metrics(values,{period:'october',customer:'unknown'},sameNames);
+  assert.deepEqual(ids(unknown.eligible),['DEMO-SALES-UNKNOWN']);
+  assert.equal(unknown.priced.length,0);
+});
+
+test('the private coverage handles actual local dates and leaves unavailable Asana prices pending',()=>{
+  const imported=(id,commercial,props={})=>({
+    id,clientId:'a',commercialType:'project',category:'horeca',request:{title:'Cotización de prueba'},
+    asana:{kind:'quote',commercial},...props
+  });
+  const project={id:'ASANA-PROJECT',request:{title:'Proyecto privado ficticio'},requestedAt:'2026-10-07',asana:{kind:'project'}};
+  const values=[
+    project,
+    imported('ASANA-OCT',{requestedAt:'2026-10-01T04:00:00Z',firstSentAt:'2026-10-02',acceptedAt:'2026-10-04',netCents:15400}),
+    imported('ASANA-NOV',{requestedAt:'2026-11-04',firstSentAt:'2026-11-08',acceptedAt:'2026-11-11',projectAt:'2026-11-14',linkedProjectId:'ASANA-PROJECT'}),
+    imported('ASANA-DEC',{requestedAt:'2026-12-02',firstSentAt:'2026-12-03',acceptedAt:'2026-12-05',netCents:3400}),
+  ];
+  const result=metrics(values,{coverage:{from:'2026-10-01',through:'2026-11-24'},period:'cut'});
+  assert.deepEqual(result.interval,['2026-10-01','2026-11-24']);
+  assert.deepEqual(result.monthlySales.map(row=>row.key),['2026-10','2026-11']);
+  assert.deepEqual(ids(result.cohort),['ASANA-NOV']);
+  assert.deepEqual(ids(result.eligible),['ASANA-NOV','ASANA-OCT']);
+  assert.equal(result.activity.projects,1);
+  assert.equal(result.monthlySales[1].pendingCount,1);
+  assert.equal(result.totalCents,15400);
+});
+
+test('status age uses seven local calendar dates and exempts terminal statuses',()=>{
+  const entered='2026-10-01T05:59:59Z';
+  assert.deepEqual(plain(api.statusAge('accepted',entered,'2026-10-07T05:59:59Z')),{days:6,kind:'current'});
+  assert.deepEqual(plain(api.statusAge('accepted',entered,'2026-10-07T06:00:00Z')),{days:7,kind:'overdue'});
+  assert.deepEqual(plain(api.statusAge('project',entered,'2026-10-20')),{days:null,kind:'inactive'});
+  assert.deepEqual(plain(api.statusAge('rejected',entered,'2026-10-20')),{days:null,kind:'inactive'});
+  assert.deepEqual(plain(api.statusAge('draft',null,'2026-10-20')),{days:null,kind:'unknown'});
+  assert.deepEqual(plain(api.statusAge('draft','2026-11-01','2026-10-20')),{days:null,kind:'unknown'});
+});
+
+test('project folios normalize only a leading recognized folio and support either form in search',()=>{
+  const project={id:'ASANA-RECORD',title:'($) 2611-14 Revisión de madera · 10-12 piezas'};
+  assert.equal(api.projectTitle(project),'($) 261114 Revisión de madera · 10-12 piezas');
+  assert.equal(api.projectFolio(project),'2611-14');
+  assert.equal(api.projectMatches(project,'261114'),true);
+  assert.equal(api.projectMatches({...project,folio:'261114',title:api.projectTitle(project)},'2611-14'),true);
+  assert.equal(api.projectTitle({id:'PR-01',title:'Mesa 2610-22 versión A-B'}),'Mesa 2610-22 versión A-B');
+  assert.equal(api.compactFolio('2699-20'),'2699-20');
+});
+
+test('the project list and imported details retain the original folio and expose only consultation actions',()=>{
+  const context=vm.createContext({URL});
+  for (const name of ['portfolio-kpis.js','project-operations.js','project-views.js']) {
+    vm.runInContext(readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),context,{filename:name});
+  }
+  const views=context.DemoProjectViews;
+  const record={
+    id:'ASANA-PROJECT',request:{title:'2611-14 Encargo ficticio',client:'Cliente de prueba',account:'Responsable de prueba'},
+    asana:{kind:'project',createdAt:'2026-11-02T15:00:00Z',statusLabel:'En curso',url:'https://example.test/origen',
+      fields:{Observación:'<script>inerten</script>'},links:[{url:'javascript:alert(0)',name:'Enlace inválido'}],
+      subtasks:[{name:'Medidas finales',responsible:'Equipo de prueba',notes:'Medir ancho interior.'}]}
+  };
+  record.project={id:'ASANA-PROJECT',title:record.request.title,folio:'2611-14',asana:record.asana};
+  for (const query of ['261114','2611-14']) {
+    const html=views.list([record],'projects',query);
+    assert.match(html,/261114 Encargo ficticio/);
+    assert.match(html,/data-project="ASANA-PROJECT"/);
+    assert.match(html,/En curso/);
+  }
+  const html=views.detail(record);
+  assert.match(html,/Folio de origen<\/dt><dd>2611-14/);
+  assert.match(html,/Folio<\/dt><dd>261114/);
+  assert.match(html,/Medidas finales/);
+  assert.match(html,/Medir ancho interior/);
+  assert.match(html,/&lt;script&gt;inerten/);
+  assert.doesNotMatch(html,/javascript:alert|data-action="op-/);
+});
+
+test('seven indicator families, eight supported categories, and fixed inclusive periods',()=>{
   assert.deepEqual(plain(api.FAMILIES),['Ventas','Tickets','Preparación','Cierre','Cotizaciones por cliente','Cotizaciones por mes','Nuevos y recurrentes']);
-  assert.deepEqual(Object.keys(api.CATEGORIES),['horeca','offices','brands','lab','residential','retail','logistics']);
+  assert.deepEqual(Object.keys(api.CATEGORIES),['horeca','offices','brands','lab','residential','retail','logistics','architecture']);
   assert.equal(api.CATEGORIES.logistics,'Logística y envíos');
   assert.equal(api.CUTOFF,'2026-10-15');
   assert.deepEqual(plain(api.PERIODS),{year:['2026-01-01','2026-10-15'],q3:['2026-07-01','2026-09-30'],october:['2026-10-01','2026-10-15']});
@@ -37,7 +141,8 @@ test('seven category fixtures use independent amounts, tickets, activity, and cl
   assert.equal(result.eligible.length,7);
   assert.equal(result.priced.length,7);
   assert.equal(result.pending.length,0);
-  assert.equal(result.byCategory.length,7);
+  assert.equal(result.byCategory.length,8);
+  assert.equal(group(result.byCategory,'architecture').count,0);
   for(let i=0;i<categories.length;i++){
     const value=group(result.byCategory,categories[i]);
     assert.equal(value.count,1);

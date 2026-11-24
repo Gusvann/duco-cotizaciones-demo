@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Catálogo de productos · Astil</title>
+  <link rel="stylesheet" href="src/galeria.css">
+  <script src="src/public-product-catalog.js" defer></script>
+  <script src="src/galeria.js" defer></script>
+</head>
+<body>
+<header><strong>Astil</strong><a href="./">Volver al cotizador</a></header>
+<main>
+  <h1>Catálogo de productos</h1>
+  <div class="filters">
+    <label>Buscar producto<input id="search" type="search" placeholder="Nombre, variante o material"></label>
+    <label>Familia<select id="family"><option value="">Todas las familias</option></select></label>
+  </div>
+  <div class="layout">
+    <nav aria-label="Productos"><ul id="products"></ul><p id="empty" hidden>Sin coincidencias.</p></nav>
+    <article id="detail" aria-labelledby="name" hidden>
+      <h2 id="name"></h2>
+      <label>Variante<select id="variant"></select></label>
+      <figure><img id="photo" alt="" decoding="async" width="800" height="600"><figcaption id="caption"></figcaption></figure>
+      <dl><div><dt>Medidas terminadas</dt><dd id="dimensions"></dd></div><div><dt>Material</dt><dd id="material"></dd></div></dl>
+    </article>
+  </div>
+</main>
+</body>
+</html>

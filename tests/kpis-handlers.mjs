@@ -1,3 +1,4 @@
+import {quoteTemplate} from '../tools/build.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -9,8 +10,8 @@ import vm from 'node:vm';
 const read=name=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 const template=read('cotizador.html');
 // A test run uses one immutable source checkpoint, even if a collaborator edits later.
-const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','journey.js'].map(name=>[name,read(name)]);
-const domain=[...template.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])
+const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','journey.js'].map(name=>[name,read(name)]);
+const domain=[...quoteTemplate(template).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])
   .find(source=>source.includes('var QuoteSchema')&&source.includes('var QuoteManufacturing_'));
 if(!domain) throw new Error('The shared public domain is required.');
 const plain=value=>JSON.parse(JSON.stringify(value));
@@ -33,8 +34,18 @@ function portfolioRecord(id,netCents,clientId='a'){
     versions:[{version:1,quoteVersionId:'opaque-'+id,clientId,category:'horeca',commercialType:'line',sentAt:'2026-10-03',snapshot:{quote:{id,versionId:'opaque-'+id},request,summary:{priceCents:netCents}},response:{result:'accepted',version:1,at:'2026-10-06'}}]};
 }
 
-async function harness({mobile=false,portfolioFixtures=false}={}){
-  const sandbox=vm.createContext({structuredClone,queueMicrotask});
+async function harness({mobile=false,portfolioFixtures=false,privateFixture=null}={}){
+  const sandbox=vm.createContext({structuredClone,queueMicrotask,URL});
+  if (privateFixture) {
+    sandbox.privateWrites=[];
+    sandbox.DucoPrivateApi={
+      initial:async()=>structuredClone(privateFixture),catalog:async()=>({products:[]}),
+      put:async(record,snapshot,revision)=>{
+        sandbox.privateWrites.push(structuredClone({record,snapshot,revision}));
+        return {revision:revision+1};
+      }
+    };
+  }
   vm.runInContext(domain,sandbox,{filename:'public-domain.js'});
   vm.runInContext(`
     globalThis.window=globalThis;
@@ -101,13 +112,13 @@ async function harness({mobile=false,portfolioFixtures=false}={}){
   return {sandbox,root,footer,click,field,key,inspect,metrics,setPortfolioFixtures,Q:sandbox.DemoQuote,app:sandbox.__client.app};
 }
 
-test('session presentation hides testing labels without hiding the session and recovery context',async()=>{
+test('offline session presents its lifetime and recovery controls without internal testing labels',async()=>{
   const h=await harness();
   const text=()=>[h.root.innerHTML,h.footer.innerHTML].join(' ').replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ');
   const check=()=>{
     assert.doesNotMatch(text(),/DEMO LOCAL|\b(?:UAT|PREVIEW|PENDING_CONFIG|PARAMETER_PENDING)\b|\bsimulaci[oó]n\b|\bsimulad[ao]s?\b|datos sint[eé]ticos/i);
     assert.match(text(),/SÓLO EN ESTA SESIÓN/);
-    assert.match(text(),/Los cambios se conservan sólo durante esta sesión/);
+    assert.match(text(),/Sin inicio de sesión; los datos desaparecen al recargar/);
   };
   check();await h.click('open',{id:'DEMO-101'});check();
   await h.click('stage',{screen:'quote'});check();
@@ -339,6 +350,100 @@ test('detail opens the same expediente and return preserves tab, filters and det
     assert.equal(await h.key(key,target),true,'Chart activation consumes '+JSON.stringify(key));
     assert.deepEqual(detailIds(h.root.innerHTML),expected);
   }
+});
+
+test('commercial filters scope both monthly charts and their details to the same client identity',async()=>{
+  const h=await harness();
+  await h.click('kpis');
+  await h.field('j-kpi-client','CL-DEMO-B');
+  await h.field('j-kpi-type','project');
+  await h.field('j-kpi-customer','new');
+  await h.click('kpi-tab',{tab:'sales'});
+  assert.match(h.root.innerHTML,/data-kpi-stacked="requests"/);
+  assert.match(h.root.innerHTML,/data-kpi-stacked="sales"/);
+  const selection=JSON.stringify({month:'2026-02',client:'CL-DEMO-B'});
+  assert.ok(detailControl(h.root.innerHTML,'month-client',selection));
+  await h.click('kpi-detail',{kind:'month-client',key:selection});
+  assert.deepEqual(detailIds(h.root.innerHTML),['DEMO-202']);
+  const local=h.inspect().state.kpis;
+  assert.deepEqual([local.client,local.type,local.customer],['CL-DEMO-B','project','new']);
+  await h.field('j-kpi-customer','recurring');
+  assert.deepEqual(detailIds(h.root.innerHTML),[]);
+  await h.field('j-kpi-customer','new');
+  await h.click('kpi-detail',{kind:'type',key:'project'});
+  assert.deepEqual(detailIds(h.root.innerHTML),['DEMO-202']);
+});
+
+test('the private view separates imported quotes and projects, with correct owner and folio filters',async()=>{
+  const projectSource={kind:'project',createdAt:'2026-11-04T12:00:00Z',url:'https://example.test/proyecto',description:'Detalle del proyecto'};
+  const quoteSource={kind:'quote',createdAt:'2026-11-02T12:00:00Z',url:'https://example.test/cotizacion',description:'Detalle de la cotización',
+    commercial:{requestedAt:'2026-11-02'},related:{id:'ASANA-PROJECT',url:projectSource.url}};
+  const project={id:'ASANA-PROJECT',folio:'2611-14',request:{client:'Cuenta ficticia',title:'2611-14 Proyecto de prueba'},
+    asana:projectSource,history:[],versions:[],project:{id:'ASANA-PROJECT',folio:'2611-14',title:'2611-14 Proyecto de prueba',asana:projectSource}};
+  const quote={id:'ASANA-QUOTE',folio:'COT-TEST',request:{client:'Cuenta ficticia',title:'Cotización de prueba',account:'Responsable ficticio'},
+    asana:quoteSource,history:[],versions:[],responsibleId:'OWNER-MOCK',importedStatus:'accepted'};
+  const local={id:'LOCAL-REQUEST',source:'DUCO_LOCAL',version:1,clientId:'CLI-LOCAL',request:{title:'Cotización local',client:'Cuenta local',account:'Cuenta local'},
+    history:[],versions:[],started:false,statusAtKey:'request',statusEnteredAt:'2026-10-02T12:00:00Z'};
+  const ownedProject={...structuredClone(local),id:'OWNED-PROJECT',title:'Proyecto local'};
+  ownedProject.project={id:'PR-OWNED-PROJECT',sourceId:ownedProject.id,folio:'2611-15',version:1,title:ownedProject.title,baseline:{
+    quote:{id:ownedProject.id,versionId:'OWNED-PROJECT-V1'},request:ownedProject.request,summary:{complete:true,priceCents:100}
+  }};
+  const drafts=[local,ownedProject].map(record=>({record,revision:1,snapshot:null}));
+  const h=await harness({privateFixture:{user:{role:'account',username:'responsable'},records:[project,quote],drafts,clients:{},coverage:{from:'2026-10-01',through:'2026-11-24',lists:{project:'2026-11-24',quote:'2026-11-24'}}}});
+  assert.match(h.root.innerHTML,/data-record-id="ASANA-QUOTE"/);
+  assert.doesNotMatch(h.root.innerHTML,/La importación de cotizaciones de Asana está pendiente/);
+  assert.doesNotMatch(h.root.innerHTML,/data-record-id="ASANA-PROJECT"/);
+  assert.match(h.root.innerHTML,/COPIA PRIVADA/);
+  assert.match(h.root.innerHTML,/Cerrar sesión/);
+  assert.match(h.root.innerHTML,/Antigüedad sin verificar/);
+  await h.field('j-responsible-filter','');
+  assert.doesNotMatch(h.root.innerHTML,/data-record-id="ASANA-QUOTE"/);
+  await h.field('j-responsible-filter','OWNER-MOCK');
+  assert.match(h.root.innerHTML,/data-record-id="ASANA-QUOTE"/);
+  await h.click('open',{id:'ASANA-QUOTE'});
+  assert.match(h.root.innerHTML,/Detalle de la cotización/);
+  assert.match(h.root.innerHTML,/Consultar proyecto/);
+  assert.doesNotMatch(h.root.innerHTML,/data-action="convert"/);
+  await h.click('projects');
+  for (const value of ['2611-14','261114']) {
+    await h.field('j-project-search',value,{type:'input'});
+    assert.match(h.root.innerHTML,/261114 Proyecto de prueba/);
+  }
+  await h.click('project-open',{id:'ASANA-PROJECT',project:'ASANA-PROJECT',tab:'plan'});
+  assert.match(h.root.innerHTML,/Detalle del proyecto/);
+  assert.match(h.root.innerHTML,/Folio de origen<\/dt><dd>2611-14/);
+  assert.doesNotMatch(h.root.innerHTML,/data-action="op-(?:plan|task|close)/);
+  await h.click('list');
+  await h.click('open',{id:'LOCAL-REQUEST'});
+  await h.click('stage',{screen:'quote'});
+  const after=h.inspect().records.find(record=>record.id===local.id);
+  assert.equal(after.statusAtKey,'draft');
+  assert.notEqual(after.statusEnteredAt,local.statusEnteredAt);
+  await h.click('stage',{screen:'quote'});
+  assert.equal(h.inspect().records.find(record=>record.id===local.id).statusEnteredAt,after.statusEnteredAt);
+  await h.click('projects');
+  if (h.inspect().state.guard==='dirty') await h.click('keep-and-leave',{},h.footer);
+  await h.field('j-project-search','',{type:'input'});
+  await h.click('project-open',{id:ownedProject.id,project:ownedProject.project.id,tab:'plan'});
+  const eventTarget=(field,value)=>({id:'',value,container:h.root,dataset:{opForm:'plan',opField:field,opProject:ownedProject.project.id}});
+  for(const [field,value] of [['owner','Equipo de prueba'],['dueDate','2026-11-28']]){
+    const target=eventTarget(field,value);
+    for(const listener of h.root.listeners.get('change')||[])await listener({target});
+  }
+  await h.click('op-plan-save',{id:ownedProject.id,project:ownedProject.project.id,revision:'0'});
+  assert.equal(h.sandbox.privateWrites.at(-1).record.project.operations.owner,'Equipo de prueba');
+  assert.equal(h.sandbox.privateWrites.at(-1).record.project.operations.events.at(-1).actor,'responsable');
+  assert.equal(h.sandbox.privateWrites.at(-1).revision,1);
+});
+
+test('partial private import explains the pending quote cutoff in the table, board and KPIs',async()=>{
+  const coverage={from:'2026-10-01',through:'2026-11-24',lists:{project:'2026-11-24'}};
+  const h=await harness({privateFixture:{user:{role:'account',username:'responsable'},records:[],drafts:[],clients:{},coverage}});
+  assert.match(h.root.innerHTML,/La importación de cotizaciones de Asana está pendiente/);
+  await h.click('view',{view:'flujo'});
+  assert.match(h.root.innerHTML,/La importación de cotizaciones de Asana está pendiente/);
+  await h.click('kpis');
+  assert.match(h.root.innerHTML,/Cotizaciones de Asana pendientes/);
 });
 
 test('chart legends escape text, keep stable IDs/colors, and distinguish empty, pending, zero, overflow and exact cents',async()=>{

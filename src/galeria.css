@@ -1,0 +1,40 @@
+* { box-sizing: border-box }
+:root { color-scheme: light; font-family: Inter, "Segoe UI", sans-serif; color: #15334d; background: #f6faff }
+body { margin: 0 }
+header { display: flex; align-items: center; justify-content: space-between; padding: 14px clamp(16px,4vw,64px); background: white; border-bottom: 1px solid #d3e2ed }
+header strong { color: #123d67; font-size: 1.65rem; letter-spacing: -.05em }
+header a { color: #0866af; font-size: .95rem }
+main { margin: auto; max-width: 1500px; padding: 24px clamp(16px,4vw,64px) }
+h1 { margin: 0 0 24px; font-size: clamp(1.75rem,3.5vw,2.8rem); letter-spacing: -.035em }
+h2 { margin: 0 0 14px }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px }
+label { display: grid; gap: 6px; font-size: .85rem; color: #455f76 }
+input, select { color: #15334d; font: inherit; font-size: .95rem; border: 1px solid #b3ccdf; border-radius: 7px; padding: 9px 11px; background: white; max-width: 100%; min-width: 0 }
+.filters label:first-child { flex: 0 1 22rem }
+.layout { display: grid; grid-template-columns: minmax(200px,1fr) minmax(0,2fr); align-items: start; gap: 18px }
+nav, article { border: 1px solid #cfdfec; border-radius: 10px; background: white }
+ul { margin: 0; padding: 0; list-style: none }
+li+li { border-top: 1px solid #dfebf3 }
+li button { display: flex; align-items: center; text-align: left; gap: 12px; width: 100%; padding: 9px 13px; color: inherit; font: inherit; border: 0; background: transparent; cursor: pointer }
+li button:hover { background: #f4f9fd }
+li button[aria-pressed=true] { background: #e8f3ff; color: #075d9e; box-shadow: inset 3px 0 #0875ca }
+li img { object-fit: contain; width: 52px; height: 52px; border-radius: 6px; background: #f6f6f4 }
+li span { display: grid; gap: 3px }
+small,figcaption,dt { color: #516b80 }
+article { padding: clamp(14px,2vw,24px) }
+article label { max-width: 36rem }
+figure { margin: 18px 0 }
+figure img { width: 100%; height: auto; max-height: min(60vh,640px); object-fit: contain; background: #f7f7f5; display: block; border-radius: 8px }
+figcaption { margin-top: 8px; font-size: .83rem }
+dl { margin: 0 }
+dl div { display: grid; grid-template-columns: minmax(8rem,1fr) 2fr; gap: 10px; padding: 10px 0; border-top: 1px solid #dfebf3 }
+dd { margin: 0; overflow-wrap: anywhere }
+#empty { padding: 8px 16px }
+:focus-visible { outline: 2px solid #0875ca; outline-offset: 2px }
+@media(max-width:680px) {
+  .layout { grid-template-columns: 1fr }
+  nav { max-height: 14rem; overflow-y: auto }
+  .filters label { flex: 1 1 100% }
+  li button { padding: 6px 10px }
+  li img { width: 38px; height: 38px }
+}

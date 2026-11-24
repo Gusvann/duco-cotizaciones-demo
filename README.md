@@ -3,6 +3,7 @@
 Interfaz oficial del cotizador seleccionada por el propietario el **5 de noviembre de 2026**. La propuesta antes denominada «B» pasa a ser la base de trabajo del cotizador y sustituye la portada de este repositorio. Las menciones a B en nombres internos o pruebas identifican su origen histórico; no son otra versión vigente.
 
 - [Abrir cotizador](https://gusvann.github.io/duco-cotizaciones-demo/)
+- [Ver la galería de productos](https://gusvann.github.io/duco-cotizaciones-demo/catalogo.html)
 - [Repositorio](https://github.com/Gusvann/duco-cotizaciones-demo)
 
 ## Alcance
@@ -10,6 +11,13 @@ Interfaz oficial del cotizador seleccionada por el propietario el **5 de noviemb
 Mesa y Flujo comparten expedientes con Solicitud, Cotizador, Revisión, Envío, Respuesta y Proyecto. Portafolio incorpora KPIs. El seguimiento de proyectos, planificación, abastecimiento, producción y entrega conserva los ejemplos y contratos locales existentes; esta elección del cotizador no oficializa políticas operativas del ERP.
 
 Por corrección directa del propietario del 5 de noviembre, «Mapa del proceso» ya no se ofrece en el menú de escritorio ni en el menú móvil. Se conserva el resto de la navegación y del recorrido.
+
+### Probar una cotización en GitHub Pages
+
+1. Abre **Nueva solicitud**, completa los datos de ejemplo y entra a **Artículos → Agregar producto → Producto de línea**. El catálogo permite elegir entre 135 variantes de 12 productos. La geometría, el material y el canto ayudan a identificar la ilustración.
+2. Edita cantidades o despieces y pulsa **Guardar borrador**. Una vez confirmado el guardado, puedes cerrar la pestaña y abrir el expediente desde Mesa en el mismo perfil del navegador.
+3. Completa los datos comerciales y las dos revisiones, registra el envío de prueba y la aceptación de esa misma versión. **Convertir en proyecto** crea la ficha en **Portafolio → Proyectos**. La ficha conserva la versión aceptada y su importe.
+4. Los cambios de la prueba se guardan en IndexedDB en el navegador que los creó. Un segundo perfil comienza con los expedientes ficticios de muestra. Borrar los datos del sitio también borra las pruebas de ese perfil.
 
 ### Listas de Cotizador y Proyectos
 
@@ -37,57 +45,115 @@ node tests/acceptance.mjs
 
 ### Cliente y solicitud
 
-La pantalla usa «Formulario continuo». Los datos de cliente y responsables se consultan en el formulario, y el encabezado conserva el folio, la versión, el título y el estado. **Continuar sin guardar** abre Artículos y **Guardar borrador** confirma el borrador en la sesión. Las pestañas Cliente, Artículos, Costos generales, Precio y Revisión comparten la misma posición. Al cambiar de pestaña, el foco acompaña la selección sin desplazar la página. En móvil, las pestañas se distribuyen en dos filas. Las etapas comerciales aparecen en las pantallas de revisión, envío, respuesta y proyecto.
+La pantalla usa «Formulario continuo». Los datos de cliente y responsables se consultan en el formulario, y el encabezado conserva el folio, la versión, el título y el estado. **Continuar sin guardar** abre Artículos. En la vista privada, **Guardar borrador** confirma el borrador en la base local y **Nuevo cliente** registra un cliente para reutilizarlo en otras solicitudes. Las pestañas Cliente, Artículos, Costos generales, Precio y Revisión comparten la misma posición. Al cambiar de pestaña, el foco acompaña la selección sin desplazar la página. En móvil, las pestañas se distribuyen en dos filas. Las etapas comerciales aparecen en las pantallas de revisión, envío, respuesta y proyecto.
+
+### Prueba privada del cotizador
+
+La vista privada guarda borradores, versiones y proyectos en **DucoCotizador** dentro de AppData. El archivo HTML que se puede publicar conserva las pruebas de demostración y las recetas documentadas. La vista privada arranca con los datos importados y los expedientes que se hayan guardado en el equipo.
+
+El catálogo de trabajo se importa con `node tools/private-server.mjs import --recipes RUTA_JSON`. El archivo contiene las colecciones `products` y `rows`. Cada fila identifica la variante y su producto, el despiece, los consumos, las operaciones y las referencias históricas. Una revisión reutiliza el identificador de la variante. El importador comprueba el conjunto antes de sustituirlo en la base local. La página carga estas recetas al abrirse con una sesión autorizada. El HTML distribuible contiene únicamente el catálogo de demostración.
+
+En los insumos que se compran en una unidad distinta de la de consumo, la ficha conserva ambas unidades. Si la superficie de compra depende del lote, la cantidad de lienzos se captura cuando se conoce su medida. Los consumos por pieza siguen disponibles durante la cotización.
+
+El arranque requiere Node 24 y una cuenta local. El servidor escucha en 127.0.0.1.
+
+```powershell
+node tools/build.mjs
+node tools/private-server.mjs serve --port 61048
+```
+
+En Windows, la cuenta de cotización se puede vincular una sola vez al perfil del operador con `node tools/private-server.mjs link-windows --user NOMBRE`, pasando la contraseña de esa cuenta por entrada estándar. Desde ese perfil, abrir `http://127.0.0.1:61048/` inicia la sesión de cotización automáticamente. El servidor comprueba el propietario y la sesión de Windows de la conexión entrante. **Cerrar sesión** lleva al acceso manual, disponible también en `/acceso` para Dirección.
+
+Para aprovisionar una cuenta, ejecutar `node tools/private-server.mjs provision --user NOMBRE --role account` y suministrar una contraseña por entrada estándar. Para una cuenta de Dirección, el propietario autorizado ejecuta el mismo comando con `--role direction`. El servidor guarda verificadores derivados mediante scrypt y la cuenta de Dirección confirma desde su propia sesión. La solicitud de alta y la aprobación se vinculan a la revisión guardada de una receta. Los cambios posteriores requieren otra aprobación.
+
+**Es un prototipo** está disponible al agregar un producto nuevo. Cada prototipo tiene su propio margen inicial editable del 40 %. Precio utiliza el costo estimado aplicado del artículo y calcula el menor precio unitario en centavos que alcanza el margen después del descuento y antes de IVA. **Usar precio sugerido** aplica ese precio. Si el costo está incompleto, la sugerencia queda pendiente.
+
+### Carga puntual de datos
+
+Pasar las exportaciones de tareas de Asana al comando `node tools/private-server.mjs import --projects RUTA --quotes RUTA --through AAAA-MM-DD`. En la primera carga indicar los identificadores de lista con `--project-list-id ID` y `--quote-list-id ID`. Los identificadores se guardan en la base privada. Se puede cargar cada lista por separado. La importación selecciona las tareas principales por fecha de creación en Ciudad de México y agrega sus subtareas pertinentes. El ID original identifica cada registro. La ficha de proyecto usa el folio compacto cuando aplica y conserva el folio de Asana. La búsqueda acepta ambos formatos. Volver a importar actualiza la copia de la lista elegida.
+
+Para proveedores, usar `node tools/private-server.mjs import --suppliers RUTA` con los encabezados `Proveedor_ID`, `Proveedor`, `Alias` y `Estado_Proveedor`. El buscador consulta nombres y alias y conserva el identificador al guardar. La consulta histórica, la vigencia y el IVA están en el detalle de compra. Para fechas de primera venta acreditadas, usar `--clients RUTA` con `Cliente_ID`, `Cliente` y `Fecha primera venta`. La cobertura de KPIs depende de los hitos y precios verificables en las fuentes importadas.
+
+### Avisos durante la cotización
+
+Los avisos siguen el mismo recorrido para productos de línea y artículos nuevos. En **Cliente y solicitud**, los datos pendientes se revisan al continuar. En **Artículos**, cada partida presenta su importe conocido y sus campos pendientes. Una tarifa de mano de obra en cero cuenta como trabajo sin cargo. Borrar la tarifa deja pendiente esa operación.
+
+Una receta aporta precios editables como estimación para la cotización. La procedencia se conserva al cambiar la cantidad de productos. La interfaz pide directamente la unidad, el precio o el IVA de compra que falte para calcular una partida. El IVA de **venta** se captura en **Precio**, junto con los términos comerciales. Un reparto de pagos de 70/30 ya distribuye el 100 % aun cuando siga pendiente el precio de venta.
+
+En **Costos generales**, una decisión de alcance se comparte entre las partidas que dependen de ella. Empaque e indirectos porcentuales indican cuándo esperan el costo base. Un conflicto entre la instalación acordada y la declarada en fabricación requiere resolver esa diferencia. **Revisión** agrupa los pendientes por paso y permite abrir el campo correspondiente. Los cambios de alcance que afecten una versión previa se vuelven a revisar.
+
+**Guardar y continuar** conserva un borrador con datos comerciales pendientes. Si el guardado se bloquea, el aviso identifica la causa. En la vista privada se guardan los despieces aplicados al artículo junto con la cotización.
 
 ### Menú lateral
 
 Operación y Portafolio forman un acordeón en escritorio y móvil. Portafolio inicia abierto. Al abrir un grupo se cierra el otro y el grupo abierto puede plegarse. El filtro de Cotizador y la reapertura del menú móvil conservan el último despliegue de la sesión. Al cambiar de pantalla, se abre el grupo del destino. En móvil, el foco queda dentro del menú mientras está abierto. Escape lo cierra y devuelve el foco al botón **Abrir menú**.
 
-La aplicación funciona **sólo en memoria durante la sesión**. Recargar o usar Reiniciar sesión descarta la captura. No hay backend, autenticación real, almacenamiento persistente, telemetría ni conexiones con Google, Asana, Astil o bases de datos. No captures información empresarial o personal adicional. La publicación del frontend no acredita integración productiva.
+En GitHub Pages, los borradores confirmados y los proyectos convertidos persisten en ese navegador. La apertura directa del archivo HTML conserva el modo de demostración en memoria. La vista privada usa la base local y protege su acceso con la cuenta local. La publicación del frontend no acredita integración productiva.
 
 ## Captura y recetas
 
-La [guía de recetas de fabricación](docs/recetas-de-fabricacion.md) relaciona los campos del cotizador con las hojas P1, P8 y P9. Incluye los importes de control, las vistas de escritorio y móvil y las pruebas para revisar otra receta.
+La [guía de recetas de fabricación](docs/recetas-de-fabricacion.md) documenta los cortes de fabricación anteriores. En la demo pública, los despieces y las tarifas son ficticios. En el cotizador privado se usan los componentes y estimaciones de la receta importada.
 
-- Desde el 21 de noviembre, Madera maciza presenta seis subtotales para la cantidad solicitada. Para una Florencia de Tzalam, P1 del libro de mesas da $1,083.27 de materia prima y $2,025.35 de madera maciza en I55. La vista suma los importes conocidos antes del redondeo y conserva el estado parcial cuando faltan tarifas. Los $22.00 de herrajes se agregan una vez al costo actual del artículo.
+- Madera maciza presenta seis subtotales para la cantidad solicitada. Suma los importes conocidos antes del redondeo. Si faltan tarifas aplicables, el costo se identifica como parcial. Los herrajes se agregan una vez al costo del artículo.
 - En mano de obra, una tarifa vacía queda pendiente y una tarifa de cero representa un trabajo sin cargo. Al completar los seis rubros aplicables desaparece «parcial» del costo de madera. Cada tabla admite desplazamiento horizontal dentro de la vista móvil.
-- Las solicitudes nuevas empiezan sin artículos. **Agregar producto** ofrece cuatro productos de línea con siete variantes, además de la captura de un producto nuevo. El recorrido se describe en [Catálogo de productos con ficha lateral](#catálogo-de-productos-con-ficha-lateral).
-- Bent Legs · Encino rojo usa la receta de P8 para una mesa de Ø45 × 46 cm, con tablero Lisapol de 12 mm. Las referencias por mesa son $22.00 de herrajes, $1,163.51 de madera, $517.10 de tablero y $1,451.05 de herrería. El total de referencia usa los valores originales antes del redondeo y da $3,153.65 para una mesa y $6,307.31 para dos. El rolado se captura en Herrería y la media jornada de integración en Tableros. La imagen de catálogo es una recreación generada con IA.
+- Las solicitudes nuevas empiezan sin artículos. **Agregar producto** ofrece 135 variantes de 12 productos de línea, además de la captura de un producto nuevo. El recorrido se describe en [Catálogo de productos con ficha lateral](#catálogo-de-productos-con-ficha-lateral).
+- Las fichas de Bent Legs distinguen el material de la cubierta. La demostración incluye operaciones de ejemplo que permiten ensayar el flujo de fabricación.
 - El editor utiliza tablas continuas, controles compactos, cantidad comercial en el encabezado y unidades visibles. Pieza y Juego admiten enteros positivos; los consumos conservan sus unidades y decimales.
-- Madera maciza muestra la **cantidad total de piezas** al cambiar la cantidad comercial: dos mesas Florencia requieren 2 cubiertas, 8 patas y 4 travesaños. El campo **Por artículo** conserva la receta de una mesa; el total deriva del mismo motor que calcula los costos, sin volver a multiplicar la receta. Una cantidad vacía o inválida no se presenta como un total confirmado. Corrección solicitada por el propietario el 5 de noviembre de 2026.
+- Madera maciza muestra la **cantidad total de piezas** al cambiar la cantidad comercial. «Por artículo» conserva el despiece de una unidad. El costo usa el mismo multiplicador una sola vez.
 - La captura de mano de obra por días en Madera maciza ofrece Carpintería, CNC / Láser y Acabados. Por decisión posterior del propietario se retiran Instalación, Tejido e Integración de esta sección, conservando los datos históricos y las reglas de alcance de la solicitud. Las tarifas restantes mantienen su correspondencia original; esta retirada no modifica costos guardados ni declara servicios gratuitos.
 - En madera, **Confirmar cambios** valida y aplica la pieza; **Descartar** recupera la captura anterior. Cambiar de pieza o expediente exige resolver cambios pendientes. No hay autoguardado de las piezas de madera. Los demás renglones conservan su captura automática en sesión.
 - Confirmar una pieza no reemplaza el snapshot de **Guardar borrador**. El guardado debe tener resultado confirmado; errores y resultados desconocidos conservan sus protecciones.
-- La cubierta de Florencia conserva CNC de 244 cm × 1. Sus patas y travesaños no llevan entablerado ni CNC. Tableros incluye composición, cantidad, medidas/superficie, cantos, caras, recorrido CNC y costo base.
+- Cada pieza de madera tiene su decisión de CNC y su recorrido. Tableros incluye composición, cantidad, medidas, superficie, cantos, caras y costo base.
 - Tableros y Herrería presentan los rubros como el despiece de Madera maciza. En P8 y P9, las filas 58–95 corresponden al tablero y sus operaciones. Las filas 98–126 separan las láminas por superficie, los perfiles por longitud y los trabajos posteriores. Cada importe se asigna una vez a su rubro. Las tarifas capturadas en piezas sin fórmula de receta se identifican como tarifas y conservan su tratamiento económico original.
-- Bolonia · Encino rojo incluye sus herrajes, madera, bajo cubierta Lisapol de 12 mm y componentes metálicos. Su imagen de catálogo se generó con ImageGen a partir de la cubierta redonda de encino rojo y los cuatro perfiles con cruceta en negro grafito. Tuerca inserto utiliza PZA por corrección directa del propietario. El selector contiene los 13 materiales incorporados a esta versión.
+- La ficha de Bolonia identifica la madera de la cubierta y muestra su estructura metálica en la ilustración de la variante.
 - El costo base de tablero deriva de área × precio por hoja ÷ área de hoja × (1 + desperdicio). La cantidad comercial escala una sola vez antes del redondeo. Base calculada y compra confirmada siguen siendo conceptos distintos.
-- El catálogo publicado contiene siete variantes con referencias normalizadas. Los importes históricos sirven para cotejar la captura. La vigencia comercial, moneda e impuestos requieren verificación en cada cotización. Los libros originales y las extracciones privadas se conservan fuera del repositorio.
+- La demo pública presenta importes de prueba. En la instalación privada, los precios históricos de las recetas importadas se pueden usar como estimaciones editables. Su procedencia se conserva por separado de la vigencia comercial y de los datos fiscales de compra. Las recetas usan identificadores internos mientras se verifica el SKU. Los libros originales y las extracciones privadas se conservan fuera del repositorio.
 - Los campos ausentes o inválidos siguen siendo distintos de cero. Las referencias de procesos y CNC no activan tarifas financieras ni completan un costo pendiente por mostrarse en pantalla. Primer y acabado final productivos conservan su alcance diferido.
 - Las imágenes del catálogo son ilustraciones; no fotografías verificadas del producto.
 
 ## KPIs, versiones y proyectos
 
-Los expedientes y los KPIs usan datos ficticios compartidos. Ventas toma el precio neto de la versión aceptada correspondiente; un borrador posterior no cambia esa base. Preparación y cierre utilizan hitos estructurados y fechas de calendario. Filtros, denominadores y exclusiones permanecen visibles.
+Mesa y Flujo combinan búsqueda, estado y responsable. Las cotizaciones abiertas señalan la antigüedad desde el séptimo día natural en el estado actual. Si falta la fecha de entrada al estado, se indica que la antigüedad no pudo verificarse.
+
+El tablero combina período, categoría, cliente, tipo comercial y tipo de cliente. La primera venta anterior al período clasifica al cliente como recurrente. Si ocurrió durante el período se clasifica como nuevo. Sin evidencia, se muestra **Sin historial**. Los cierres de Producto de línea y Proyecto miden del primer envío a la aceptación. En el detalle y en las barras de ventas se usa el importe neto aceptado de esa versión. Las aceptaciones con importe desconocido quedan pendientes de cuantificar.
 
 Cada envío conserva su versión. La aceptación y la conversión se vinculan con ella; un reintento devuelve el mismo proyecto. Planeación y seguimiento no reescriben el presupuesto aceptado ni representan compras, cobros, inventario o entrega física.
 
 ## Construir y comprobar
 
-Requiere Node.js; el build y las pruebas de dominio no instalan dependencias.
+La construcción usa Node.js. Las pruebas del servicio local usan el módulo integrado node:sqlite.
 
 ```text
 node tools/build.mjs
 node tools/build.mjs --check
 node tools/verify.mjs
-node --test --test-concurrency=1 --test-reporter=spec tests/domain.mjs tests/kpis.mjs tests/kpis-handlers.mjs tests/recipes.mjs tests/recipe-reference.mjs tests/recipe-workshop.mjs tests/wood-pieces.mjs tests/wood-presentation.mjs tests/row-layout.mjs tests/boards.mjs tests/project-operations.mjs tests/project-handlers.mjs
 ```
 
-El build genera un único `index.html` con fuentes, imágenes, estilos y scripts incrustados. `--check` no escribe y rechaza una salida distinta. La fuente histórica D85 permanece congelada; las adaptaciones viven en módulos de extensión. La política de contenido bloquea conexiones externas, frames y envíos de formularios. Las pruebas de VM no prueban autorización, persistencia real ni presentación visual.
+En PowerShell, la suite de Node se ejecuta con todas las pruebas de primer nivel salvo el recorrido de Edge.
+
+```powershell
+$pruebas = (Get-ChildItem tests -Filter *.mjs -File | Where-Object Name -ne acceptance.mjs).FullName
+node --test --test-concurrency=1 --test-reporter=spec $pruebas
+```
+
+El build genera `index.html` con fuentes, estilos y scripts de la aplicación. Las fotos y miniaturas se cargan desde las carpetas de imágenes del mismo sitio cuando se consulta el catálogo. `--check` no escribe y rechaza una salida distinta. La fuente histórica D85 permanece congelada; las adaptaciones viven en módulos de extensión. La política de contenido bloquea conexiones externas, frames y envíos de formularios. Las pruebas de VM no prueban autorización, persistencia real ni presentación visual.
 
 La corrida de la publicación inicial (`0027b3a5`) aprobó **209/209 pruebas Node**, sin fallos ni omisiones, y los verificadores de construcción reproducible y seguridad estática. HTML de ese checkpoint SHA-256: `9e66748008689c16ae92ce752886a1ac50f792d9e44e8e68c7955c4e2b013365`. Los resultados de cada ejecución se conservan localmente en `artifacts/`, excluido de Git. La aceptación visual de una corrección posterior no se atribuye a pruebas de checkpoints anteriores.
 
 `tests/acceptance.mjs` contiene la aceptación de navegador y necesita un entorno autorizado con Playwright y Chromium ya disponibles. El 21 de noviembre se ejecutó en Edge la prueba «Florencia móvil» a 360, 390 y 468 px sobre el HTML local. Comprueba el ancho del documento, el acceso a la última columna y el foco al editar tarifas. Se puede repetir con `DEMO_TEST_FILTER=Florencia m` y `DEMO_BROWSER_CHANNEL=msedge`.
+
+Para ejecutar la aceptación completa en Edge, quita el filtro de la sesión de PowerShell.
+
+```powershell
+$env:DEMO_BROWSER_CHANNEL = 'msedge'
+Remove-Item Env:DEMO_TEST_FILTER -ErrorAction SilentlyContinue
+node tests/acceptance.mjs
+node tests/browser/public-pages.mjs
+```
+
+Con `PAGES_TEST_URL=https://gusvann.github.io/duco-cotizaciones-demo/`, la segunda prueba usa Pages y comprueba que el navegador recibió el HTML de esta versión. Utiliza un perfil temporal y datos ficticios.
+
+Los recorridos de edición usan la cantidad en la cabecera, el desplegable **Datos del artículo** y los controles **Confirmar cambios** y **Descartar** de la pieza. La aceptación por HTTP comprueba el guardado y la reapertura en el mismo perfil de Edge, la conversión y las imágenes del catálogo.
 
 ## Publicación y recuperación
 

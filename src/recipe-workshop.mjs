@@ -160,12 +160,15 @@ function installWorkshop(calculator) {
       values['finish.'+i+'.enabled']=!!row;values['finish.'+i+'.hands']=row?(i===0?'2':'1'):'';
       values['finish.'+i+'.yield']=row?'7':i===2?'15':'';values['finish.'+i+'.price']=row?.unitPrice??'';
     });
+    Object.assign(values,recipe?.workshopDefaults?.values);
     return {version:1,values,dayNames:names};
   }
-  function state(itemId) {
+  function state(itemId,persist=false) {
     const local=solidWoodState(itemId);if(!local)return null;
-    if(!local.workshop)local.workshop=defaults(itemId);
-    return local.workshop;
+    if(local.workshop)return local.workshop;
+    const initial=defaults(itemId);
+    if(persist)local.workshop=initial;
+    return initial;
   }
   function geometry(itemId) {
     return solidWoodEntries(itemId,true).map(piece=>{
@@ -198,7 +201,7 @@ function installWorkshop(calculator) {
   }
   function tableHead(labels,helps={},itemId='',group='labor'){return '<div class="workshop-table-head">'+labels.map((label,index)=>'<span>'+esc(label)+(helps[index]?help(itemId,group,helps[index],'Ayuda de '+label):'')+'</span>').join('')+'</div>';}
   function section(itemId,key,index,title,body,subtotal,tip='') {
-    const panels=app.breakdownUi.panels||{},open=Object.hasOwn(panels,itemId+'|workshop-'+key)?panels[itemId+'|workshop-'+key]:true;
+    const open=app.breakdownUi.panels?.[itemId+'|workshop-'+key] === true;
     const amount=money(subtotal.totalCents)+(subtotal.partial&&subtotal.totalCents!==null?' · parcial':'');
     return '<details class="workshop-block" data-fab-item="'+esc(itemId)+'" data-fab-panel="workshop-'+esc(key)+'"'+(open?' open':'')+'><summary><span class="workshop-number">'+esc(index)+'</span><span>'+esc(title)+'</span>'+(tip?'<span class="workshop-info" tabindex="0" aria-label="'+esc(tip)+'" title="'+esc(tip)+'">i</span>':'')+'<output class="workshop-subtotal" data-workshop-live="subtotal-'+esc(key)+'">'+amount+'</output></summary><div class="workshop-block-body">'+body+'</div></details>';
   }
@@ -273,7 +276,7 @@ function installWorkshop(calculator) {
     let value=target.type==='checkbox'?target.checked:target.value;
     if(monetaryKey(key)){try{value=moneyInputValue(value);}catch(_){/* Invalid grouping stays visible for correction. */}}
     if(key==='domino.componentId'&&value&&!solidWoodEntries(itemId,true).some(piece=>piece.id===value))return;
-    stored.values[key]=value;
+    if(stored.values[key]!==value)state(itemId,true).values[key]=value;
     // Keep invalid raw values in their own article; never coerce them to zero.
     target.setAttribute?.('aria-invalid',String(!calculator.valid(key,value)));
     refresh(itemId);

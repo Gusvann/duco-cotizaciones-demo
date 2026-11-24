@@ -1,4 +1,4 @@
-/* Synthetic demo adapter. Memory only; the unmodified domain calculates cents. */
+/* Quote editing adapter. The domain calculates cents and the host confirms writes. */
 (function () {
   'use strict';
   const c = window.__client;
@@ -8,6 +8,8 @@
   const phone = window.DemoPhone;
   if (typeof phone?.analyze !== 'function') throw new Error('Catálogo de teléfono no disponible.');
   const { app, D } = c, M = window.QuoteManufacturing_, S = window.QuoteSchema;
+  const privatePreview=Boolean(window.DucoPrivateApi);
+  const persistentCapture=privatePreview||Boolean(window.DemoBrowserStore);
   function clone(value) {
     if (typeof value === 'function') return null; // DOM continuations belong to the currently open view.
     if (value == null || typeof value !== 'object') return value;
@@ -17,7 +19,7 @@
     return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, clone(child)]));
   }
   const entries = new Map(), listeners = new Set();
-  let active = '', profile = 'account', queued = false, serial = 0;
+  let active = '', profile = 'account', queued = false, serial = 0, localRole='';
   const uid = prefix => prefix + '-DEMO-' + (++serial);
   const HOST = () => document.getElementById('quote-host');
   const account = { email: 'account@example.test', name: 'Account de ejemplo', role: 'Account', state: 'Activo' };
@@ -88,6 +90,7 @@
 
   function configure(state) {
     state.token = 'DEMO_MEMORY_ONLY'; state.user = user(); state.capability = { manufacturingReady: true, processCatalogReady: true };
+    if(privatePreview)state.localAuthenticatedRole=localRole;
     state.articleStudyVariant = 'panel'; state.panelInterior = 'current';
     state.scopeUatConfig = scopeConfig();
     // Request text is the source: opening the editor must not replace it with UAT seed text.
@@ -128,6 +131,19 @@
     if (state.breakdownEditor?.solidWoodF && !rows.some(row => row.id === state.breakdownEditor.solidWoodF.id)) rows.push(state.breakdownEditor.solidWoodF);
     return rows;
   }
+  function localWoodSnapshot(state) {
+    const items=new Map(state.q.items.map(item=>[item.id,new Set()]));
+    for(const row of state.q.manufacturing?.items||[]){
+      const materials=items.get(row.itemId);
+      for(const material of row.materials)materials?.add(material.id);
+    }
+    return [...(state.solidWoodLocal?.articles||[])].flatMap(([id,local])=>{
+      if(!items.has(id))return [];
+      const applied=local.applied||[],workshop=local.workshop||null;
+      const boardSettings=Object.fromEntries(Object.entries(local.boardSettings||{}).filter(([piece])=>items.get(id).has(piece)));
+      return applied.length||workshop||Object.keys(boardSettings).length?[[id,{applied,workshop,boardSettings}]]:[];
+    });
+  }
   function pending(entry) {
     const state = currentState(entry);
     if (entry.id === active && typeof c.partDraftDirty === 'function') return c.partDraftDirty();
@@ -141,27 +157,46 @@
       for (const key of ['location', 'contactPhone', 'contactEmail', 'need', 'included', 'excluded', 'quoteDue', 'deliveryDate']) entry.request[key] = q[key];
       for (const key of ['account', 'designer']) entry.request[key] = state.lineCatalog.users.find(row => row.id === q[key])?.name || q[key];
     }
-    return JSON.stringify({ quote: q, wood: woodEntries(state), recipeArticles: state.syntheticRecipes?.articles || {}, request: entry.request });
+    return JSON.stringify({quote:q,wood:woodEntries(state),woodSnapshot:persistentCapture?localWoodSnapshot(state):null,
+      recipeArticles:state.syntheticRecipes?.articles||{},request:entry.request});
   }
   function touch(entry) { const value = fingerprint(entry); if (entry.lastFingerprint !== value) { entry.revision++; entry.lastFingerprint = value; } return value; }
+  function draftSaveBlockers(state, hasPending) {
+    const reasons = [];
+    if (state.inputErrors?.size) reasons.push('Corrige los campos marcados antes de guardar.');
+    else if (hasPending) reasons.push(state.breakdownEditor?.solidWoodF
+      ? 'Confirma o descarta los cambios de la pieza de madera en edición.'
+      : 'Completa o descarta la captura pendiente del artículo antes de guardar.');
+    if (phone.analyze(state.q?.contactPhone).ambiguous) reasons.push('Revisa el teléfono para separar la posible extensión.');
+    if (!persistentCapture && woodEntries(state).length) reasons.push('La captura de madera solo se conserva en la sesión y todavía no se puede guardar en el borrador.');
+    return reasons;
+  }
   function summary(id) {
     const entry = get(id), state = currentState(entry); touch(entry);
-    const blockers = [];
-    const phoneNeedsReview = phone.analyze(state.q?.contactPhone).ambiguous;
-    if (phoneNeedsReview) blockers.push('Revisa el teléfono para retirar la posible extensión.');
-    let evaluated = null;
-    try { evaluated = D.evaluate(state.q, { base: state.baseQuote, preview: true, date: '2026-10-14' }); }
-    catch (error) { blockers.push(error.message || 'Revisa los datos capturados.'); }
-    if (evaluated) blockers.push(...evaluated.issues.map(issue => issue.message));
-    if (woodEntries(state).length) blockers.push('Madera: el costo y su guardado siguen pendientes. No se guardará parcialmente.');
     const hasPending = pending(entry);
-    if (hasPending) blockers.push('Hay captura sin aplicar en el artículo.');
-    if (state.inputErrors?.size) blockers.push('Hay entradas inválidas sin resolver.');
+    const saveBlockers = draftSaveBlockers(state, hasPending);
+    const blockers = [];
+    let workflowIssues = [];
+    let evaluated = null;
+    try {
+      const date = '2026-10-14';
+      evaluated = D.evaluate(state.q, { base: state.baseQuote, preview: true, date });
+      workflowIssues = window.DemoQuoteIssues.collect(state.q, evaluated, { inputErrors: state.inputErrors?.values(), scopeState: state.scopeUatState, date });
+    } catch {
+      workflowIssues = [{ key:'evaluation', code:'EVALUATION_FAILED', severity:'error', step:4,
+        message:'No se pudieron comprobar los datos de esta cotización.', field:'', itemId:'', target:{ entity:'quote', entityId:id, field:'' } }];
+    }
+    if (evaluated?.structuralValid === false && !saveBlockers.length) {
+      saveBlockers.push(workflowIssues.find(issue => issue.severity === 'error')?.message || 'Corrige los datos inválidos antes de guardar.');
+    }
+    blockers.push(...workflowIssues.filter(issue => issue.severity === 'error').map(issue => issue.message));
+    blockers.push(...saveBlockers);
     if (entry.saveState === 'unknown') blockers.push('Resultado del guardado pendiente de confirmar.');
     const totals = evaluated?.totals;
     return {
       costCents: totals?.cost ?? null, priceCents: totals?.net ?? null, taxCents: totals?.tax ?? null, totalCents: totals?.total ?? null,
-      complete: !!evaluated?.structuralValid && !!evaluated?.calculationsComplete && !evaluated?.issues.length && !woodEntries(state).length && !hasPending && !state.inputErrors?.size && !phoneNeedsReview,
+      complete: !!evaluated?.structuralValid && !!evaluated?.calculationsComplete && blockers.length === 0,
+      canSaveDraft: !locked(entry) && saveBlockers.length === 0, saveBlockers, workflowIssues,
       blockers: [...new Set(blockers)], revision: entry.revision, savedRevision: entry.savedRevision,
       hasPending, dirty: fingerprint(entry) !== entry.savedFingerprint, saveState: entry.saveState,
     };
@@ -180,8 +215,9 @@
     const state = clone(initialApp), req = normalizeRequest(request);
     configure(state); state.q = fixture(id, req); state.baseQuote = null;
     if (options.clientId != null) {
-      if (typeof options.clientId !== 'string' || !/^[A-Za-z0-9_-]{3,80}$/.test(options.clientId)) throw new Error('Cliente sintético inválido.');
+      if (!(privatePreview&&options.clientId==='')&&(typeof options.clientId !== 'string' || !/^[A-Za-z0-9_-]{3,80}$/.test(options.clientId))) throw new Error('Identificador de cliente inválido.');
       state.q.client.id = options.clientId;
+      if(privatePreview&&!options.clientId)state.q.client.status='';
     }
     if (options.unitPriceCents != null) {
       if (!Number.isSafeInteger(options.unitPriceCents) || options.unitPriceCents < 0) throw new Error('Precio sintético inválido.');
@@ -201,13 +237,16 @@
     if (scenario === 'wood') seedWood(state);
     if(options.emptyArticles){
       state.q.items=[];state.q.manufacturing.items=[];
-      state.q.needs=state.q.needs.filter(need=>!need.itemId);
+      state.q.needs=state.q.needs.filter(need=>!need.itemId).map(need=>({...need,confirmedHash:'',confirmedBy:'',confirmedAt:''}));
       state.q.costs=state.q.costs.filter(cost=>!cost.itemId&&!cost.id?.startsWith('CST_MFG_'));
       state.q.resources=state.q.resources.filter(resource=>!resource.itemId);
       state.q.workUnits=state.q.workUnits.filter(work=>!work.itemId);
       state.q.scopeReview.confirmations=[];
       // Rebuild generated coverage and general costs against the now-empty request.
       state.q=M.apply(state.q);
+    } else if (state.q.needs.some(need => need.confirmedHash)) {
+      // Seeded examples carry existing scope decisions, including before the first draft save.
+      state.baseQuote=clone(state.q);
     }
     const entry = { id, scenario, request: req, state, revision: 1, savedRevision: 0, savedFingerprint: '', saved: null, pendingSave: null, saveState: 'idle', frozen: false, lastFingerprint: '' };
     entries.set(id, entry); entry.lastFingerprint = fingerprint(entry); return summary(id);
@@ -239,12 +278,37 @@
     app.step = step; render(get(active)); notify(); return true;
   }
   function snapshot(id) { return clone(get(id).saved); }
-  function snapshotCandidate(entry) {
-    const state = currentState(entry), evaluation = summary(entry.id);
-    // Only the canonical quote is serializable. F state is explicitly blocked before this function.
-    return { quote: clone(D.sanitize(state.q)), summary: clone(evaluation), request: clone(entry.request) };
+  function snapshotCandidate(entry, evaluation) {
+    const state = currentState(entry);
+    const snapshot={quote:clone(D.sanitize(state.q)),summary:{...clone(evaluation),dirty:false,saveState:'success',savedRevision:entry.revision},request:clone(entry.request)};
+    if(persistentCapture){
+      snapshot.local={wood:clone(localWoodSnapshot(state)),recipeArticles:clone(state.syntheticRecipes?.articles||{}),lineOrigins:[...(state.lineOrigins||[])].map(clone),
+        baseQuote:clone(state.baseQuote),scope:clone(state.scopeUatState||null)};
+    }
+    return snapshot;
   }
-  function confirmSave(entry, operation) {
+  function hydrate(record,snapshot) {
+    if(!persistentCapture||entries.has(record.id)||!snapshot?.quote)return false;
+    create(record.id,'complete',record.request,{emptyArticles:true});
+    const entry=get(record.id),state=entry.state,local=snapshot.local;
+    state.q=D.sanitize(snapshot.quote);
+    state.baseQuote=clone(local?.baseQuote||null);
+    state.meta={...state.meta,number:record.version};
+    state.step=record.quoteStep||1;
+    state.lineOrigins=new Map(local?.lineOrigins||[]);
+    state.syntheticRecipes={context:context(state),articles:clone(local?.recipeArticles||{})};
+    state.solidWoodLocal={context:context(state),articles:new Map(local?.wood||[])};
+    state.scopeUatState=clone(local?.scope||null);
+    state.scopeUatSeedUsed=true;
+    state.dirty=false;
+    entry.saved=clone(snapshot);
+    entry.revision=entry.savedRevision=snapshot.summary.savedRevision;
+    entry.savedFingerprint=entry.lastFingerprint=fingerprint(entry);
+    entry.saveState='success';
+    entry.frozen=Boolean(record.sent);
+    return true;
+  }
+  async function confirmSave(entry, operation) {
     touch(entry);
     if (operation.fingerprint !== fingerprint(entry) || operation.revision !== entry.revision) {
       entry.saveState = 'conflict'; entry.pendingSave = null;
@@ -252,6 +316,18 @@
       notify(entry.id);
       return { ok: false, state: 'conflict', summary: summary(entry.id), snapshot: snapshot(entry.id) };
     }
+    if(operation.persist) {
+      try {await operation.persist(clone(operation.snapshot));}
+      catch(error){
+        if(entries.get(entry.id)!==entry)return {ok:false,state:'reset'};
+        entry.saveState=error.status===409?'conflict':error.status?'failed':'unknown';
+        if(entry.saveState!=='unknown')entry.pendingSave=null;
+        if(active===entry.id)paintLock(entry);
+        notify(entry.id);
+        return {ok:false,state:entry.saveState,summary:summary(entry.id),snapshot:snapshot(entry.id)};
+      }
+    }
+    if(entries.get(entry.id)!==entry)return {ok:false,state:'reset'};
     entry.saved = clone(operation.snapshot); entry.savedRevision = operation.revision; entry.savedFingerprint = operation.fingerprint;
     entry.saveState = 'success'; entry.pendingSave = null;
     const state = currentState(entry); state.dirty = false; state.storedEvaluation = D.evaluate(state.q, { base: state.baseQuote, preview: true, date: '2026-10-14' }); state.storedTotals = clone(state.storedEvaluation.totals);
@@ -259,13 +335,14 @@
     if (active === entry.id) render(entry);
     notify(entry.id); return { ok: true, state: 'success', summary: summary(entry.id), snapshot: snapshot(entry.id) };
   }
-  async function save(id, outcome = 'success') {
-    const entry = get(id), state = currentState(entry);
+  async function save(id, outcome = 'success', persist = null) {
+    const entry = get(id);
     if (!['success', 'fail', 'unknown'].includes(outcome)) throw new Error('Resultado de guardado inválido.');
     if (entry.frozen || entry.saveState === 'unknown' || entry.saveState === 'pending') return { ok: false, state: entry.saveState, summary: summary(id), snapshot: snapshot(id) };
     if (id === active) c.rowAutoFlush?.({onlyScheduled:true});
-    if (pending(entry) || woodEntries(state).length || state.inputErrors?.size || phone.analyze(state.q?.contactPhone).ambiguous) return { ok: false, state: 'blocked', summary: summary(id), snapshot: snapshot(id) };
-    const operation = { id: uid('SAVE'), snapshot: snapshotCandidate(entry), revision: entry.revision, fingerprint: fingerprint(entry) };
+    const readiness = summary(id);
+    if (!readiness.canSaveDraft) return { ok: false, state: 'blocked', summary: readiness, snapshot: snapshot(id) };
+    const operation = { id: uid('SAVE'), snapshot: snapshotCandidate(entry, readiness), revision: entry.revision, fingerprint: fingerprint(entry), persist };
     entry.pendingSave = operation; entry.saveState = 'pending'; if (active === id) paintLock(entry); notify(id);
     await Promise.resolve();
     if (entries.get(id) !== entry) return { ok: false, state: 'reset', summary: null, snapshot: null };
@@ -307,6 +384,14 @@
   function reset() { c.rowAutoCancel?.(); entries.clear(); active = ''; serial = 0; profile = 'account'; Object.assign(app, clone(initialApp)); configure(app); if (HOST()) { HOST().inert = false; const workspace = document.getElementById('workspace'); if (workspace) workspace.replaceChildren(); } }
 
   window.DemoLocalApi = async function (action, input = {}) {
+    if (privatePreview) {
+      const privateApi=window.DucoPrivateApi;
+      if(action==='search'&&input.kind==='suppliers')return privateApi.suppliers(input.query||'');
+      if(action==='search'&&input.kind==='clients')return privateApi.clients(input.query||'');
+      if(action==='clientContact')return privateApi.clientContact(input.clientId);
+      if(action==='clientCreate')return privateApi.clientCreate(input);
+      if(action==='clientCreateStatus')return privateApi.clientCreateStatus(input.requestId);
+    }
     if (action === 'search' && ['clients', 'users'].includes(input.kind)) {
       const query = String(input.query || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const rows = input.kind === 'users' ? [{ id: account.email, name: account.name, role: account.role, status: 'Activo' }, { id: designer.email, name: designer.name, role: designer.role, status: 'Activo' }] : [...new Map([...entries.values()].map(entry => [entry.state.q.client.id,{ id: entry.state.q.client.id, name: entry.request.client, status: 'Activo' }])).values()];
@@ -316,7 +401,9 @@
     if (action === 'processTariffs') return { items: [], next: null, total: 0, fixture: 'SYNTHETIC_DEMO' };
     const error = new Error('Acción no disponible. No hay conexión con este servicio.'); error.code = 'DEMO_ONLY'; throw error;
   };
-  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, leave, applyPending, discardPending, freeze, revise, reset, setProfile, canEdit,
+  function thaw(id) {const entry=get(id);entry.frozen=false;if(active===id)paintLock(entry);}
+  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, leave, applyPending, discardPending, freeze, thaw, hydrate, revise, reset, setProfile, canEdit,
+    setLocalUser(user){if(privatePreview)localRole=user?.role||'';},
     onChange(callback) { listeners.add(callback); return () => listeners.delete(callback); } };
   for (const eventName of ['input', 'change', 'click']) document.addEventListener(eventName, event => { if (HOST()?.contains(event.target)) scheduleNotify(); });
   // Native navigation may finish after an awaited handler. Observe its committed

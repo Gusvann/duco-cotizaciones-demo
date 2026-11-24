@@ -48,7 +48,13 @@ El cotizador suma los importes a su precisión de origen y redondea al presentar
 4. **Conservar las discrepancias de origen junto a la pieza.** En Bolonia, la unidad de la tuerca inserto se corrigió a PZA por confirmación del propietario. En Bent Legs, la nota de espesor permite revisar la diferencia con el plano.
 5. **Identificar las pruebas por familia.** Madera, Tableros y Herrería ahora comparten estilos. La prueba móvil de Florencia localiza la familia de madera mediante `data-article-fold="wood"`; buscar el estilo compartido seleccionaba tres paneles. La prueba sigue comprobando el foco y la última columna a 360, 390 y 468 px.
 
-## Verificación del corte
+## Catálogo de prueba del 24 de noviembre de 2026
+
+La galería y el selector de artículos comparten la identidad de cada variante, su ilustración y sus medidas terminadas. Las recetas públicas usan partidas y tarifas ficticias para practicar la captura, el escalado y la conversión. La edición privada carga por separado los despieces de fabricación y sus tarifas históricas.
+
+Las 34 ilustraciones de la primera serie mantienen su identificador. Las siguientes tienen una foto WebP y una miniatura WebP; sus hashes se comprueban en el manifiesto de imágenes. Una variante conserva su fotografía al cambiar el precio o la cantidad cotizada. Los tonos de tapicería representativos se identifican en la ficha.
+
+## Verificación histórica del rediseño de despieces
 
 HTML de la vista revisada, SHA-256 `dce0c13ea1261c200b1cfe9024075d477caa6b601dd95e635b8fec7d50da460c`. La receta normalizada vive en [recipe-reference.js](../src/recipe-reference.js), la geometría y los costos en [fabrication-costs.mjs](../src/fabrication-costs.mjs) y [board-calculator.mjs](../src/board-calculator.mjs), y la edición por rubro en [row-variant.mjs](../src/row-variant.mjs).
 

@@ -3,26 +3,19 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash,randomUUID} from 'node:crypto';
 import vm from 'node:vm';
-import {extendRecipes} from '../tools/recipe-extension.mjs';
-import {extendRecipePresentation} from '../src/recipe-presentation.mjs';
-import {extendPhone} from '../tools/phone-extension.mjs';
-import {extendWoodPieces} from '../tools/wood-pieces-extension.mjs';
-import {extendArticleMeasures} from '../tools/article-measure-extension.mjs';
-import {extendRowVariant} from '../src/row-variant.mjs';
-import {extendSessionAutosave} from '../src/session-autosave.mjs';
-import {extendViewPolish} from '../src/view-polish.mjs';
-import {extendRecipeWorkshop} from '../src/recipe-workshop.mjs';
+import {quoteTemplate} from '../tools/build.mjs';
 
 // Commercial catalog identities and D91 recipe preview with unconfirmed historical economics. The actual transformed D85 client, domain and
 // bridge execute in a Node VM with a DOM substitute. This is not browser QA.
 const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const native=read('src/cotizador.html');
 const referenceSource=read('src/recipe-reference.js');
+const expansionSource=read('src/public-product-catalog.js')+'\n'+read('src/recipe-expansion.js');
 const catalogSource=read('src/recipe-catalog.js');
 const bridgeSource=read('src/quote-bridge.js');
 const portfolioSource=read('src/portfolio-kpis.js'),journeySource=read('src/journey.js');
 const operationsSource=read('src/project-operations.js'),projectViewsSource=read('src/project-views.js');
-const extended=extendRecipeWorkshop(extendViewPolish(extendSessionAutosave(extendRowVariant(extendArticleMeasures(extendPhone(extendWoodPieces(extendRecipePresentation(extendRecipes(native)))))))));
+const extended=quoteTemplate(native);
 const scripts=[...extended.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1]);
 const plain=value=>value==null?value:JSON.parse(JSON.stringify(value));
 const request=()=>({title:'Recorrido de receta inventada',client:'Cliente ficticio',contact:'Contacto ficticio',need:'Explorar recetas sintéticas sin servicios.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-21',deliveryDate:'2026-11-12'});
@@ -35,6 +28,317 @@ function editPart(h,itemId,field,value,type='text'){
   assert.ok(index>=0);assert.equal(h.c.partInput(input({path:'items.'+index+'.'+field},value,type),false),true);
 }
 const itemRow=(quote,id)=>quote.manufacturing.items.find(row=>row.itemId===id);
+test('the previous 34-slot catalog imports independent article recipes with documentary estimates',async()=>{
+  const h=harness({expansion:true});
+  const variants=h.R.products.flatMap(product=>product.variants);
+  assert.equal(variants.length,34);
+  assert.equal(new Set(variants.map(variant=>variant.imageId)).size,34);
+  const additions=variants.filter(variant=>variant.id.startsWith('SYN-CATALOG-'));
+  assert.equal(additions.length,27);
+  for(const variant of additions){
+    const quoteId='COMPLETE-'+variant.id;
+    const recipe=h.R.recipe(variant.recipeId);
+    const parts=recipe.wood.length+recipe.boards.length+recipe.metal.length+recipe.hardware.length;
+    assert.ok(parts>0,variant.id);
+    assert.equal(recipe.documentary.financialConfirmed,false);
+    assert.ok(Number(recipe.referenceTotals.amount)>0);
+    assert.ok(recipe.commercialNotes.length);
+    h.open(quoteId);
+    const {itemId}=await h.select(variant.id);
+    assert.ok(itemId,variant.id);
+    const row=itemRow(h.c.app.q,itemId);
+    assert.equal(row.materials.length,recipe.boards.length+recipe.metal.length+recipe.hardware.length,variant.id);
+    assert.equal(row.processes.length,recipe.processes.length,variant.id);
+    assert.equal(h.c.app.solidWoodLocal.articles.get(itemId).applied.length,recipe.wood.length,variant.id);
+    editPart(h,itemId,'quantity','2','number');
+    assert.equal(h.c.rowAutoFlush(),true,variant.id+' '+(h.c.app.partDraft?.error||''));
+    assert.equal(h.c.app.q.items.find(item=>item.id===itemId).quantity,'2',variant.id);
+    assert.equal(h.Q.leave(quoteId).ok,true,variant.id);
+  }
+});
+
+test('a Verde copy retains its wood species and scales hide purchases and upholstery only once',async()=>{
+  const h=harness({expansion:true});
+  const variantId='SYN-CATALOG-20',recipe=h.R.recipe('R-'+variantId);
+  assert.equal(recipe.referenceTotals.amount,'500.00');
+  h.open();
+  const {itemId}=await h.select(variantId);
+  assert.equal(h.c.app.solidWoodLocal.articles.get(itemId).applied.map(piece=>piece.woodKind).join(','), 'Encino rojo,Pino');
+  const original=JSON.stringify(recipe);
+  editPart(h,itemId,'quantity','2','number');
+  assert.equal(h.c.rowAutoFlush(),true,h.c.app.partDraft?.error);
+  const row=itemRow(h.c.app.q,itemId);
+  const hide=row.materials.find(value=>value.purchaseUnit==='Lienzo');
+  assert.ok(hide);
+  assert.equal(hide.unit,'dm²');
+  assert.equal(hide.quantity,'250');
+  assert.equal(hide.purchaseQuantity,'2');
+  assert.equal(hide.unitPrice,'440.00');
+  assert.equal(h.c.D.sanitize(h.c.app.q).manufacturing.items.find(row=>row.itemId===itemId).processes[0].source.netAmount,'320.00');
+  assert.ok(h.c.recipeDirectoryHtml(h.c.app.q.items.find(item=>item.id===itemId)).includes('250 dm²'));
+  assert.equal(original,JSON.stringify(h.R.recipe('R-'+variantId)));
+});
+
+test('supply rows show per-article consumption and scale the separate purchase unit',async()=>{
+  const material={name:'Insumo de prueba',specification:'Envase de prueba',category:'Insumos',
+    quantityPerProduct:'120',unit:'mL',purchasePerProduct:'0.2',purchaseUnit:'PZA',unitPrice:'10'};
+  const h=harness({expansion:true,additionalSupply:material});
+  h.open();const {itemId}=await h.select('TEST-SUPPLY');
+  editPart(h,itemId,'quantity','2','number');
+  assert.equal(h.c.rowAutoFlush(),true);
+  const row=itemRow(h.c.app.q,itemId);
+  const testSupply=row.materials.find(m=>m.name==='Insumo de prueba');
+  assert.equal(testSupply.purchaseQuantity,'0.4');
+  assert.equal(testSupply.purchaseUnit,'PZA');
+  h.c.editor();
+  const html=h.nodes.get('workspace').innerHTML;
+  assert.match(html,/120 mL de consumo por artículo/);
+  assert.doesNotMatch(html,/0\.4 mL de consumo|PZA de consumo por artículo/);
+  await h.event('click',{breakAction:'edit-component',id:testSupply.id});
+  assert.equal(h.c.app.breakdownEditor?.value.id,testSupply.id);
+  const editing=h.nodes.get('workspace').innerHTML;
+  const editor=editing.slice(editing.indexOf('data-row-editor="'+testSupply.id+'"'));
+  assert.match(editor,/120 mL de consumo por artículo/);
+});
+
+test('pedestal uses plate paint, cut by gauge and the exact source amount before quantity rounding',async()=>{
+  const h=harness({expansion:true});
+  h.open();
+  const {itemId}=await h.select('SYN-CATALOG-11');
+  editPart(h,itemId,'quantity','1','number');
+  assert.equal(h.c.rowAutoFlush(),true);
+  h.c.editor();
+  const articleCost=()=>h.nodes.get('workspace').innerHTML.match(new RegExp('data-article-cost-status="'+itemId+'"[^>]*>([^<]+)'))?.[1];
+  // Plate $96, tube $100, rolling $30, cut 1.501 m at $12.33, supplies $218, assembly $160.
+  assert.match(articleCost(),/622\.51/);
+  await h.event('click',{headerIncrement:itemId});
+  assert.match(articleCost(),/1,245\.01/);
+  assert.match(h.nodes.get('workspace').innerHTML,/Corte láser 1\/2/);
+  const operations=h.c.recipeEntry(itemId).fabrication.metal.operations;
+  assert.equal(operations.find(operation=>operation.name.includes('1/2')).quantity,'1.501');
+});
+
+test('all catalog variants retain the copied finish and place missing sales terms in Precio',async()=>{
+  const h=harness();
+  const variants=h.R.products.flatMap(product=>product.variants);
+  assert.equal(variants.length,7);
+  for(const variant of variants){
+    const quoteId='TEST-'+variant.id;
+    h.open(quoteId);
+    const {itemId}=await h.select(variant.id);
+    editPart(h,itemId,'quantity','2','number');
+    assert.equal(h.c.rowAutoFlush(),true);
+    const item=h.c.app.q.items.find(row=>row.id===itemId);
+    assert.equal(item.finishes,variant.finishes);
+    assert.ok(item.finishes);
+    const issues=h.Q.summary(quoteId).workflowIssues;
+    const tax=issues.find(issue=>issue.target.entityId===itemId&&issue.target.field==='tax');
+    assert.equal(tax?.step,3);
+    assert.ok(!issues.some(issue=>issue.field==='payments' || issue.target.entityId===itemId && issue.target.field==='finishes'));
+    assert.ok(!issues.some(issue=>/calidad del|confirma la cobertura/i.test(issue.message)));
+    assert.equal(h.Q.leave(quoteId).ok,true);
+  }
+});
+test('a new article keeps its commercial descriptions and incomplete sales terms across a draft save',async()=>{
+  const h=harness(),id='DEMO-CUSTOM';
+  h.open(id);
+  h.c.lineAction('line-add',{dataset:{}});
+  const intent=h.c.productStart().match(/data-product-intent="([^"]+)"/)[1];
+  h.c.lineAction('line-new',{dataset:{productIntent:intent}});
+  const itemId=h.c.app.openPartId;
+  for(const [key,value] of [['description','Banco a medida'],['quantity','1'],['materials','Acero tubular'],['finishes','Pintura negra']]){
+    editPart(h,itemId,key,value,key==='quantity'?'number':'text');
+  }
+  assert.equal(h.c.rowAutoFlush(),true);
+  const ready=h.Q.summary(id);
+  assert.equal(ready.canSaveDraft,true,ready.saveBlockers.join(' '));
+  assert.equal(ready.complete,false);
+  assert.equal((await h.Q.save(id)).ok,true);
+  h.open('DEMO-OTHER');
+  assert.equal(h.Q.open(id),true);
+  const item=h.c.app.q.items.find(row=>row.id===itemId);
+  assert.equal(item.materials,'Acero tubular');
+  assert.equal(item.finishes,'Pintura negra');
+  assert.ok(h.Q.summary(id).workflowIssues.some(issue=>issue.itemId===itemId&&issue.step===3));
+});
+test('marking a new product as a prototype retains its margin and never applies the suggestion by itself',async()=>{
+  const h=harness(),id='DEMO-PROTOTYPE';
+  h.open(id);
+  h.c.lineAction('line-add',{dataset:{}});
+  const intent=h.c.productStart().match(/data-product-intent="([^"]+)"/)[1];
+  h.c.lineAction('line-new',{dataset:{productIntent:intent}});
+  const itemId=h.c.app.openPartId;
+  for(const [key,value] of [['description','Banco de prueba'],['quantity','1'],['materials','Acero tubular'],['finishes','Pintura negra']]){
+    editPart(h,itemId,key,value,key==='quantity'?'number':'text');
+  }
+  const index=h.c.app.q.items.findIndex(item=>item.id===itemId);
+  assert.match(h.nodes.get('workspace').innerHTML,/Es un prototipo/);
+  assert.equal(h.c.app.q.items[index].prototype,false);
+  const currentPrice=h.c.app.q.items[index].unitPrice;
+  const path='items.'+index+'.prototype';
+  await h.event('change',{path},'on',{...input({path},'on','checkbox'),checked:true,tagName:'INPUT'});
+  assert.equal(h.c.rowAutoFlush(),true);
+  h.Q.showStep(3);
+  assert.match(h.nodes.get('workspace').innerHTML,/Margen objetivo %/);
+  assert.match(h.nodes.get('workspace').innerHTML,/Precio sugerido pendiente/);
+  assert.equal(h.c.app.q.items[index].unitPrice,currentPrice);
+  assert.equal(h.c.app.q.items[index].prototypeMargin,'40');
+  assert.equal((await h.Q.save(id)).ok,true);
+  assert.equal(h.Q.snapshot(id).quote.items[index].prototype,true);
+  assert.equal(h.Q.snapshot(id).quote.items[index].prototypeMargin,'40');
+});
+test('Nueva solicitud starts without a placeholder customer and confirms a new customer in the native form',async()=>{
+  const h=harness({privatePreview:true});
+  const user={username:'account-prueba',role:'account'},customers=[];
+  h.sandbox.DucoPrivateApi={
+    initial:async()=>({user,records:[],coverage:null,clients:{},drafts:[]}),
+    clients:async query=>({items:customers.filter(client=>client.name.includes(query))}),
+    clientCreate:async input=>{
+      const client={id:'CL-FICTICIO-01',status:'Activo',name:input.name,contact:input.contact,contactPhone:input.contactPhone,contactEmail:input.contactEmail};
+      customers.push(client);return {client,requestId:input.requestId,found:true};
+    },
+    put:async()=>({revision:1}),
+  };
+  const {J,action}=await h.initJourney();
+  await action('new-request');
+  const id=J.inspect().records[0].id;
+  assert.equal(h.c.app.q.client.id,'');
+  assert.equal(J.inspect().records[0].clientId,'');
+  assert.ok(h.nodes.get('workspace').innerHTML.includes('Buscar cliente'));
+  await h.event('click',{action:'client-new'});
+  const button=h.nodes.get('workspace').innerHTML.match(/<button[^>]+data-action="client-new-submit"[^>]*>[^<]*<\/button>/)?.[0]||'';
+  assert.match(button,/Crear cliente/);assert.doesNotMatch(button,/disabled/);
+  for(const [key,value] of [['name','Cliente nuevo ficticio'],['contact','Contacto de prueba'],['contactEmail','contacto@example.test']]){
+    await h.event('input',{altaField:key},value,{tagName:'INPUT',type:'text'});
+  }
+  await h.event('click',{action:'client-new-submit'});
+  await h.bubbleToDocument('click');
+  assert.equal(h.c.app.q.client.id,'CL-FICTICIO-01');
+  assert.equal(h.c.app.q.contactEmail,'contacto@example.test');
+  assert.equal(h.c.app.q.name,'Nueva solicitud');
+  assert.equal(J.inspect().records[0].clientId,'CL-FICTICIO-01');
+  assert.equal((await h.Q.save(id)).ok,true);
+  assert.equal(h.Q.snapshot(id).quote.client.id,'CL-FICTICIO-01');
+  assert.equal(h.sandbox.DemoRecipeCatalog.products.length>0,true);
+});
+test('using the suggested prototype price changes the unit price and preserves the captured discount and tax',async()=>{
+  const h=harness();h.open();
+  const item=h.c.app.q.items[0];
+  Object.assign(item,{prototype:true,prototypeMargin:'40',discount:'10'});
+  const priceBefore=item.unitPrice,taxBefore=item.tax;
+  h.Q.showStep(3);
+  const html=h.nodes.get('workspace').innerHTML;
+  assert.ok(html.includes('Usar precio sugerido'),'A consolidated complete cost produces a suggestion');
+  assert.equal(html.match(/Precio unitario sugerido \$\s*([\d,.]+)/)?.[1],'2,590.20');
+  assert.equal(item.unitPrice,priceBefore);
+  const dataset={applyPrototypePrice:item.id};
+  await h.event('click',dataset,'',{closest(selector){return selector==='[data-apply-prototype-price]'?this:null;}});
+  assert.equal(item.unitPrice,'2590.20');
+  assert.equal(item.discount,'10');
+  assert.equal(item.tax,taxBefore);
+});
+test('adds a privately approved recipe from the current catalog and scales copied purchases once',async()=>{
+  const h=harness(),recipeId='R-SYN-NUBE-C',variantId='LINE-APPROVED',productId='LOCAL-APPROVED';
+  h.open();
+  let sequence=0;
+  const {groups,materials,wood,processes}=h.R.instantiate(recipeId,tag=>tag+'-SYN-APPROVED-'+ ++sequence,'2');
+  h.sandbox.DucoPrivateApi={catalog:async()=>({products:[{
+    id:productId,name:'Producto aprobado ficticio',family:'Productos autorizados',unit:'pieza',
+    variants:[{id:variantId,name:'Receta autorizada',articleLabel:'Producto aprobado ficticio',unit:'pieza',
+      description:'Variante aprobada para la prueba',materials:'Madera',finishes:'Barniz',specs:[],
+      localBreakdown:{articleQuantity:'2',groups,materials,processes,wood}}]
+  }]})};
+  const nonce=h.begin();
+  await new Promise(resolve=>setImmediate(resolve));
+  h.c.editor();
+  assert.ok(h.nodes.get('workspace').innerHTML.includes('Producto aprobado ficticio'),'The approved product appears in the catalog');
+  h.c.lineAction('line-select-product',{dataset:{product:productId}});
+  await h.event('change',{lineVariant:productId},variantId);
+  assert.equal(h.c.app.lineState.variantId,variantId);
+  h.c.lineAction('line-use',{dataset:{product:productId,productIntent:nonce}});
+  const itemId=h.c.app.openPartId;
+  const recipe=h.c.recipeEntry(itemId);
+  assert.equal(recipe?.source,'APPROVED_LOCAL_RECIPE',h.nodes.get('notice').textContent);
+  assert.equal(h.c.solidWoodEntries(itemId).length,wood.length);
+  const original=materials.find(material=>material.purchaseUnit&&material.purchaseQuantity);
+  const copy=itemRow(h.c.app.partDraft.quote,itemId).materials.find(material=>material.specification===original.specification);
+  assert.notEqual(copy.id,original.id);
+  assert.equal(copy.purchaseQuantity,'4');
+  editPart(h,itemId,'quantity','2','number');
+  assert.equal(itemRow(h.c.app.partDraft.quote,itemId).materials.find(material=>material.id===copy.id).purchaseQuantity,'8');
+  assert.equal(original.purchaseQuantity,'8');
+});
+test('line authorization requests identify the saved revision and the approval checkbox requires Dirección',async()=>{
+  const h=harness(),id='DEMO-LINE-AUTH';
+  h.open(id);
+  h.c.lineAction('line-add',{dataset:{}});
+  const intent=h.c.productStart().match(/data-product-intent="([^"]+)"/)[1];
+  h.c.lineAction('line-new',{dataset:{productIntent:intent}});
+  const itemId=h.c.app.openPartId,versionId=h.c.app.q.versionId;
+  for(const [key,value] of [['description','Banco de prueba'],['quantity','1'],['materials','Acero tubular'],['finishes','Pintura negra']]){
+    editPart(h,itemId,key,value,key==='quantity'?'number':'text');
+  }
+  assert.equal(h.c.rowAutoFlush(),true);
+  let request=null,canApprove=false,approveCount=0;
+  h.sandbox.DucoPrivateApi={
+    lineStatus:async()=>({request,canApprove}),
+    requestLine:async fields=>{
+      assert.deepEqual(plain(fields),{quoteId:id,itemId,versionId,revision:h.Q.summary(id).savedRevision});
+      request={id:'LINE-FICTICIO',status:'pending',versionId,revision:fields.revision};
+    },
+    approveLine:async fields=>{
+      approveCount++;assert.deepEqual(plain(fields),{id:'LINE-FICTICIO',revision:request.revision});
+      request={...request,status:'approved',approvedBy:'Dirección de prueba',approvedAt:'2026-11-24T20:00:00Z'};
+    }
+  };
+  const click=(localRecipeAction,checked=false)=>h.event('click',{localRecipeAction,itemId},'',{
+    closest(selector){if(selector==='[data-local-recipe-action]')return this;if(selector==='section')return {querySelector:()=>({checked})};return null;}
+  });
+  await click('request');
+  assert.equal(request,null);assert.match(h.nodes.get('notice').textContent,/Guarda la receta/);
+  assert.equal((await h.Q.save(id)).ok,true);
+  await click('request');
+  assert.equal(request.status,'pending');
+  assert.doesNotMatch(h.nodes.get('workspace').innerHTML,/Autorizar como producto de línea/);
+  await click('approve',true);
+  assert.equal(approveCount,0);
+  canApprove=true;
+  await click('status');
+  assert.match(h.nodes.get('workspace').innerHTML,/Autorizar como producto de línea/);
+  editPart(h,itemId,'description','Cambio todavía sin guardar','text');
+  await click('approve',true);
+  assert.equal(approveCount,0);
+  assert.match(h.nodes.get('notice').textContent,/revisión guardada/);
+  editPart(h,itemId,'description','Banco de prueba','text');
+  await click('approve');
+  assert.equal(approveCount,0);
+  await click('approve',true);
+  assert.equal(approveCount,1);
+  assert.match(h.nodes.get('workspace').innerHTML,/Producto de línea aprobado/);
+});
+test('a workshop-only edit updates the saved recipe revision and survives a reopen',async()=>{
+  const h=harness({privatePreview:true}),id='DEMO-WORKSHOP-REVISION';
+  h.open(id);
+  const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','1','number');
+  assert.equal(h.c.rowAutoFlush(),true);
+  assert.equal((await h.Q.save(id)).ok,true);
+  const first=h.Q.snapshot(id),revision=first.summary.savedRevision;
+  h.c.editor();
+  assert.equal(h.Q.summary(id).dirty,false,'Reading the workshop defaults is not an edit');
+  const field={workshopItem:itemId,workshopField:'labor.varnish.rate'};
+  await h.event('input',field,'205.50',{type:'text',tagName:'INPUT'});
+  assert.equal(h.Q.summary(id).dirty,true);
+  assert.equal((await h.Q.save(id)).ok,true);
+  const saved=h.Q.snapshot(id);
+  assert.ok(saved.summary.savedRevision>revision);
+  const workshop=snapshot=>snapshot.local.wood.find(([key])=>key===itemId)[1].workshop;
+  assert.equal(workshop(first),null);
+  assert.equal(workshop(saved).values['labor.varnish.rate'],'205.50');
+  h.open('DEMO-OTHER');h.Q.open(id);
+  assert.equal(h.c.workshopValues(itemId)['labor.varnish.rate'],'205.50');
+  assert.equal(h.Q.summary(id).dirty,false);
+});
 test('Florencia wood section totals reconcile to P1 at full precision and the header includes hardware once',async()=>{
   const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
   for(const [quantity,expectedWood,expectedArticle] of [['1','2,025.35','2,047.35'],['2','4,050.71','4,094.71']]){
@@ -89,6 +393,22 @@ test('an empty request can apply its first recipe without changing records outsi
   h.c.app.partDraft.quote.name='Cambio fuera del artículo';
   assert.equal(h.c.partApply(),false);
   assert.equal(h.c.app.q,quote);
+});
+test('completing one copy of a product leaves the other copy pending in the same quote',async()=>{
+  const h=harness();h.open();
+  const first=(await h.select('SYN-NUBE-C')).itemId;
+  editPart(h,first,'quantity','1','number');assert.equal(h.c.rowAutoFlush(),true);
+  const second=(await h.select('SYN-NUBE-C')).itemId;
+  assert.notEqual(first,second);
+  editPart(h,second,'quantity','1','number');assert.equal(h.c.rowAutoFlush(),true);
+  for(const field of ['days.2.quantity','days.3.quantity','labor.assembly.rate','labor.jointing.rate','labor.joinery.rate']){
+    await h.event('input',{workshopItem:second,workshopField:field},'0');
+  }
+  assert.equal(h.c.workshopRead(first).total.partial,true);
+  assert.equal(h.c.workshopRead(second).total.partial,false);
+  await h.event('input',{workshopItem:second,workshopField:'labor.joinery.rate'},'');
+  assert.equal(h.c.workshopRead(second).total.partial,true);
+  assert.equal(h.c.workshopRead(first).total.partial,true);
 });
 function renderedWoodQuantities(h,itemId){
   h.c.editor();
@@ -273,7 +593,11 @@ test('5 Nov board settings and edits remain isolated and invalid prices never sh
   h.Q.create('DEMO-OTHER-BOARDS','complete',request());assert.equal(h.Q.open('DEMO-OTHER-BOARDS'),true);
   h.Q.showStep(1);
   const next=await h.select('SYN-BOLONIA-R'),other=itemRow(h.c.app.partDraft.quote,next.itemId).materials.find(m=>m.section==='boards');
-  assert.notEqual(other.id,board.id);assert.equal(h.c.solidWoodState(next.itemId).boardSettings[other.id].sheetAreaM2,'2.88');
+  assert.notEqual(other.id,board.id);
+  await h.event('focusin',{rowOpen:'material',rowItem:next.itemId,rowId:other.id,rowField:'unitPrice'});
+  const otherRow=variantRow(h.nodes.get('workspace').innerHTML,other.id,'material');
+  assert.match(otherRow,/data-board-setting="sheetAreaM2"[^>]*value="2\.88"/);
+  assert.equal(h.c.solidWoodState(next.itemId).boardSettings?.[other.id],undefined);
   assert.equal(h.Q.snapshot('DEMO-OTHER-BOARDS'),null);
 });
 test('5 Nov duplicating a board copies its base settings without duplicating a purchase or changing the source',async()=>{
@@ -287,13 +611,14 @@ test('5 Nov duplicating a board copies its base settings without duplicating a p
   assert.equal(itemRow(h.c.app.partDraft.quote,itemId).materials.filter(m=>m.section==='boards').length,1);
   assert.equal(h.R.recipe('R-SYN-BOLONIA-R').boards.length,1);
 });
-function pureCatalog(images){
+function pureCatalog(images,{expansion=false}={}){
   const sandbox=vm.createContext({structuredClone,DemoRecipeImages:images});
   vm.runInContext(referenceSource,sandbox,{filename:'recipe-reference.js'});
+  if(expansion)vm.runInContext(expansionSource,sandbox,{filename:'recipe-expansion.js'});
   vm.runInContext(catalogSource,sandbox,{filename:'recipe-catalog.js'});
   return sandbox.DemoRecipeCatalog;
 }
-function harness({partDraftFault=false}={}){
+function harness({partDraftFault=false,expansion=false,publicCatalog=false,privatePreview=false,additionalSupply=null}={}){
   const nodes=new Map(),documentListeners=new Map();
   let document;
   const make=id=>({id,innerHTML:'',outerHTML:'',textContent:'',hidden:false,inert:false,open:false,disabled:false,dataset:{},style:{},listeners:new Map(),attributes:new Map(),
@@ -322,6 +647,12 @@ function harness({partDraftFault=false}={}){
     for(const key of ['fetch','XMLHttpRequest','WebSocket','localStorage','sessionStorage','indexedDB'])
       Object.defineProperty(globalThis,key,{get(){throw new Error('Forbidden external/storage API: '+key);}});`,sandbox);
   vm.runInContext(referenceSource,sandbox,{filename:'recipe-reference.js'});
+  if(expansion)vm.runInContext(expansionSource,sandbox,{filename:'recipe-expansion.js'});
+  if(additionalSupply){
+    const existing=sandbox.DemoRecipeExpansion[0];
+    sandbox.DucoPrivateRecipeUpdates={products:[],rows:[{...existing,id:'TEST-SUPPLY',hardware:[...existing.hardware,additionalSupply]}]};
+  }
+  if(publicCatalog)vm.runInContext(read('src/public-product-catalog.js'),sandbox,{filename:'public-product-catalog.js'});
   vm.runInContext(catalogSource,sandbox,{filename:'recipe-catalog.js'});
   vm.runInContext(read('src/country-codes.js'),sandbox,{filename:'country-codes.js'});
   vm.runInContext(read('src/demo-phone.js'),sandbox,{filename:'demo-phone.js'});
@@ -335,6 +666,8 @@ function harness({partDraftFault=false}={}){
       vm.runInContext('(function(QuotePartDraft){\n'+source+'\n})(__testPartDraft);',sandbox,{filename:'transformed-client-'+index+'.js'});
     }else vm.runInContext(source,sandbox,{filename:'transformed-client-'+index+'.js'});
   }
+  vm.runInContext(read('src/quote-issues.js'),sandbox,{filename:'quote-issues.js'});
+  if(privatePreview)sandbox.DucoPrivateApi={};
   vm.runInContext(bridgeSource,sandbox,{filename:'quote-bridge.js'});
   const c=sandbox.__client,Q=sandbox.DemoQuote,R=sandbox.DemoRecipeCatalog,host=nodes.get('quote-host');
   const event=async(type,dataset,value,options={},eventOptions={})=>{
@@ -451,7 +784,10 @@ test('article uses expandable family sections and shared headers without alterin
   assert.match(html,/data-article-study="desglose"/);
   assert.doesNotMatch(html,/<nav class="article-study-nav"/);
   assert.match(html,/<details class="article-study-fold" data-article-fold="supplies"[^>]* open>/);
-  assert.match(html,/<details class="article-study-fold" data-article-fold="wood"[^>]* open>/);
+  assert.doesNotMatch(html,/<details class="article-study-fold" data-article-fold="wood"[^>]* open>/);
+  const woodPanels=[...html.matchAll(/<details class="workshop-block"[^>]*>/g)];
+  assert.equal(woodPanels.length,6);
+  for(const panel of woodPanels)assert.doesNotMatch(panel[0],/ open>/);
   assert.match(html,/Dimensiones de materia prima/);
   assert.match(html,/rv-table-heading rv-grid/);assert.match(html,/rv-table-heading rv-grid rv-wood-grid/);
   assert.match(html,/rv-table-heading rv-grid rv-supply-grid/);
@@ -566,7 +902,8 @@ test('a linked provider and service are preserved until an explicit confirmed ch
   await h.event('click',{rowDetails:'material',rowItem:itemId,rowId:id});
   let html=variantRow(h.nodes.get('workspace').innerHTML,id,'material');
   assert.match(html,/<input readonly aria-readonly="true"[^>]*data-break-field="supplier"/);
-  assert.match(html,/Cambiar proveedor/);assert.match(html,/Otros datos de compra/);
+  assert.match(html,/Cambiar proveedor/);assert.doesNotMatch(html,/Otros datos de compra/);
+  assert.match(html,/data-break-field="taxRate"/);assert.match(html,/data-break-field="validUntil"/);
   h.c.breakdownSetField(input({breakField:'sku'},'SKU-FICTICIO'),false);
   assert.equal(h.c.breakdownSave(),true);
   assert.equal(itemRow(h.c.app.partDraft.quote,itemId).materials[0].providerId,'PROV-FICTICIO');
@@ -589,6 +926,43 @@ test('a linked provider and service are preserved until an explicit confirmed ch
   assert.equal(h.c.breakdownSave(),true);
   const saved=itemRow(h.c.app.partDraft.quote,itemId).materials[0];
   assert.equal(saved.supplier,'Proveedor nuevo ficticio');assert.equal(saved.providerId,'');assert.equal(saved.serviceId,'');
+});
+
+test('private supplier search waits for typing, ignores old results and saves the selected supplier ID',async()=>{
+  const h=harness();h.open();const {itemId}=await h.select('SYN-NUBE-C');
+  editPart(h,itemId,'quantity','1','number');
+  const [material,other]=itemRow(h.c.app.partDraft.quote,itemId).materials;
+  const calls=[];
+  h.sandbox.DucoPrivateApi={suppliers(){}};
+  h.sandbox.DemoLocalApi=async(action,input)=>{
+    assert.equal(action,'search');assert.equal(input.kind,'suppliers');
+    return new Promise(resolve=>calls.push({query:input.query,resolve}));
+  };
+  const callbacks=new Map();let sequence=0;
+  h.sandbox.setTimeout=(callback,delay)=>{
+    const id=++sequence;if(delay===240)callbacks.set(id,callback);return id;
+  };
+  h.sandbox.clearTimeout=id=>callbacks.delete(id);
+  const startSearch=()=>{const work=[...callbacks.values()];callbacks.clear();return Promise.all(work.map(callback=>callback()));};
+  await h.event('click',{rowDetails:'material',rowItem:itemId,rowId:material.id});
+  const html=variantRow(h.nodes.get('workspace').innerHTML,material.id,'material');
+  assert.match(html,/data-break-provider-query/);assert.doesNotMatch(html,/Otros datos de compra/);
+  const results={innerHTML:''};
+  const options={closest:selection=>selection==='.break-provider'?{querySelector:()=>results}:null};
+  await h.event('input',{breakProviderQuery:''},'ac',options);
+  assert.equal(calls.length,0);assert.match(results.innerHTML,/Buscando/);
+  const first=startSearch();
+  await h.event('input',{breakProviderQuery:''},'acero',options);
+  const second=startSearch();
+  assert.deepEqual(calls.map(call=>call.query),['ac','acero']);
+  calls[1].resolve({items:[{id:'PRV-ACERO',name:'Acero & socios'}]});await second;
+  calls[0].resolve({items:[{id:'PRV-ANTERIOR',name:'Anterior'}]});await first;
+  assert.match(results.innerHTML,/Acero &amp; socios/);assert.doesNotMatch(results.innerHTML,/Anterior/);
+  await h.event('click',{breakAction:'choose-provider',id:'PRV-ACERO'});
+  assert.equal(h.c.breakdownSave(),true);
+  const [changed,unchanged]=itemRow(h.c.app.partDraft.quote,itemId).materials;
+  assert.equal(changed.providerId,'PRV-ACERO');assert.equal(changed.supplier,'Acero & socios');
+  assert.equal(changed.unitPrice,material.unitPrice);assert.deepEqual(plain(unchanged),plain(other));
 });
 
 test('editing type and SKU applies only to the selected supply without changing its amount',async()=>{
@@ -700,7 +1074,7 @@ test('family headers show captured amounts, empty sections and incomplete drafts
   assert.equal(header('maquilas'),'Pendiente');
   for(const [field,value,type] of [['category','Corte láser madera','select-one'],['specification','Servicio ficticio','text'],['unit','Servicio','select-one'],['quantity','2','number'],['detail.unitPrice','3.50','number']])
     h.c.breakdownSetField(input({breakField:field},value,type),false);
-  h.c.editor();assert.match(header('maquilas'),/\$\s*7\.00 · por validar/);
+  h.c.editor();assert.match(header('maquilas'),/\$\s*7\.00 · estimado/);
   await h.event('click',{breakAction:'cancel-editor'});
   assert.match(header('maquilas'),/^\$\s*0\.00$/);
   assert.equal(JSON.stringify(h.c.app.q),quoteBefore,'Header totals do not apply or save the draft');
@@ -1164,24 +1538,32 @@ test('five D91 commercial variants have exact labels, materials, dimensions and 
   assert.equal(new Set(imageIds.map(id=>R.images[id])).size,5,'The preview is not one shared image silently reused for every variant');
 });
 
-test('the package PNG prelude matches all seven catalog images',()=>{
+test('the package image prelude matches all 34 catalog images',()=>{
   const manifest=JSON.parse(read('src/assets/catalogo-sintetico/manifest.json'));
-  assert.equal(manifest.source,'ImageGen');assert.equal(manifest.assets.length,7);
+  assert.equal(manifest.source,'ImageGen');assert.equal(manifest.assets.length,34);
+  assert.equal(new Set(manifest.assets.map(asset=>asset.sha256)).size,34);
   const images={};
   for(const asset of manifest.assets){
-    assert.equal(asset.file,asset.id+'.png');
+    const png=asset.file===asset.id+'.png';
+    assert.ok(png||asset.file===asset.id+'.jpg');
     assert.equal(asset.kind,'AI_GENERATED_SYNTHETIC_ILLUSTRATION');
     const bytes=readFileSync(new URL('../src/assets/catalogo-sintetico/'+asset.file,import.meta.url));
-    assert.equal(bytes.length,asset.bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),asset.sha256);
-    assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
-    assert.equal(bytes.readUInt32BE(16),asset.width);assert.equal(bytes.readUInt32BE(20),asset.height);
-    images[asset.id]='data:image/png;base64,'+bytes.toString('base64');
+    assert.equal(createHash('sha256').update(bytes).digest('hex'),asset.sha256);
+    if(png){
+      assert.equal(bytes.length,asset.bytes);
+      assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+      assert.equal(bytes.readUInt32BE(16),asset.width);assert.equal(bytes.readUInt32BE(20),asset.height);
+    }else{
+      assert.equal(bytes.subarray(0,3).toString('hex'),'ffd8ff');
+      assert.equal(bytes.subarray(-2).toString('hex'),'ffd9');
+    }
+    images[asset.id]='data:image/'+(png?'png':'jpeg')+';base64,'+bytes.toString('base64');
   }
-  const R=pureCatalog(images);
+  const R=pureCatalog(images,{expansion:true});
   assert.deepEqual(plain(Object.keys(R.images).sort()),manifest.assets.map(asset=>asset.id).sort());
   assert.equal(R.imageKinds['SYN-BOLONIA-R'],'IA');
   for(const asset of manifest.assets){
-    assert.equal(R.imageKinds[asset.id],'IA');assert.match(R.images[asset.id],/^data:image\/png;base64,/);
+    assert.equal(R.imageKinds[asset.id],'IA');assert.equal(R.images[asset.id],images[asset.id]);
     assert.equal(createHash('sha256').update(Buffer.from(R.images[asset.id].split(',')[1],'base64')).digest('hex'),asset.sha256);
   }
 });
@@ -1502,7 +1884,7 @@ test('documentary supplements omit duplicate wood and hardware tables without mu
   assert.equal(h.c.recipeSourceCostsHtml(h.c.app.q.items.find(row=>row.id===itemId)),html,'One-article historical reference is not an actual cost and does not scale with ordered quantity');
   assert.deepEqual(plain(itemRow(h.c.app.q,itemId).materials.map(row=>row.purchaseQuantity)),['8','8'],'Actual editable purchases still scale once');
   assert.deepEqual(plain(itemRow(h.c.app.q,itemId).processes),[]);
-  const summary=h.Q.summary('DEMO-RECIPE');assert.equal(summary.complete,false);assert.match(summary.blockers.join(' '),/Madera:/);
+  const summary=h.Q.summary('DEMO-RECIPE');assert.equal(summary.complete,false);assert.match(summary.saveBlockers.join(' '),/captura de madera.*guardar/);
   assert.equal((await h.Q.save('DEMO-RECIPE')).state,'blocked','Documentary subtotals do not accredit a complete saved quote');
 });
 
@@ -1570,12 +1952,12 @@ test('only confirmed native deletion removes a recipe preview and metadata; othe
   await remove(first.itemId);
   assert.equal(h.c.app.q.items.some(row=>row.id===first.itemId),false);assert.equal(h.c.app.solidWoodLocal.articles.has(first.itemId),false);assert.equal(h.c.recipeEntry(first.itemId),null);
   assert.deepEqual(plain(h.c.solidWoodState(second.itemId).applied),secondWood);assert.deepEqual(plain(h.c.recipeEntry(second.itemId)),secondMeta);
-  assert.match(h.Q.summary('DEMO-RECIPE').blockers.join(' '),/Madera:/,'Only the remaining recipe still blocks financial completion');
+  assert.match(h.Q.summary('DEMO-RECIPE').saveBlockers.join(' '),/captura de madera.*guardar/,'Only the remaining recipe still blocks financial completion');
   await remove(second.itemId);
   assert.equal(h.c.app.solidWoodLocal.articles.has(second.itemId),false);
   for(const [id,local] of h.c.app.solidWoodLocal.articles){assert.ok(h.c.app.q.items.some(item=>item.id===id));assert.equal(local.applied.length,0);}
   assert.deepEqual(plain(h.c.app.syntheticRecipes.articles),{});
-  assert.doesNotMatch(h.Q.summary('DEMO-RECIPE').blockers.join(' '),/Madera:/);
+  assert.doesNotMatch(h.Q.summary('DEMO-RECIPE').saveBlockers.join(' '),/captura de madera.*guardar/);
   assert.deepEqual(plain(h.c.app.q.items[0]),originalItem);assert.deepEqual(plain(h.c.app.q.manufacturing.items[0]),originalRow);
   assert.equal((await h.Q.save('DEMO-RECIPE')).ok,true,'The original fixture can save again after recipe cleanup');
 });
@@ -1627,7 +2009,7 @@ test('applying a recipe keeps F/CNC incomplete and does not enable review, sendi
   assert.equal(J.portfolio().totalCents,21000000);
   await action('open',{id:'DEMO-101'});h.Q.showStep(1);
   const {itemId}=await h.select('SYN-NUBE-C');editPart(h,itemId,'quantity','1','number');editPart(h,itemId,'unitPrice','500','number');assert.equal(h.c.partApply(),true);
-  const summary=h.Q.summary('DEMO-101');assert.equal(summary.complete,false);assert.match(summary.blockers.join(' '),/Madera:/);
+  const summary=h.Q.summary('DEMO-101');assert.equal(summary.complete,false);assert.match(summary.saveBlockers.join(' '),/captura de madera.*guardar/);
   assert.equal((await h.Q.save('DEMO-101')).state,'blocked');assert.equal(h.Q.snapshot('DEMO-101'),null);assert.equal(h.Q.freeze('DEMO-101'),null);
   await action('stage',{screen:'review'});assert.notEqual(J.inspect().state.screen,'review');await action('stay');
   await action('validate');await action('send');await action('convert');
@@ -2203,6 +2585,8 @@ test('removed wood specialties have no controls or writers and retain original d
   };
   assertVisibleDays();
   // Simulate pre-existing local capture: removing a display row cannot rewrite it.
+  assert.equal(h.c.solidWoodState(itemId).workshop,undefined);
+  await h.event('input',{workshopItem:itemId,workshopField:'days.0.quantity'},'0.40');
   h.c.solidWoodState(itemId).workshop.values['days.1.quantity']='0.5';
   const model=h.c.app.partDraft.quote.manufacturing;model.installation='yes';model.installationReason='';
   assert.equal(h.c.workshopRead(itemId).days[1].unitCents,'60000');

@@ -1,3 +1,4 @@
+import {quoteTemplate} from '../tools/build.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ const recipeCatalog = readFileSync(new URL('../src/recipe-catalog.js', import.me
 const recipeReference = readFileSync(new URL('../src/recipe-reference.js', import.meta.url), 'utf8');
 const countrySource = readFileSync(new URL('../src/country-codes.js', import.meta.url), 'utf8');
 const phoneSource = readFileSync(new URL('../src/demo-phone.js', import.meta.url), 'utf8');
-const domain = [...template.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1])
+const domain = [...quoteTemplate(template).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1])
   .find(source => source.includes('var QuoteSchema') && source.includes('var QuoteManufacturing_'));
 if (!domain) throw new Error('The public template must contain its shared pure domain.');
 
@@ -35,6 +36,7 @@ function harness() {
   vm.runInContext(recipeCatalog, sandbox, { filename: 'recipe-catalog.js' });
   vm.runInContext(countrySource, sandbox, { filename: 'country-codes.js' });
   vm.runInContext(phoneSource, sandbox, { filename: 'demo-phone.js' });
+  vm.runInContext(readFileSync(new URL('../src/quote-issues.js', import.meta.url), 'utf8'), sandbox);
   vm.runInContext(bridge, sandbox, { filename: 'quote-bridge.js' });
   return { Q: sandbox.DemoQuote, app: sandbox.__client.app, M: sandbox.QuoteManufacturing_, host: sandbox.__host };
 }
@@ -61,7 +63,7 @@ test('F/CNC preview is separate and cannot become a confirmed quote', async () =
   const { Q } = harness();
   const s = Q.create('DEMO-102', 'wood', request());
   assert.equal(s.complete, false);
-  assert.match(s.blockers.join(' '), /Madera:/);
+  assert.match(s.saveBlockers.join(' '), /captura de madera.*guardar/);
   assert.equal((await Q.save('DEMO-102')).state, 'blocked');
   assert.equal(Q.snapshot('DEMO-102'), null);
   assert.equal(Q.freeze('DEMO-102'), null);

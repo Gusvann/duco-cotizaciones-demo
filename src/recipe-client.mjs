@@ -23,9 +23,32 @@ export const recipeClient = String.raw`
     const meta=recipeEntry(id),item=quote?.items.find(row=>row.id===id),row=quote?.manufacturing?.items.find(row=>row.itemId===id);if(!meta||!item||!row)return;
     const modes=recipeModes(id);
     const tx=app.partDraft?.itemId===id?app.partDraft:null;if(tx){if(tx.error===tx.syntheticRecipeError)tx.error='';tx.syntheticRecipeError='';}
-    for(const h of meta.hardware){const material=row.materials.find(m=>m.id===h.id);if(!material)continue;const mode=modes[h.id]||h.mode;if(mode==='AUTO'&&material.purchaseUnit===h.unit){const quantity=String(item.quantity??''),perProduct=String(material.quantity??'');if(!/^\d+(?:\.\d{1,3})?$/.test(quantity)||!/^\d+(?:\.\d{1,3})?$/.test(perProduct)){material.purchaseQuantity='';continue;}try{material.purchaseQuantity=DemoRecipeCatalog.scaled(perProduct,quantity);}catch(error){material.purchaseQuantity='';if(tx)tx.error=tx.syntheticRecipeError=error.message;}material.economicReviewed=false;material.purchaseQuality='pending';const sub=app.breakdownEditor;if(sub?.itemId===id&&sub.value?.id===h.id&&!sub.syntheticRecipeManual)sub.value.purchaseQuantity=material.purchaseQuantity;}}
+    for(const h of meta.hardware){
+      const material=row.materials.find(m=>m.id===h.id);
+      if(!material||(modes[h.id]||h.mode)!=='AUTO'||material.purchaseUnit!==h.unit)continue;
+      const quantity=String(item.quantity??''),perProduct=String(material.quantity??'');
+      if(!/^\d+(?:\.\d{1,3})?$/.test(quantity)||!/^\d+(?:\.\d{1,3})?$/.test(perProduct)){material.purchaseQuantity='';continue;}
+      try{material.purchaseQuantity=h.localPurchase
+        ?localRecipeRatio(D,h.localPurchase.quantity,h.localPurchase.articleQuantity,quantity,3)
+        :DemoRecipeCatalog.scaled(perProduct,quantity);}
+      catch(error){material.purchaseQuantity='';if(tx)tx.error=tx.syntheticRecipeError=error.message;}
+      const sub=app.breakdownEditor;
+      if(sub?.itemId===id&&sub.value?.id===h.id&&!sub.syntheticRecipeManual)sub.value.purchaseQuantity=material.purchaseQuantity;
+    }
+    for(const source of meta.localProcessRates||[]){
+      const process=row.processes.find(value=>value.id===source.id);
+      if(!process||(modes[source.id]||source.mode)==='MANUAL')continue;
+      try{
+        if(source.wholeQuantity)process.quantity=localRecipeRatio(D,source.wholeQuantity,meta.sourceArticleQuantity,item.quantity,3);
+        if(source.manualAmount)process.source.netAmount=localRecipeRatio(D,source.manualAmount,meta.sourceArticleQuantity,item.quantity,2);
+      }catch(error){if(tx)tx.error=tx.syntheticRecipeError=error.message;}
+    }
   }
   function lineStructuredBreakdown(variant){
+    if(variant?.localBreakdown){
+      if(!recipeCanEdit())throw Error('Este borrador no admite cambios.');
+      return copyApprovedBreakdown(variant.localBreakdown,lineState().productId,variant.id,uid,D);
+    }
     if(!variant?.recipeId)return recipeBaseLineStructuredBreakdown(variant);
     if(!recipeCanEdit())throw Error('Este borrador no admite cambios.');
     return DemoRecipeCatalog.instantiate(variant.recipeId,uid,'1');
@@ -34,7 +57,8 @@ export const recipeClient = String.raw`
     if(!recipeCanEdit())return null;
     if(!breakdown?.metadata)return recipeBasePartStartCreation(technical,origin,breakdown);
     if(app.partDraft&&partDraftDirty())return null;
-    const rec=DemoRecipeCatalog.recipe(breakdown.metadata.recipeId);
+    const approved=breakdown.metadata.source==='APPROVED_LOCAL_RECIPE';
+    const rec=approved?breakdown.metadata:DemoRecipeCatalog.recipe(breakdown.metadata.recipeId);
     if(!rec||origin?.productId!==rec.productId||origin?.variantId!==rec.variantId)return null;
     const previous={q:app.q,solidWoodLocal:app.solidWoodLocal?{context:app.solidWoodLocal.context,articles:new Map(app.solidWoodLocal.articles)}:null,syntheticRecipes:app.syntheticRecipes?{...app.syntheticRecipes,articles:{...app.syntheticRecipes.articles}}:null,lineOrigins:new Map(app.lineOrigins),technicalDrafts:new Map(app.technicalDrafts),deferredPartIds:new Set(app.deferredPartIds),openPartId:app.openPartId,partDraft:app.partDraft,breakdownEditor:app.breakdownEditor,dirty:app.dirty};
     try{
@@ -42,6 +66,8 @@ export const recipeClient = String.raw`
       app.syntheticRecipes=app.syntheticRecipes||{articles:{}};
       app.syntheticRecipes.articles[part.id]=breakdownClone(breakdown.metadata);
       const local=solidWoodState(part.id);local.applied=breakdownClone(breakdown.wood);local.draft=null;
+      if(approved&&breakdown.workshop)local.workshop=breakdownClone(breakdown.workshop);
+      if(approved&&breakdown.boardSettings)local.boardSettings=breakdownClone(breakdown.boardSettings);
       // Manufacturing canonical rows never receive the F wood preview a second time.
       app.partDraft=QuotePartDraft.open(app.q,part.id,partContext());
       return part;
@@ -80,13 +106,20 @@ export const recipeClient = String.raw`
   function solidWoodApply(){if(!recipeCanEdit())return false;return recipeBaseSolidWoodApply();}
   function solidWoodAction(action,id=app.openPartId,componentId=''){if(!recipeCanEdit())return false;return recipeBaseSolidWoodAction(action,id,componentId);}
   function solidWoodApplyCnc(itemId,componentId){if(!recipeCanEdit())return false;return recipeBaseSolidWoodApplyCnc(itemId,componentId);}
-  function recipeImage(product,variant){const imageId=variant?.imageId||product.imageId;return '<figure class="recipe-product-figure"><img class="line-product-image" src="'+esc(DemoRecipeCatalog.images[imageId]||'')+'" alt="'+esc((variant?.articleLabel||product.name)+' · imagen ilustrativa sintética')+'" width="240" height="160"><figcaption>'+ (DemoRecipeCatalog.imageKinds[imageId]==='IA'?'Imagen ilustrativa generada con IA':'Ilustración geométrica sintética')+'</figcaption></figure>';}
+  function recipeImage(product,variant){
+    const imageId=variant?.imageId||product.imageId,image=DemoRecipeCatalog.images[imageId];
+    if(!image)return '<p class="recipe-preview-note">Imagen pendiente.</p>';
+    const tone=variant&&DemoRecipeCatalog.recipe(variant.recipeId)?.illustratedTone;
+    const caption=DemoRecipeCatalog.imageKinds[imageId]==='IA'?'Imagen ilustrativa generada con IA':'Ilustración geométrica sintética';
+    return '<figure class="recipe-product-figure"><img class="line-product-image" src="'+esc(image)+'" alt="'+esc(variant?.articleLabel||product.name)+'" width="240" height="160" decoding="async"><figcaption>'+caption+(tone?' · Tono ilustrado: '+esc(tone):'')+'</figcaption></figure>';
+  }
   function lineVariantSummary(product){
     const variant=lineState().productId===product.id&&product.variants.find(v=>v.id===lineState().variantId);
     if(!variant)return '<p class="meta">Selecciona una variante para consultar su imagen, medidas y receta.</p>';
     if(!variant.recipeId)return recipeBaseLineVariantSummary(product);
     const rec=DemoRecipeCatalog.recipe(variant.recipeId),fields=[['Artículo',variant.articleLabel],['SKU de muestra',variant.sku],['Descripción',variant.description],['Medidas terminadas',rec.finishedDimensions],['Material',variant.materials],['Acabados',variant.finishes],['Receta',rec.wood.length+' componente'+(rec.wood.length===1?'':'s')+' de madera · '+rec.hardware.length+' herrajes'+(rec.fabrication?' · Tableros ('+rec.boards.length+') · Herrería ('+rec.metal.length+')':'')]];
-    return '<dl class="line-variant-summary">'+fields.map(([label,value])=>'<div><dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl><p class="recipe-preview-note">Receta de la referencia local. Madera y CNC siguen pendientes de validación; los importes históricos no confirman costos vigentes.</p>';
+    const note=rec.syntheticPricing?'Despiece y tarifas ficticias para probar la cotización.':'Receta de la referencia local. Madera y CNC siguen pendientes de validación; los importes históricos no confirman costos vigentes.';
+    return '<dl class="line-variant-summary">'+fields.map(([label,value])=>'<div><dt>'+esc(label)+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl><p class="recipe-preview-note">'+note+'</p>'+expandedCatalogReference(rec);
   }
   function lineResults(){
     const state=lineState(),normalize=v=>String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
@@ -97,7 +130,7 @@ export const recipeClient = String.raw`
     const current=matches.find(product=>product.id===state.productId)||matches[0];
     const rows=matches.map(product=>'<li><button type="button" class="recipe-catalog-row" data-action="line-select-product" data-product="'+
       esc(product.id)+'" aria-controls="line-catalog-detail" aria-pressed="'+(current.id===product.id)+'">'+
-      '<img class="recipe-catalog-thumb" src="'+esc(DemoRecipeCatalog.images[product.imageId]||'')+'" alt="" width="56" height="56" decoding="async">'+
+      (DemoRecipeCatalog.images[product.imageId]?'<img class="recipe-catalog-thumb" src="'+esc(DemoRecipeCatalog.thumbnails[product.imageId]||DemoRecipeCatalog.images[product.imageId])+'" alt="" width="56" height="56" decoding="async" loading="lazy">':'')+
       '<span><strong>'+esc(product.name)+'</strong><small>'+esc(product.family)+'</small></span></button></li>').join('');
     return '<div class="recipe-catalog-layout"><ul id="line-catalog-products" class="recipe-catalog-products" aria-label="Resultados del catálogo">'+rows+
       '</ul><div id="line-catalog-detail">'+recipeCatalogDetail(current,state)+'</div></div>';
@@ -126,8 +159,9 @@ export const recipeClient = String.raw`
   }
   function lineCatalogPanel(){
     const state=lineState(),families=[...new Set(lineProducts().map(p=>p.family))];
+    const gallery=globalThis.DemoPublicRecipes&&!globalThis.DucoPrivateApi?'<a class="quiet" href="catalogo.html" target="_blank" rel="noopener">Ver galería</a>':'';
     return '<section class="line-catalog recipe-catalog" aria-labelledby="line-catalog-title">'+
-      '<div class="line-catalog-head"><h3 id="line-catalog-title">Catálogo de productos</h3>'+
+      '<div class="line-catalog-head"><h3 id="line-catalog-title">Catálogo de productos</h3>'+gallery+
       '<button type="button" class="quiet" data-action="line-cancel" aria-label="Cerrar catálogo">Cerrar</button></div>'+
       '<div class="line-search"><div class="field"><label for="line-search">Buscar producto</label>'+
       '<input type="search" id="line-search" maxlength="120" placeholder="Nombre, familia o material" value="'+esc(state.query)+'"></div>'+
@@ -141,25 +175,35 @@ export const recipeClient = String.raw`
   function breakdownDetailedSections(item,row){if(!recipeEntry(item.id))return recipeBaseBreakdownDetailedSections(item,row);return recipeDirectoryHtml(item)+recipeOriginalDetailedSections(item,row);}
   function breakdownSetField(el,repaint=false){
     if(!recipeCanEdit())return;
+    const oldPurchaseUnit=app.breakdownEditor?.value?.purchaseUnit;
     recipeBaseBreakdownSetField(el,repaint);
     const draft=app.breakdownEditor,meta=recipeEntry(draft?.itemId);
     const field=el.dataset.breakField,entry=meta?.hardware.find(h=>h.id===draft?.value?.id);
-    if(draft&&entry&&['purchaseQuantity','purchaseUnit','unit'].includes(field)&&!Object.keys(draft.numericErrors||{}).length){if((recipeModes(draft.itemId)[entry.id]||entry.mode)!=='MANUAL')draft.forceDirty=true;draft.syntheticRecipeManual=true;draft.value.economicReviewed=false;draft.value.purchaseQuality='pending';if(['purchaseUnit','unit'].includes(field)&&draft.value.purchaseUnit!==entry.unit){draft.value.unitPrice='';draft.value.purchaseQuantity='';}}
+    if(draft&&meta?.localProcessRates?.some(value=>value.id===draft.value?.id)&&['quantity','quantityScope','source.netAmount','detail.unitPrice'].includes(field)&&!Object.keys(draft.numericErrors||{}).length){
+      draft.forceDirty=true;draft.syntheticRecipeManualProcess=true;
+    }
+    if(draft&&entry&&['purchaseQuantity','purchaseUnit','unit'].includes(field)&&!Object.keys(draft.numericErrors||{}).length){
+      if((recipeModes(draft.itemId)[entry.id]||entry.mode)!=='MANUAL')draft.forceDirty=true;
+      draft.syntheticRecipeManual=true;
+      if(['purchaseUnit','unit'].includes(field)&&draft.value.purchaseUnit!==oldPurchaseUnit){
+        draft.value.unitPrice='';draft.value.purchaseQuantity='';draft.value.economicReviewed=false;draft.value.purchaseQuality='pending';
+      }
+    }
   }
   function breakdownSave(){
     if(!recipeCanEdit())return false;
-    const draft=app.breakdownEditor,id=draft?.itemId,materialId=draft?.value?.id,manual=draft?.syntheticRecipeManual;
+    const draft=app.breakdownEditor,id=draft?.itemId,materialId=draft?.value?.id,manual=draft?.syntheticRecipeManual||draft?.syntheticRecipeManualProcess;
     const result=recipeBaseBreakdownSave();
     if(result&&app.partDraft?.itemId===id){if(manual)app.partDraft.syntheticRecipeModes={...recipeModes(id),[materialId]:'MANUAL'};recipeSyncQuote(app.partDraft.quote,id);}
     return result;
   }
   function partPaint(){const tx=app.partDraft;if(tx&&recipeCanEdit()&&partSameContext(tx.context))recipeSyncQuote(tx.quote,tx.itemId);return recipeBasePartPaint();}
   function partCandidate(){const tx=app.partDraft;if(tx&&recipeCanEdit()&&partSameContext(tx.context)){recipeSyncQuote(tx.quote,tx.itemId);if(tx.syntheticRecipeError)throw Error(tx.syntheticRecipeError);}return recipeBasePartCandidate();}
-  function partDraftDirty(){const tx=app.partDraft,meta=recipeEntry(tx?.itemId);return recipeBasePartDraftDirty()||!!(meta&&tx&&Object.entries(tx.syntheticRecipeModes||{}).some(([id,mode])=>meta.hardware.find(h=>h.id===id)?.mode!==mode));}
+  function partDraftDirty(){const tx=app.partDraft,meta=recipeEntry(tx?.itemId);return recipeBasePartDraftDirty()||!!(meta&&tx&&Object.entries(tx.syntheticRecipeModes||{}).some(([id,mode])=>[...meta.hardware,...(meta.localProcessRates||[])].find(h=>h.id===id)?.mode!==mode));}
   function partApply(){
     if(!recipeCanEdit())return false;
     const tx=app.partDraft,id=tx?.itemId,result=recipeBasePartApply();
-    if(result){const modes=tx?.syntheticRecipeModes||{},meta=recipeEntry(id);if(meta){for(const h of meta.hardware){if(modes[h.id])h.mode=modes[h.id];const m=app.q.manufacturing?.items.find(r=>r.itemId===id)?.materials.find(m=>m.id===h.id);if(h.mode==='AUTO'&&m)h.lastAutoQuantity=m.purchaseQuantity;}}}
+    if(result){const modes=tx?.syntheticRecipeModes||{},meta=recipeEntry(id);if(meta){for(const h of meta.hardware){if(modes[h.id])h.mode=modes[h.id];const m=app.q.manufacturing?.items.find(r=>r.itemId===id)?.materials.find(m=>m.id===h.id);if(h.mode==='AUTO'&&m)h.lastAutoQuantity=m.purchaseQuantity;}for(const source of meta.localProcessRates||[])if(modes[source.id])source.mode=modes[source.id];}}
     return result;
   }
   function partDiscard(){return recipeBasePartDiscard();}

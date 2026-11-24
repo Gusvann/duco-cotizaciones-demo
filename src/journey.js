@@ -1,4 +1,4 @@
-/* Recorrido sintético. Toda la información vive únicamente en memoria. */
+/* Commercial workflow for the public demo and the private local service. */
 (() => {
   'use strict';
   const root = document.getElementById('journey-root');
@@ -25,18 +25,24 @@
     return Number.isNaN(parsed.valueOf()) ? 'Por definir' : new Intl.DateTimeFormat('es-MX', {day:'numeric', month:'short', year:'numeric'}).format(parsed);
   };
   let clockTick = 0;
-  const stamp = () => new Date(Date.UTC(2026,9,15,12,0,clockTick++)).toISOString();
-  const clients = {
+  const privateApi=window.DucoPrivateApi;
+  const browserStore=!privateApi && window.DemoBrowserStore;
+  const storage=privateApi || browserStore;
+  let localUser=null;
+  const storageRevisions=new Map();
+  const stamp = () => storage ? new Date().toISOString() : new Date(Date.UTC(2026,9,15,12,0,clockTick++)).toISOString();
+  const clients = Object.assign(Object.create(null),{
     'CL-DEMO-A':{name:'Cliente ficticio Alba',firstSaleAt:'2024-05-18'},'CL-DEMO-B':{name:'Cliente ficticio Bruma',firstSaleAt:'2026-02-15'},
     'CL-DEMO-C':{name:'Cliente ficticio Cobre',firstSaleAt:'2026-03-20'},'CL-DEMO-D':{name:'Cliente ficticio Duna',firstSaleAt:'2025-08-12'},
     'CL-DEMO-E':{name:'Cliente ficticio Ébano',firstSaleAt:'2026-08-05'},'CL-DEMO-F':{name:'Cliente ficticio Faro',firstSaleAt:null},'CL-DEMO-G':{name:'Cliente ficticio Greda',firstSaleAt:null}
-  };
+  });
   const initialClientIds = new Set(Object.keys(clients));
   const stages = [{key:'request', label:'Solicitud'}, {key:'quote', label:'Cotizador'}, {key:'review', label:'Revisión'}, {key:'offer', label:'Envío'}, {key:'response', label:'Respuesta'}, {key:'project', label:'Proyecto'}];
-  const statuses = {request:'Solicitud', draft:'Borrador', review:'Revisada', sent:'Enviada', accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada', project:'Convertida'};
+  const statuses = {request:'Solicitud', draft:'Borrador', review:'Revisada', sent:'Enviada', waiting:'En espera de aprobación', paused:'Pausada por cliente', accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada', project:'Proyecto',unknown:'Sin clasificar'};
   const profiles = {account:'Account de ejemplo',designer:'Diseño de ejemplo'};
   const state = {view:'mesa', screen:'list', id:null, search:'', filter:'all', profile:'account', saveOutcome:'success', busy:false, feedback:'', tone:'info', guard:null, menu:false,navGroup:'portfolio',returnToKpis:false,kpis:{period:'year',category:'all',basis:'acceptedAt',tab:'summary',ranking:'client',detail:null}};
   let records = [];
+  let importCoverage = null;
   let suppressChanges = false;
   let sequence = 102;
   let pendingTransition = null;
@@ -52,7 +58,7 @@
   }
 
   function projectOperations(record) {
-    if (!record?.project || record.historicalPartial) return null;
+    if (!record?.project || record.historicalPartial || record.asana) return null;
     const project=record.project;
     if (!project.operations) {
       // Explicit authored examples, not inference from a name, price or commercial category.
@@ -73,16 +79,19 @@
     return operationDrafts.get(op.projectId);
   }
 
-  function projectAction(target,type,payload) {
+  async function projectAction(target,type,payload) {
     const record=current();
-    if(state.busy||state.guard||state.screen!=='project'||!record?.project||target.dataset.id!==record.id||target.dataset.project!==record.project.id){notify('Abre el proyecto correspondiente antes de cambiar su seguimiento.','error');return false;}
+    if(state.busy||state.guard||state.screen!=='project'||!record?.project||record.asana||target.dataset.id!==record.id||target.dataset.project!==record.project.id){notify('Abre el proyecto editable correspondiente antes de cambiar su seguimiento.','error');return false;}
     const op=projectOperations(record),revision=target.dataset.revision;
     if(!/^(0|[1-9]\d*)$/.test(revision||'')||!Number.isSafeInteger(Number(revision))||Number(revision)!==op.revision){notify('El proyecto cambió. Consulta su estado actual antes de reintentar.','error');return false;}
-    const at=new Date(Date.UTC(2026,9,15,12,0,clockTick)).toISOString();
-    const result=operations.apply(op,{projectId:op.projectId,expectedRevision:Number(revision),type,payload,at,actor:profiles[state.profile]});
+    const at=storage ? stamp() : new Date(Date.UTC(2026,9,15,12,0,clockTick)).toISOString();
+    const actor=privateApi ? localUser.username : profiles[state.profile];
+    const result=operations.apply(op,{projectId:op.projectId,expectedRevision:Number(revision),type,payload,at,actor});
     if(!result.ok){notify(result.message,'error');return false;}
+    const before=storage ? clone(record) : null;
     record.project.operations=result.state;
-    if(result.code==='APPLIED')clockTick++;
+    if(storage && result.code==='APPLIED' && !await persistStage(record,before))return false;
+    if(!storage && result.code==='APPLIED')clockTick++;
     if(type==='plan')projectDraft(record).plan={owner:result.state.owner,dueDate:result.state.dueDate,route:result.state.route,installation:result.state.installation};
     if(type==='task-add')projectDraft(record).task={title:'',stage:state.opTab||'plan',owner:'',dueDate:''};
     if(type==='delivery')projectDraft(record).delivery=clone(result.state.delivery);
@@ -90,8 +99,8 @@
   }
 
   const current = () => records.find(record => record.id === state.id);
-  const summary = record => api.summary(record.id);
-  const snapshot = record => api.snapshot(record.id);
+  const summary = record => record.asana ? record.asana.commercial || {} : api.summary(record.id);
+  const snapshot = record => record.asana ? null : api.snapshot(record.id);
   const requestComplete = record => ['title','client','need','account','designer','quoteDue','deliveryDate'].every(key => String(record.request[key] || '').trim());
   const saved = record => {
     const s = summary(record);
@@ -100,8 +109,25 @@
   const complete = record => Boolean(summary(record)?.complete && requestComplete(record));
   const reviewCurrent = record => Boolean(record.review && saved(record) && complete(record) && record.review.revision === summary(record).revision && record.review.requestRevision === record.requestRevision);
   const accepted = record => Boolean(record.sent && record.sent.response?.result === 'accepted' && record.sent.response.version === record.sent.version);
-  const locked = record => Boolean(record.sent || record.project);
-  const status = record => record.project ? 'project' : record.sent?.response?.result === 'accepted' ? 'accepted' : record.sent?.response?.result === 'rejected' ? 'rejected' : record.sent ? 'sent' : reviewCurrent(record) ? 'review' : record.lastResponse === 'changes' ? 'changes' : record.started ? 'draft' : 'request';
+  const locked = record => Boolean(record.asana || record.sent || record.project);
+  function status(record) {
+    if (record.project) return 'project';
+    if (record.asana) return Object.hasOwn(statuses,record.importedStatus) ? record.importedStatus : 'unknown';
+    if (record.sent?.response?.result === 'accepted') return 'accepted';
+    if (record.sent?.response?.result === 'rejected') return 'rejected';
+    if (record.sent) return 'sent';
+    if (reviewCurrent(record)) return 'review';
+    if (record.lastResponse === 'changes') return 'changes';
+    return record.started ? 'draft' : 'request';
+  }
+  function noteStatusTransition(record,previousStatus,at=new Date().toISOString()) {
+    if (!record || record.asana) return false;
+    const next=status(record);
+    if (next===(record.statusAtKey || previousStatus)) return false;
+    record.statusAtKey=next;
+    record.statusEnteredAt=at;
+    return true;
+  }
   const displayedSummary = record => record.project?.baseline?.summary || record.sent?.snapshot?.summary || summary(record);
   const button = (label, action, attrs = '', primary = false) => `<button type="button" class="j-btn${primary ? ' j-primary' : ''}" data-action="${action}" ${attrs}>${escape(label)}</button>`;
   const pill = (label, tone = '') => `<span class="j-pill ${tone}">${escape(label)}</span>`;
@@ -139,7 +165,7 @@
       navEntry('Cotizador','list',state.screen === 'list'||!globalScreens.has(state.screen)&&state.screen !== 'project'),
       navEntry('Proyectos','projects',['projects','project'].includes(state.screen))
     ]);
-    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(profiles[state.profile])}</strong><small>Sin sesión iniciada</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
+    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(privateApi ? localUser?.username || 'Cuenta local' : profiles[state.profile])}</strong><small>${privateApi ? (localUser?.role==='direction' ? 'Dirección' : 'Sesión local') : 'Sin sesión iniciada'}</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
   }
 
   function closeMenu() {
@@ -153,12 +179,39 @@
   }
 
   async function seed() {
+    if(privateApi){
+      const initial=await privateApi.initial();
+      localUser=initial.user;
+      api.setLocalUser?.(localUser);
+      importCoverage=initial.coverage;
+      for(const id of Object.keys(clients))delete clients[id];
+      Object.assign(clients,initial.clients);
+      records=initial.records;
+      storageRevisions.clear();
+      suppressChanges=true;
+      try {
+        for(const {record,snapshot,revision} of initial.drafts){
+          records.push(record);
+          if(snapshot)api.hydrate(record,snapshot);
+          else api.create(record.id,'complete',clone(record.request),{clientId:record.clientId,emptyArticles:true});
+          storageRevisions.set(record.id,revision);
+        }
+      } finally {suppressChanges=false;}
+      return;
+    }
+    let browserDrafts=[];
+    if(browserStore){
+      try {browserDrafts=await browserStore.initial();}
+      catch(error){state.feedback=error.message;state.tone='error';}
+    }
+    const storedIds=new Set(browserDrafts.map(entry=>entry.record.id));
     records = [
       makeRecord('DEMO-101', 'complete', {title:'Consola modular de muestra', client:'Cliente ficticio Alba', contact:'Contacto de ejemplo A', need:'Dos módulos de recepción para explorar el recorrido comercial.', included:'Fabricación; Empaque', excluded:'Obra civil', account:'Account de ejemplo', designer:'Diseño de ejemplo', quoteDue:'2026-10-21', deliveryDate:'2026-11-12'}),
       makeRecord('DEMO-102', 'wood', {title:'Mesa de práctica · madera y CNC', client:'Cliente ficticio Bruma', contact:'Contacto de ejemplo B', need:'Dos mesas inventadas para revisar la captura de madera y condiciones de CNC.', included:'Fabricación; Empaque', excluded:'Obra civil', account:'Account de ejemplo', designer:'Diseño de ejemplo', quoteDue:'2026-10-23', deliveryDate:'2026-11-19'})
     ];
     Object.assign(records[0],{clientId:'CL-DEMO-A',category:'offices'});
     Object.assign(records[1],{clientId:'CL-DEMO-B',category:'horeca'});
+    records=records.filter(record=>!storedIds.has(record.id));
     suppressChanges = true;
     try {
       for (const record of records) api.create(record.id, record.scenario, clone(record.request), {scopePreset:'fabrication-packaging',clientId:record.clientId});
@@ -175,6 +228,7 @@
         ['210','Logística de práctica','G','logistics','line','2026-10-12',null,null,null,2400000,'open']
       ];
       for (const [suffix,title,clientKey,category,type,requestedAt,firstSentAt,acceptedAt,poAt,netCents,stage] of fixtures) {
+        if(storedIds.has('DEMO-'+suffix))continue;
         const clientId = 'CL-DEMO-'+clientKey;
         const request = {title,client:clients[clientId].name,contact:'Contacto inventado '+clientKey,need:'Alcance de mobiliario para el proyecto.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:requestedAt,deliveryDate:'2026-11-30'};
         const record = makeRecord('DEMO-'+suffix,'complete',request);
@@ -198,6 +252,12 @@
         if (stage === 'project') record.project = {id:'PR-'+record.id,title,version:1,sourceId:record.id,conversionKey:record.id+':V1',createdAt:acceptedAt+'T12:00:00.000Z',baseline:clone(record.sent.snapshot)};
         if (stage === 'draft') { api.revise(record.id); record.version=2; record.sent=null; record.requestDirty=true; }
       }
+      for(const {record,snapshot,revision} of browserDrafts) {
+        if(!api.hydrate(record,snapshot))throw Error('No se pudo abrir la cotización guardada.');
+        records.push(record);
+        storageRevisions.set(record.id,revision);
+        if(record.clientId&&!Object.hasOwn(clients,record.clientId))clients[record.clientId]={name:record.request.client,firstSaleAt:null};
+      }
       api.hide();
       // User approved removing explicit extensions even from synthetic history.
       records = records.map(phone.cleanRecord);
@@ -213,39 +273,81 @@
 
   function log(record, text) { record.history.unshift({at:stamp(), text}); }
 
+  const isQuoteRecord = record => record.asana?.kind !== 'project';
+  const responsibleId = record => record.responsibleId || record.request.accountId || (!record.asana && record.request.account ? 'local:'+record.request.account : '');
+  const responsibleName = record => (record.source==='DUCO_LOCAL' ? record.responsibleId : record.request.account || record.asana?.assignee?.name) || 'Sin asignar';
+  function filterOptions(options, selected) {
+    return options.map(([value,label])=>`<option value="${escape(value)}"${selected===value ? ' selected' : ''}>${escape(label)}</option>`).join('');
+  }
+  function filterField(id, label, options, selected) {
+    return `<label class="j-field"><span>${escape(label)}</span><select id="${id}" class="j-input">${filterOptions(options,selected)}</select></label>`;
+  }
+  function identityOptions(entries) {
+    const unique = [...new Map(entries)];
+    const counts = new Map();
+    for (const [,name] of unique) counts.set(name,(counts.get(name) || 0)+1);
+    return unique.sort((a,b)=>a[1].localeCompare(b[1],'es-MX') || a[0].localeCompare(b[0]))
+      .map(([id,name])=>[id,counts.get(name)>1 ? name+' · '+id : name]);
+  }
   function filteredRecords() {
     const query = state.search.trim().toLocaleLowerCase('es-MX');
-    return records.filter(record => (state.filter === 'all' || status(record) === state.filter) && (!query || [record.id, record.request.title, record.request.client, record.request.account, record.request.designer].some(value => String(value).toLocaleLowerCase('es-MX').includes(query))));
+    const selected = state.responsibleFilter ?? 'all';
+    return records.filter(record => isQuoteRecord(record) && (state.filter === 'all' || status(record) === state.filter) &&
+      (selected==='all' || responsibleId(record)===selected) && (!query || [record.folio,record.id,record.request.title,record.request.client,responsibleName(record),record.request.designer].some(value=>String(value ?? '').toLocaleLowerCase('es-MX').includes(query))));
   }
 
   function nextLabel(record) {
+    if (record.asana) return 'Consultar cotización';
     if (record.historicalPartial) return 'Consultar referencia parcial';
     const key = status(record);
-    return ({project:'Consultar proyecto', accepted:'Convertir en proyecto', rejected:'Consultar respuesta', sent:'Registrar respuesta', review:'Preparar envío', changes:'Trabajar nueva versión', draft:'Continuar cotización', request:'Abrir solicitud'})[key];
+    return ({project:'Consultar proyecto', accepted:'Convertir en proyecto', rejected:'Consultar respuesta', sent:'Registrar respuesta', review:'Preparar envío', changes:'Trabajar nueva versión', draft:'Continuar cotización', request:'Abrir solicitud'})[key] || 'Consultar cotización';
+  }
+
+  function quoteStateMarkup(record) {
+    const stage = status(record);
+    const className = stage==='project' || stage==='accepted' ? 'good' : record.scenario==='wood' ? 'warn' : '';
+    const age = portfolio.statusAge(stage,stage==='unknown' ? null : record.statusEnteredAt,new Date().toISOString());
+    const warning = age.kind==='overdue' ? `<div class="j-aging">${age.days} días en este estado</div>`
+      : age.kind==='unknown' && (record.asana || importCoverage) ? '<div class="j-sub">Antigüedad sin verificar</div>' : '';
+    return pill(statuses[stage],className)+warning;
   }
 
   function listMarkup() {
     const visible = filteredRecords();
+    const sourceNotice = privateApi && !importCoverage?.lists?.quote
+      ? '<p class="j-notice" role="status">La importación de cotizaciones de Asana está pendiente.</p>' : '';
     const switcher = `<div class="j-switch" role="group" aria-label="Vista de cotizaciones">${button('Mesa de cotizaciones','view',`data-view="mesa" aria-pressed="${state.view === 'mesa'}"`)}${button('Flujo de oportunidades','view',`data-view="flujo" aria-pressed="${state.view === 'flujo'}"`)}</div>`;
-    const options = `<option value="all">Todos los estados</option>` + Object.entries(statuses).map(([key,label]) => `<option value="${key}" ${state.filter === key ? 'selected' : ''}>${label}</option>`).join('');
-    const controls = `<div class="j-toolbar"><label class="j-field j-search"><span>Buscar solicitudes</span><input id="j-search" class="j-input" type="search" placeholder="Nombre, cliente o folio" value="${escape(state.search)}"></label><label class="j-field"><span>Estado</span><select id="j-status-filter" class="j-input">${options}</select></label><p class="j-muted j-record-count" role="status">${visible.length} de ${records.length} expedientes</p></div>`;
+    const quoteRecords = records.filter(isQuoteRecord);
+    const owners = identityOptions(quoteRecords.filter(record=>responsibleId(record)).map(record=>[responsibleId(record),responsibleName(record)]));
+    const responsible = [['all','Todos'],['','Sin asignar'],...owners];
+    const controls = `<div class="j-toolbar"><label class="j-field j-search"><span>Buscar solicitudes</span><input id="j-search" class="j-input" type="search" placeholder="Nombre, cliente o folio" value="${escape(state.search)}"></label>${filterField('j-status-filter','Estado',[['all','Todos los estados'],...Object.entries(statuses)],state.filter)}${filterField('j-responsible-filter','Responsable de cotización',responsible,state.responsibleFilter ?? 'all')}<p class="j-muted j-record-count" role="status">${visible.length} de ${quoteRecords.length} expedientes</p></div>`;
+    const quoteOpen = record => `data-id="${escape(record.id)}"`;
     let body;
     if (state.view === 'mesa') {
-      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${record.id}"><td>${button(record.request.title,'open',`data-id="${record.id}"`)}<div class="j-sub">${record.id} · ${escape(record.request.client)}</div></td><td>${pill(statuses[status(record)], status(record) === 'project' || accepted(record) ? 'good' : record.scenario === 'wood' ? 'warn' : '')}<div class="j-sub">Versión ${record.version}</div></td><td>${escape(record.request.account)}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',`data-id="${record.id}"`)}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
+      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${escape(record.id)}"><td>${button(record.request.title,'open',quoteOpen(record))}<div class="j-sub">${escape(record.folio || record.id)} · ${escape(record.request.client)}</div></td><td>${quoteStateMarkup(record)}${record.version ? `<div class="j-sub">Versión ${escape(record.version)}</div>` : ''}</td><td>${escape(responsibleName(record))}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!record.asana && !complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',quoteOpen(record))}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
     } else {
-      const columns = [{label:'Por cotizar', keys:['request']}, {label:'En preparación', keys:['draft','review','changes']}, {label:'Con el cliente', keys:['sent','rejected']}, {label:'Aceptadas', keys:['accepted']}, {label:'Convertidas', keys:['project']}];
-      body = `<div class="j-board">${columns.map(column => { const items = visible.filter(record => column.keys.includes(status(record))); return `<section class="j-lane" aria-label="${column.label}"><div class="j-lane-head"><h2>${column.label}</h2><span>${items.length}</span></div>${items.map(record => `<article class="j-card" data-record-id="${record.id}"><span class="j-sub">${record.id} · V${record.version}</span><h3>${button(record.request.title,'open',`data-id="${record.id}"`)}</h3><p class="j-muted">${escape(record.request.client)}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${pill(statuses[status(record)], accepted(record) ? 'good' : '')}<p class="j-next">${escape(nextLabel(record))}</p></article>`).join('') || '<p class="j-empty">Sin expedientes</p>'}</section>`; }).join('')}</div>`;
+      const columns = [{label:'Por cotizar', keys:['request']}, {label:'En preparación', keys:['draft','review','changes']}, {label:'Con el cliente', keys:['sent','waiting','paused','rejected']}, {label:'Aceptadas', keys:['accepted']}, {label:'Proyecto', keys:['project']}];
+      if (visible.some(record=>status(record)==='unknown')) columns.push({label:'Sin clasificar',keys:['unknown']});
+      body = `<div class="j-board">${columns.map(column => { const items = visible.filter(record => column.keys.includes(status(record))); return `<section class="j-lane" aria-label="${column.label}"><div class="j-lane-head"><h2>${column.label}</h2><span>${items.length}</span></div>${items.map(record => `<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'open',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`).join('') || '<p class="j-empty">Sin expedientes</p>'}</section>`; }).join('')}</div>`;
     }
-    return `<div class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Portafolio comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus cotizaciones.</span> <span class="j-heading-emphasis">De la solicitud al proyecto.</span></h1><p class="j-muted">Una solicitud, su cotización y el proyecto que resulta de ella.</p></div>${button('Nueva solicitud','new-request','',true)}</div><div class="j-list-switch">${switcher}<span class="j-muted">Dos vistas · los mismos expedientes</span></div>${controls}${body}`;
+    return `<div class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Portafolio comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tus cotizaciones.</span> <span class="j-heading-emphasis">De la solicitud al proyecto.</span></h1><p class="j-muted">Una solicitud, su cotización y el proyecto que resulta de ella.</p></div>${button('Nueva solicitud','new-request','',true)}</div><div class="j-list-switch">${switcher}<span class="j-muted">Dos vistas · los mismos expedientes</span></div>${controls}${sourceNotice}${body}`;
   }
 
   const decimal = value => value === null ? '—' : new Intl.NumberFormat('es-MX',{maximumFractionDigits:2}).format(value);
-  const kpiMetrics = () => portfolio.compute(records,state.kpis,clients);
+  function kpiMetrics() {
+    if (!importCoverage && !window.DucoPrivateApi) return portfolio.compute(records,state.kpis,clients);
+    const localDates = records.filter(record=>!record.asana).flatMap(record=>[record.requestedAt,record.acceptedAt,record.project?.createdAt])
+      .map(portfolio.localDate).filter(Boolean).sort();
+    const today = portfolio.localDate(new Date().toISOString());
+    const from=localDates[0] || today, latest=localDates.at(-1) || today;
+    const coverage = importCoverage ? {...importCoverage,latest} : {from,through:latest,localOnly:true};
+    return portfolio.compute(records,{...state.kpis,coverage},clients);
+  }
   const kpiLink = (label,kind,key = '') => button(label,'kpi-detail',`data-kind="${escape(kind)}" data-key="${escape(key)}"`);
   const groupTotal = group => group.count && !group.pricedCount ? 'Pendiente' : money(group.totalCents);
   const kpiDate = value => value ? date(value) : 'Sin registrar';
   function kpiRows(rows,timing = false) {
-    return rows.map(item => `<tr><td>${button(item.id+' · '+item.title,'kpi-open',`data-id="${escape(item.id)}"`)}<span class="j-sub">${escape(item.clientName)} · ${escape(portfolio.CATEGORIES[item.category] || 'Sin categoría')}</span><details class="j-kpi-record-dates"><summary>Ver fechas y versión</summary><span>Solicitud: ${kpiDate(item.requestedAt)}</span><span>Primer envío: ${kpiDate(item.firstSentAt)}</span><span>Aceptación: ${kpiDate(item.acceptedAt)}</span><span>Anticipo / PO: ${kpiDate(item.poAt)}</span><span>Versión aceptada: ${item.version ? 'V'+item.version : 'Sin aceptación'}</span>${item.currentVersion > item.version && item.version ? `<span>La versión actual V${item.currentVersion} no reemplaza el importe aceptado V${item.version}.</span>` : ''}</details></td><td>${timing ? decimal(portfolio.days(item.requestedAt,item.firstSentAt))+' días' : item.accepted ? pill('V'+item.version+' aceptada','good') : pill(item.rejected ? 'Rechazada' : item.firstSentAt ? 'Enviada' : 'Borrador')}</td><td>${timing ? decimal(portfolio.days(item.firstSentAt,item.acceptedAt))+' días' : portfolio.hasPrice(item) ? money(item.netCents) : 'Pendiente'}</td></tr>`).join('') || '<tr><td colspan="3" class="j-empty">Sin expedientes para esta selección.</td></tr>';
+    return rows.map(item => `<tr><td>${button((item.folio || item.id)+' · '+item.title,'kpi-open',`data-id="${escape(item.id)}"`)}<span class="j-sub">${escape(item.clientName)} · ${escape(portfolio.CATEGORIES[item.category] || 'Sin categoría')}</span><details class="j-kpi-record-dates"><summary>Ver fechas y versión</summary><span>Solicitud: ${kpiDate(item.requestedAt)}</span><span>Primer envío: ${kpiDate(item.firstSentAt)}</span><span>Aceptación: ${kpiDate(item.acceptedAt)}</span><span>Anticipo / PO: ${kpiDate(item.poAt)}</span><span>Versión aceptada: ${item.version ? 'V'+item.version : 'Sin versión registrada'}</span>${item.currentVersion > item.version && item.version ? `<span>La versión actual V${item.currentVersion} no reemplaza el importe aceptado V${item.version}.</span>` : ''}</details></td><td>${timing ? decimal(portfolio.days(item.requestedAt,item.firstSentAt))+' días' : item.accepted ? pill(item.version ? 'V'+item.version+' aceptada' : 'Aceptada','good') : pill(item.rejected ? 'Rechazada' : item.firstSentAt ? 'Enviada' : 'Borrador')}</td><td>${timing ? decimal(portfolio.days(item.firstSentAt,item.acceptedAt))+' días' : portfolio.hasPrice(item) ? money(item.netCents) : 'Pendiente'}</td></tr>`).join('') || '<tr><td colspan="3" class="j-empty">Sin expedientes para esta selección.</td></tr>';
   }
   function kpiTable(rows,timing = false) {
     return `<div class="j-table-wrap j-kpi-table"><table class="j-table"><thead><tr><th scope="col">Expediente y cliente</th><th scope="col">${timing ? 'Preparación' : 'Estado / versión'}</th><th scope="col">${timing ? 'Cierre' : 'Precio sin IVA'}</th></tr></thead><tbody>${kpiRows(rows,timing)}</tbody></table></div>`;
@@ -303,7 +405,7 @@
     const activity='<div class="j-kpi-panels">'+kpiDonut({id:'received-client',title:'Cotizaciones recibidas por cliente',caption:'Cohorte por fecha de solicitud',groups:activityGroups(false),total:metrics.activity.received,count:metrics.activity.received,kind:'received-client',amount:false,totalKind:'requests'})+kpiDonut({id:'accepted-client',title:'Cotizaciones aceptadas por cliente',caption:'Aceptadas de la misma cohorte de solicitudes',groups:activityGroups(true),total:metrics.activity.accepted,count:metrics.activity.accepted,kind:'accepted-client',amount:false,totalKind:'won'})+'</div>';
     const recurrence=metrics.segments.filter(group=>group.key!=='unknown'||group.count>0).map(group=>kpiDonut({id:'segment-'+group.key,title:({new:'Ventas de clientes nuevos',recurring:'Ventas de clientes recurrentes',unknown:'Ventas sin historial clasificado'})[group.key],caption:'Por cliente · primera venta frente al período',groups:group.clients||[],total:group.totalCents,count:group.count,pricedCount:group.pricedCount,pendingCount:group.pendingCount,kind:'segment-client',totalKind:'segment',totalKey:group.key,keyFor:client=>chartKey({segment:group.key,client:client.key})})).join('');
     const unknown=metrics.segments.find(group=>group.key==='unknown');
-    return activity+kpiTicketCards(metrics)+'<section class="j-kpi-recurrence j-spaced"><div class="j-panel-head"><div><h2>Nuevos y recurrentes por cliente</h2><p class="j-muted">Historial de primera venta; sin historial permanece sin clasificar.</p></div>'+kpiLink('Ver clientes sin clasificar','segment','unknown')+'</div><div class="j-kpi-panels">'+recurrence+'</div>'+(!unknown?.count?'<p class="j-sub j-spaced">Sin ventas con historial desconocido en este corte; no se ha dibujado una dona sin observaciones.</p>':'')+'</section><div class="j-spaced">'+kpiMonthly(metrics,true)+'</div>';
+    return activity+kpiTicketCards(metrics)+'<section class="j-kpi-recurrence j-spaced"><div class="j-panel-head"><div><h2>Nuevos y recurrentes por cliente</h2><p class="j-muted">Historial de primera venta. Los clientes sin fecha comprobable aparecen como «Sin historial».</p></div>'+kpiLink('Ver clientes sin clasificar','segment','unknown')+'</div><div class="j-kpi-panels">'+recurrence+'</div>'+(!unknown?.count?'<p class="j-sub j-spaced">Sin ventas con historial desconocido en esta selección.</p>':'')+'</section><div class="j-kpi-panels j-spaced">'+kpiMonthly(metrics,true)+kpiMonthly(metrics)+'</div>';
   }
   function kpiTimingPanels(metrics) {
     const cards='<div class="j-type-timing-cards">'+metrics.byType.map(group=>'<button type="button" class="j-panel j-type-timing-card" data-kpi-timing="'+group.key+'" '+chartData('type',group.key)+'><span>Cierre · '+escape(group.label)+'</span><strong>'+decimal(group.closeDays)+(group.n?' días':'')+'</strong><small>Primer envío → aceptación · n='+group.n+' de '+group.count+' · días naturales</small></button>').join('')+'</div>';
@@ -313,15 +415,15 @@
     if (!state.kpis.detail) return '';
     const {kind,key} = state.kpis.detail;
     let rows = metrics.eligible, title = 'Ventas del período', definition = 'Versión aceptada · fecha elegida · MXN sin IVA', timing = false;
-    if (kind === 'definitions') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Definiciones y decisiones pendientes</h2>${button('Cerrar detalle','kpi-close')}</div><div class="j-table-wrap j-kpi-table"><table class="j-table"><thead><tr><th>Familia</th><th>Criterio</th></tr></thead><tbody><tr><td>Ventas</td><td>Total, cliente, categoría y mes. Precio sin IVA de la versión aceptada; aceptación por defecto. PO es un hito comparativo, nunca un cobro.</td></tr><tr><td>Tickets</td><td>General y por categoría: importe conocido / número de ventas con importe. Las ausencias no valen cero. Se conservan seis categorías históricas y se añade Logística.</td></tr><tr><td>Preparación</td><td>Solicitud → primer envío, días naturales. Cohorte aceptada del período; denominador propio de intervalos válidos.</td></tr><tr><td>Cierre</td><td>Primer envío → aceptación, general / línea / proyecto, días naturales. No se modelan pausas.</td></tr><tr><td>Cotizaciones por cliente</td><td>Recibidas y aceptadas de la misma cohorte por fecha de solicitud. Un expediente agrupa sus versiones.</td></tr><tr><td>Cotizaciones por mes</td><td>Expedientes únicos por mes de solicitud.</td></tr><tr><td>Nuevos / recurrentes</td><td>Primera venta dentro / antes del período. Historial desconocido conserva su propio grupo.</td></tr></tbody></table></div><p class="j-notice">Pendientes productivos: validación de la fecha comercial, clasificación histórica y reglas de anticipo/PO; equivalencia de los tiempos con Asana no acreditada. Estos KPIs no aprueban roles, cobros, tarifas ni cambios en Astil o el cotizador operativo.</p><p class="j-muted">Corte y reloj deterministas: 15 oct 2026. Moneda: MXN, centavos enteros. Las relaciones ambiguas se reportan y no se sustituyen por el borrador más reciente.</p></section>`;
-    if (kind === 'quality') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Cobertura de datos</h2>${button('Cerrar detalle','kpi-close')}</div>${row('Ventas con importe válido',metrics.priced.length+' de '+metrics.eligible.length)}${row('Importes pendientes de las ventas elegibles',metrics.pending.length)}${row('Aceptadas del período sin anticipo / PO',metrics.noPo.length)}${row('Ventas con cliente sin historial',metrics.unknown.length)}${row('Expedientes ambiguos excluidos del universo',metrics.quality.ambiguous.length)}<h3 class="j-spaced">Observaciones del universo completo</h3><ul class="j-kpi-quality-list">${metrics.quality.issues.map(issue => `<li>${button(issue.id,'kpi-open',`data-id="${escape(issue.id)}"`)} ${escape(issue.message)}</li>`).join('') || '<li>Sin observaciones en los controles ejecutados sobre estos datos.</li>'}</ul>${metrics.pending.length ? kpiTable(metrics.pending) : ''}</section>`;
+    if (kind === 'definitions') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Definiciones y decisiones pendientes</h2>${button('Cerrar detalle','kpi-close')}</div><div class="j-table-wrap j-kpi-table"><table class="j-table"><thead><tr><th>Familia</th><th>Criterio</th></tr></thead><tbody><tr><td>Ventas</td><td>Total, cliente, categoría y mes. Precio sin IVA de la versión aceptada; aceptación por defecto. PO es un hito comparativo, nunca un cobro.</td></tr><tr><td>Tickets</td><td>General y por categoría: importe conocido / número de ventas con importe. Las ausencias no valen cero. Se conservan seis categorías históricas y se añade Logística.</td></tr><tr><td>Preparación</td><td>Solicitud → primer envío, días naturales. Cohorte aceptada del período; denominador propio de intervalos válidos.</td></tr><tr><td>Cierre</td><td>Primer envío → aceptación, general / línea / proyecto, días naturales. No se modelan pausas.</td></tr><tr><td>Cotizaciones por cliente</td><td>Recibidas y aceptadas de la misma cohorte por fecha de solicitud. Un expediente agrupa sus versiones.</td></tr><tr><td>Cotizaciones por mes</td><td>Expedientes únicos por mes de solicitud.</td></tr><tr><td>Nuevos / recurrentes</td><td>Primera venta dentro / antes del período. Historial desconocido conserva su propio grupo.</td></tr></tbody></table></div><p class="j-notice">Pendientes productivos: validación de la fecha comercial, clasificación histórica y reglas de anticipo/PO; equivalencia de los tiempos con Asana no acreditada. Estos KPIs no aprueban roles, cobros, tarifas ni cambios en Astil o el cotizador operativo.</p><p class="j-muted">${escape(coverageLabel(metrics))}. Moneda: MXN, centavos enteros. Las relaciones ambiguas se reportan y no se sustituyen por el borrador más reciente.</p></section>`;
+    if (kind === 'quality') return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><h2>Cobertura de datos</h2>${button('Cerrar detalle','kpi-close')}</div>${row('Ventas con importe válido',metrics.priced.length+' de '+metrics.eligible.length)}${row('Importes pendientes de las ventas elegibles',metrics.pending.length)}${row('Aceptadas del período sin anticipo / PO',metrics.noPo.length)}${row('Ventas con cliente sin historial',metrics.unknown.length)}${row('Expedientes excluidos por identidad ambigua',metrics.quality.ambiguous.length)}<h3 class="j-spaced">Observaciones de la selección</h3><ul class="j-kpi-quality-list">${metrics.quality.issues.map(issue => `<li>${button(issue.id,'kpi-open',`data-id="${escape(issue.id)}"`)} ${escape(issue.message)}</li>`).join('') || '<li>Sin observaciones en los controles ejecutados sobre estos datos.</li>'}</ul>${metrics.pending.length ? kpiTable(metrics.pending) : ''}</section>`;
     if (kind === 'ticket') {title='Ticket promedio';definition='Suma de importes válidos / número de ventas con importe; n='+metrics.priced.length+'. Pendientes: '+metrics.pending.length+'.';}
     if (kind === 'prep' || kind === 'close') { rows=metrics.times;timing=true;title=kind === 'prep' ? 'Tiempo de preparación' : 'Tiempo de cierre';definition='Aceptadas del período · días naturales · n='+ (kind === 'prep' ? metrics.prepN : metrics.closeN)+' de '+metrics.times.length+'. Los intervalos ausentes o negativos quedan excluidos.'; }
     if (kind === 'month') {rows=metrics.eligible.filter(item => item[state.kpis.basis]?.startsWith(key));title='Ventas · '+key;}
     if (kind === 'client' || kind === 'category') {const group=(kind === 'client' ? metrics.byClient : metrics.byCategory).find(group => group.key === key);rows=group?.rows || [];title=group?.label || 'Sin clasificar';}
     if (kind === 'segment') {rows=metrics.segments.find(group => group.key === key)?.rows || [];title=({new:'Clientes nuevos',recurring:'Clientes recurrentes',unknown:'Clientes sin clasificar'})[key];}
     if (kind === 'type') {rows=metrics.byType.find(group => group.key === key)?.rows || [];title='Cierre · '+(key === 'line' ? 'Producto de línea' : 'Proyecto');timing=true;definition='Aceptación en el período · primer envío → aceptación · denominador de intervalos válidos.';}
-    if (['requests','sent','won','projects','request-month'].includes(kind)) {rows=metrics.cohort.filter(item => kind === 'sent' ? item.firstSentAt && item.firstSentAt <= portfolio.CUTOFF : kind === 'won' ? item.accepted : kind === 'projects' ? item.projectId && item.projectAt && item.projectAt <= portfolio.CUTOFF : kind === 'request-month' ? item.requestedAt?.startsWith(key) : true);title=({requests:'Solicitudes recibidas',sent:'Solicitudes con envío',won:'Solicitudes aceptadas',projects:'Solicitudes convertidas','request-month':'Solicitudes · '+key})[kind];definition='Cohorte por fecha de solicitud · estado al corte · un expediente por solicitud.';}
+    if (['requests','sent','won','projects','request-month'].includes(kind)) {rows=metrics.cohort.filter(item => kind === 'sent' ? item.firstSentAt && item.firstSentAt <= metrics.filters.cutoff : kind === 'won' ? item.accepted : kind === 'projects' ? item.projectId && item.projectAt && item.projectAt <= metrics.filters.cutoff : kind === 'request-month' ? item.requestedAt?.startsWith(key) : true);title=({requests:'Solicitudes recibidas',sent:'Solicitudes con envío',won:'Solicitudes aceptadas',projects:'Proyecto','request-month':'Solicitudes · '+key})[kind];definition='Cohorte por fecha de solicitud · estado al corte · un expediente por solicitud.';}
     if (kind === 'client-history') {rows=metrics.byClient.find(group => group.key === key)?.activity || [];title='Cotizaciones por cliente';definition='Recibidas y aceptadas de la misma cohorte de solicitudes.';}
     if (kind === 'received-client' || kind === 'accepted-client') {const group=metrics.byClient.find(group=>group.key===key);rows=group?.activity || [];if(kind==='accepted-client')rows=rows.filter(item=>item.accepted);title=(kind==='received-client'?'Cotizaciones recibidas · ':'Cotizaciones aceptadas de la cohorte · ')+(group?.label || 'Sin cliente identificado');definition='Identidad: '+key+' · cohorte por fecha de solicitud · un expediente por solicitud.';}
     if (kind === 'category-ticket') {const group=metrics.byCategory.find(group=>group.key===key);rows=group?.rows || [];title='Ticket · '+(group?.label || 'Sin categoría');definition='Promedio '+(group?ticketValue(group):'—')+' · n='+(group?.pricedCount || 0)+' importes válidos de '+(group?.count || 0)+' ventas; '+(group?.pendingCount || 0)+' pendientes. MXN sin IVA.';}
@@ -335,17 +437,34 @@
     }
     return `<section class="j-panel j-kpi-detail" id="j-kpi-detail" tabindex="-1"><div class="j-panel-head"><div><h2>${escape(title)}</h2><p class="j-muted">${rows.length} expedientes</p></div>${button('Cerrar detalle','kpi-close')}</div><p class="j-muted">${escape(definition)}</p>${kpiTable(rows,timing)}<p class="j-sub">Abre una ficha para consultar el mismo expediente. Al regresar se conservan pestaña, filtros y detalle.</p></section>`;
   }
+  function coverageLabel(metrics) {
+    const interval=metrics.interval;
+    if (!metrics.coverage) return 'Corte '+date(metrics.filters.cutoff);
+    const source = metrics.coverage.localOnly ? 'Registros locales' : 'Asana al '+date(metrics.coverage.through);
+    const incomplete=privateApi && !metrics.coverage.lists?.quote ? ' · Cotizaciones de Asana pendientes' : '';
+    const undated=metrics.undatedSales.length ? ' · '+metrics.undatedSales.length+' con estado de venta o aceptación, pendientes de fecha e importe' : '';
+    return `Cobertura de la selección ${date(interval[0])} al ${date(interval[1])} · ${source}${incomplete}${undated}`;
+  }
+  function kpiFiltersMarkup(metrics) {
+    const periods = metrics.coverage
+      ? Object.keys(portfolio.coveragePeriods(metrics.coverage)).map(key=>[key,({cut:metrics.coverage.localOnly ? 'Registros locales' : 'Corte de Asana',october:'Octubre 2026',november:'Noviembre 2026',local:'Registros locales posteriores'})[key]])
+      : [['year','2026 · al 15 de octubre'],['q3','Julio – septiembre 2026'],['october','Octubre · al día 15']];
+    const labels=identityOptions(metrics.rows.filter(row=>row.clientId && Object.hasOwn(clients,row.clientId)).map(row=>[row.clientId,row.clientName]));
+    const {period,category,basis,client,type,customer}=metrics.filters;
+    return `<div class="j-kpi-toolbar">${filterField('j-kpi-period','Período',periods,period)}${filterField('j-kpi-category','Categoría',[['all','Todas las categorías'],...Object.entries(portfolio.CATEGORIES)],category)}${filterField('j-kpi-client','Cliente',[['all','Todos los clientes'],...labels],client)}${filterField('j-kpi-type','Tipo comercial',[['all','Todos los tipos'],...Object.entries(portfolio.TYPES)],type)}${filterField('j-kpi-customer','Tipo de cliente',[['all','Todos los clientes'],...Object.entries(portfolio.SEGMENTS)],customer)}${filterField('j-kpi-basis','Fecha de ventas',[['acceptedAt','Aceptación'],['poAt','Anticipo / PO · sólo hito']],basis)}</div>`;
+  }
   function kpisMarkup() {
     const metrics = kpiMetrics();
-    const stat = (kind,label,value,context) => `<button type="button" class="j-kpi-stat" data-action="kpi-detail" data-kind="${kind}"><span>${label}</span><strong>${value}</strong><small>${context}</small></button>`;
+    const stat = (kind,label,value,context,key='') => `<button type="button" class="j-kpi-stat" ${chartData(kind,key)}><span>${escape(label)}</span><strong>${escape(value)}</strong><small>${escape(context)}</small></button>`;
     const currentTotal = amountValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,totalCents:metrics.totalCents});
-    return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">Cotizaciones, clientes y tiempos en una misma vista.</p></div></header><div class="j-kpi-toolbar"><label class="j-field"><span>Período</span><select id="j-kpi-period" class="j-input"><option value="year" ${state.kpis.period === 'year' ? 'selected' : ''}>2026 · al 15 de octubre</option><option value="q3" ${state.kpis.period === 'q3' ? 'selected' : ''}>Julio – septiembre 2026</option><option value="october" ${state.kpis.period === 'october' ? 'selected' : ''}>Octubre · al día 15</option></select></label><label class="j-field"><span>Categoría</span><select id="j-kpi-category" class="j-input"><option value="all">Todas las categorías</option>${Object.entries(portfolio.CATEGORIES).map(([key,label]) => `<option value="${key}" ${state.kpis.category === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="j-field"><span>Fecha de ventas</span><select id="j-kpi-basis" class="j-input"><option value="acceptedAt" ${state.kpis.basis === 'acceptedAt' ? 'selected' : ''}>Aceptación</option><option value="poAt" ${state.kpis.basis === 'poAt' ? 'selected' : ''}>Anticipo / PO · sólo hito</option></select></label></div><p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${stat('close','Cierre',decimal(metrics.closeDays)+(metrics.closeN ? ' días' : ''),'Primer envío → aceptación · n='+metrics.closeN+' de '+metrics.times.length)}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','A proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · corte: 15 oct 2026</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">Los indicadores muestran los expedientes de esta sesión; la equivalencia histórica con Asana no está acreditada.</p>`;
+    return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">Cotizaciones, clientes y tiempos en una misma vista.</p></div></header>${kpiFiltersMarkup(metrics)}<p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${metrics.byType.map(group=>stat('type',group.label,decimal(group.closeDays)+(group.n ? ' días' : ''),'Cierre · '+group.n+' intervalos válidos',group.key)).join('')}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','Proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · ${escape(coverageLabel(metrics))}</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">${!metrics.coverage ? 'Los indicadores muestran los expedientes de esta sesión.' : metrics.coverage.localOnly ? 'El tablero muestra los expedientes guardados en el equipo.' : 'Asana aporta el corte importado. Los expedientes locales se consultan en su período correspondiente.'}</p>`;
   }
   function recordMarkup(record) {
     const projected = portfolio.project([record],clients)[0];
     return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia histórica parcial. No tiene un guardado confirmado. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${!record.historicalPartial ? button('Abrir recorrido de este expediente','stage','data-screen="request"',true) : button('Consultar referencia histórica','stage','data-screen="offer"')}${button('Regresar a KPIs','return-kpis')}</div>${versionsMarkup(record)}</section>`;
   }
   function canStage(record, key) {
+    if (record.asana) return key==='record' && record.asana.kind==='quote' || key==='project' && Boolean(record.project);
     if (key === 'record') return true;
     if (record.historicalPartial) return key === 'offer';
     if (key === 'request' || key === 'quote') return true;
@@ -357,10 +476,13 @@
   }
 
   function caseMarkup(record) {
-    const s = summary(record);
+    if (record.asana) return importedCaseMarkup(record);
     const isEditing = state.screen === 'request' || state.screen === 'quote';
     const metadata = isEditing ? '' : `<p class="j-muted">${escape(record.request.client)} · ${escape(record.request.account)} · ${escape(record.request.designer)}</p>`;
-    const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${record.id} · Versión ${record.version}</p><h1>${escape(record.request.title)}</h1>${metadata}</div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
+    const viewProject = state.screen==='project' && record.project;
+    const folio = viewProject ? portfolio.compactFolio(portfolio.projectFolio(record.project)) : record.id;
+    const title = viewProject ? portfolio.projectTitle(record.project) || record.request.title : record.request.title;
+    const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)} · Versión ${record.version}</p><h1>${escape(title)}</h1>${metadata}</div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
     const back = state.returnToKpis ? `<div class="j-kpi-return">${button('Regresar a KPIs','return-kpis')}<span class="j-muted">Se conservarán los filtros y el detalle.</span></div>` : '';
     const phoneNotice = phone.recordNeedsAttention(record) ? '<p class="j-notice" role="status">Un teléfono de este expediente requiere revisión para retirar una posible extensión.</p>' : '';
     if (state.screen === 'record') return crumbs+back+phoneNotice+recordMarkup(record);
@@ -368,15 +490,39 @@
     let body = '';
     if (state.screen === 'request' || state.screen === 'quote') body = nativeFormMarkup(record);
     if (state.screen === 'review') body = reviewMarkup(record);
-    if (state.screen === 'offer') body = offerMarkup(record);
+    if(state.screen==='offer'){
+      body=offerMarkup(record);
+      if(record.sent&&!record.historicalPartial&&privateApi?.lineForSent&&localUser?.role==='direction'){
+        body+=`<section class="j-panel j-spaced" data-sent-line-panel="${escape(record.id)}" aria-labelledby="j-sent-line-title">
+          <h2 id="j-sent-line-title">Alta como producto de línea</h2>
+          <button type="button" class="j-btn" data-sent-line-list>Consultar solicitudes de la versión enviada</button>
+          <p class="j-muted" data-sent-line-status role="status"></p><div data-sent-line-rows></div>
+        </section>`;
+      }
+    }
     if (state.screen === 'response') body = responseMarkup(record);
     if (state.screen === 'project') body = projectMarkup(record);
     return `${crumbs}${back}${nav}${phoneNotice}${body}`;
   }
 
+  function importedCaseMarkup(record) {
+    const project = state.screen==='project' ? record.project : null;
+    const folio = project ? portfolio.compactFolio(portfolio.projectFolio(project)) : record.folio || record.id;
+    const title = project ? portfolio.projectTitle(project) || record.request.title : record.request.title;
+    const back = state.returnToKpis ? button('Regresar a KPIs','return-kpis') : project ? button('Todos los proyectos','projects') : button('Volver a cotizaciones','list');
+    const relatedRecord = records.find(item=>item.id===record.asana.related?.id);
+    const related = relatedRecord && (project ? relatedRecord.asana?.kind==='quote' : Boolean(relatedRecord.project))
+      ? button(project?'Consultar cotización':'Consultar proyecto','open',`data-id="${escape(relatedRecord.id)}"`)
+      : !project && record.project && button('Consultar proyecto','stage','data-screen="project"');
+    const details = project ? projectViews.detail(record) : projectViews.sourceDetail(record.asana,record.request,{
+      heading:'Detalles de la cotización',folio:record.folio,status:statuses[status(record)]
+    });
+    return `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)}</p><h1>${escape(title)}</h1></div>${!project ? quoteStateMarkup(record) : ''}</div><div class="j-actions j-spaced">${back}${related || ''}</div>${details}`;
+  }
+
   function saveStatus(record) {
     const s = summary(record);
-    return saved(record) ? 'Guardado durante esta sesión' : s.hasPending ? 'Captura sin aplicar' : s.saveState === 'unknown' ? 'Resultado de guardado desconocido' : '';
+    return saved(record) ? (browserStore?'Guardado en este navegador':privateApi?'Guardado en el equipo':'Guardado durante esta sesión') : s.hasPending ? 'Captura sin aplicar' : s.saveState === 'unknown' ? 'Resultado de guardado desconocido' : '';
   }
 
   function nativeFormMarkup(record) {
@@ -388,13 +534,24 @@
     return notice+status+recovery;
   }
 
+  function refreshCommercialType(record) {
+    if (state.screen!=='request' || !record || record.asana) return;
+    const fields=host.querySelector('.client-section--request > .grid');
+    if (!fields) return;
+    if (!fields.querySelector('#j-commercial-type')) fields.insertAdjacentHTML('beforeend',
+      `<div class="field"><label for="j-commercial-type">Tipo comercial</label><select id="j-commercial-type">${filterOptions([['','Por definir'],...Object.entries(portfolio.TYPES)],record.commercialType || '')}</select></div>`);
+    const selector=fields.querySelector('#j-commercial-type');
+    selector.value=record.commercialType || '';
+    selector.disabled=locked(record);
+  }
+
   function internalTotals(s) {
     return row('Costo interno',money(s?.costCents)) + row('Precio antes de IVA',money(s?.priceCents)) + row('IVA',money(s?.taxCents)) + row('Total de oferta',money(s?.totalCents));
   }
 
   function reviewMarkup(record) {
     const s = snapshot(record)?.summary;
-    return `<div class="j-two-columns"><section class="j-panel"><p class="j-eyebrow">Revisión</p><h2>Revisión interna de V${record.version}</h2><p class="j-muted">La revisión se conserva durante esta sesión.</p><label class="j-check"><input id="j-review-technical" type="checkbox" ${record.reviewChecks.technical ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión técnica: artículos, medidas, procesos y alcance.</span></label><label class="j-check"><input id="j-review-commercial" type="checkbox" ${record.reviewChecks.commercial ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión comercial: precio, fechas y condiciones del borrador guardado.</span></label><p class="j-notice">Primer y acabado final permanecen diferidos. Madera o CNC sin tarifa confirmada no pueden aprobarse como costo completo.</p><div class="j-actions">${button(reviewCurrent(record) ? 'Revisión confirmada' : 'Confirmar revisión','validate',`${locked(record) || !record.reviewChecks.technical || !record.reviewChecks.commercial || !saved(record) || !complete(record) ? 'disabled' : ''}`,true)}${button('Preparar oferta','stage',`data-screen="offer" ${canStage(record,'offer') ? '' : 'disabled'}`)}</div></section><aside class="j-panel"><h2>Resumen interno</h2>${internalTotals(s)}<p class="j-sub">Cálculos de la versión guardada · V${record.version}. El cliente verá precio y condiciones.</p></aside></div>`;
+    return `<div class="j-two-columns"><section class="j-panel"><p class="j-eyebrow">Revisión</p><h2>Revisión interna de V${record.version}</h2><p class="j-muted">La revisión corresponde a la versión guardada de la cotización.</p><label class="j-check"><input id="j-review-technical" type="checkbox" ${record.reviewChecks.technical ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión técnica: artículos, medidas, procesos y alcance.</span></label><label class="j-check"><input id="j-review-commercial" type="checkbox" ${record.reviewChecks.commercial ? 'checked' : ''} ${locked(record) ? 'disabled' : ''}><span>Revisión comercial: precio, fechas y condiciones del borrador guardado.</span></label><div class="j-actions">${button(reviewCurrent(record) ? 'Revisión confirmada' : 'Confirmar revisión','validate',`${locked(record) || !record.reviewChecks.technical || !record.reviewChecks.commercial || !saved(record) || !complete(record) ? 'disabled' : ''}`,true)}${button('Preparar oferta','stage',`data-screen="offer" ${canStage(record,'offer') ? '' : 'disabled'}`)}</div></section><aside class="j-panel"><h2>Resumen interno</h2>${internalTotals(s)}<p class="j-sub">Cálculos de la versión guardada · V${record.version}. El cliente verá precio y condiciones.</p></aside></div>`;
   }
 
   function termsMarkup(quote) {
@@ -411,7 +568,7 @@
     const frozen = record.sent?.snapshot || snapshot(record);
     const r = frozen?.request || record.request;
     const s = frozen?.summary;
-    return `<div class="j-offer-toolbar"><div><h2>Oferta comercial · V${record.sent?.version || record.version}</h2><p class="j-muted">${record.historicalPartial ? 'Referencia histórica parcial: importes y condiciones sin acreditar.' : record.sent ? 'Copia de la versión registrada en esta sesión.' : 'Vista del borrador guardado y revisado.'}</p></div><div class="j-actions">${record.historicalPartial ? pill('Referencia parcial · sólo consulta','warn') : record.sent ? button('Registrar respuesta','stage','data-screen="response"',true) : button('Registrar envío','send',`${reviewCurrent(record) && !state.busy ? '' : 'disabled'}`,true)}${record.sent && !record.project && !record.historicalPartial ? button('Abrir nueva versión','new-version') : ''}</div></div><article id="j-commercial-offer" class="j-offer"><header class="j-offer-head"><div class="j-wordmark">${brandMarkup()}<span>· DUCO</span></div><div><p>OFERTA</p><strong>${record.id} · V${record.sent?.version || record.version}</strong></div></header><p class="j-eyebrow">Para ${escape(r.client)}</p><h2>${escape(r.title)}</h2><p>${escape(r.need)}</p><div class="j-offer-scope"><div><h3>Incluye</h3><p>${escape(r.included || 'Según descripción de los artículos.')}</p></div><div><h3>Excluye</h3><p>${escape(r.excluded || 'Sin exclusiones adicionales.')}</p></div></div>${row('Fecha de cotización',date(r.quoteDue))}${row('Entrega estimada',date(r.deliveryDate))}${row('Precio antes de IVA',money(s?.priceCents))}${row('IVA',money(s?.taxCents))}${row('Total',money(s?.totalCents))}<h3 class="j-spaced">Condiciones</h3>${termsMarkup(frozen?.quote)}<p class="j-offer-disclaimer">Este documento no se envía al cliente ni constituye una oferta real. ${record.historicalPartial ? 'Esta referencia no acredita un guardado del motor.' : 'Las condiciones proceden del cotizador de este expediente.'}</p></article>${record.historicalPartial ? '<p class="j-notice">Referencia incompleta de ejemplo: no permite revisión, envío ni conversión.</p>' : record.sent ? `<p class="j-confirm">Envío registrado en esta sesión para V${record.sent.version}. La copia permanece congelada aunque se abra otra versión.</p>` : '<p class="j-muted j-spaced">Registrar envío conserva una copia inmutable; no genera correos ni llamadas externas.</p>'}`;
+    return `<div class="j-offer-toolbar"><div><h2>Oferta comercial · V${record.sent?.version || record.version}</h2><p class="j-muted">${record.historicalPartial ? 'Referencia histórica parcial: importes y condiciones sin acreditar.' : record.sent ? 'Copia de la versión enviada.' : 'Vista del borrador guardado y revisado.'}</p></div><div class="j-actions">${record.historicalPartial ? pill('Referencia parcial · sólo consulta','warn') : record.sent ? button('Registrar respuesta','stage','data-screen="response"',true) : button('Registrar envío','send',`${reviewCurrent(record) && !state.busy ? '' : 'disabled'}`,true)}${record.sent && !record.project && !record.historicalPartial ? button('Abrir nueva versión','new-version') : ''}</div></div><article id="j-commercial-offer" class="j-offer"><header class="j-offer-head"><div class="j-wordmark">${brandMarkup()}<span>· DUCO</span></div><div><p>OFERTA</p><strong>${record.id} · V${record.sent?.version || record.version}</strong></div></header><p class="j-eyebrow">Para ${escape(r.client)}</p><h2>${escape(r.title)}</h2><p>${escape(r.need)}</p><div class="j-offer-scope"><div><h3>Incluye</h3><p>${escape(r.included || 'Según descripción de los artículos.')}</p></div><div><h3>Excluye</h3><p>${escape(r.excluded || 'Sin exclusiones adicionales.')}</p></div></div>${row('Fecha de cotización',date(r.quoteDue))}${row('Entrega estimada',date(r.deliveryDate))}${row('Precio antes de IVA',money(s?.priceCents))}${row('IVA',money(s?.taxCents))}${row('Total',money(s?.totalCents))}<h3 class="j-spaced">Condiciones</h3>${termsMarkup(frozen?.quote)}<p class="j-offer-disclaimer">Este documento no se envía al cliente ni constituye una oferta real. ${record.historicalPartial ? 'Esta referencia no acredita un guardado del motor.' : 'Las condiciones proceden del cotizador de este expediente.'}</p></article>${record.historicalPartial ? '<p class="j-notice">Referencia incompleta de ejemplo: no permite revisión, envío ni conversión.</p>' : record.sent ? `<p class="j-confirm">Envío registrado para V${record.sent.version}. La copia permanece congelada aunque se abra otra versión.</p>` : '<p class="j-muted j-spaced">Registrar envío conserva una copia inmutable; no genera correos ni llamadas externas.</p>'}`;
   }
 
   function versionsMarkup(record) {
@@ -424,14 +581,14 @@
     if (!sent) return '<p class="j-notice">Primero registra un envío.</p>';
     const existing = sent.response;
     const draft = record.responseDraft;
-    return `<div class="j-two-columns"><section class="j-panel"><h2>Respuesta a la versión ${sent.version}</h2><p class="j-muted">La respuesta identifica exactamente la oferta registrada y conserva su evidencia.</p>${existing ? `<p class="j-confirm">Respuesta registrada: ${({accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada'})[existing.result]} · V${existing.version}</p><p>${escape(existing.evidence)}</p><div class="j-actions j-spaced">${existing.result === 'accepted' ? button(record.project ? 'Consultar proyecto' : 'Preparar conversión','stage','data-screen="project"',true) : ''}${!record.project ? button('Abrir nueva versión','new-version') : ''}</div>` : `<div class="j-grid j-spaced"><label class="j-field"><span>Respuesta</span><select id="j-response-choice" class="j-input"><option value="accepted" ${draft.choice === 'accepted' ? 'selected' : ''}>Aceptada</option><option value="changes" ${draft.choice === 'changes' ? 'selected' : ''}>Solicita cambios</option><option value="rejected" ${draft.choice === 'rejected' ? 'selected' : ''}>Rechazada</option></select></label><label class="j-field"><span>Canal del ejemplo</span><select id="j-response-channel" class="j-input"><option>Correo de ejemplo</option><option>Reunión de ejemplo</option><option>Mensaje de ejemplo</option></select></label><label class="j-field j-wide"><span>Evidencia de la respuesta</span><textarea id="j-evidence" class="j-input" rows="3" placeholder="Ejemplo: El contacto ficticio acepta la oferta V${sent.version}.">${escape(draft.evidence)}</textarea></label></div><label class="j-check"><input id="j-exact-version" type="checkbox" ${draft.exact ? 'checked' : ''}><span>La respuesta corresponde a <strong>${record.id} · V${sent.version}</strong>, total ${money(sent.snapshot?.summary?.totalCents)}.</span></label>${button('Registrar respuesta','register-response','',true)}`}</section><aside class="j-panel"><p class="j-eyebrow">Versión enviada</p><h2>${escape(sent.snapshot?.request?.title)}</h2>${row('Versión',`V${sent.version}`)}${row('Total enviado',money(sent.snapshot?.summary?.totalCents))}${row('Entrega',date(sent.snapshot?.request?.deliveryDate))}${button('Consultar oferta enviada','stage','data-screen="offer"')}<p class="j-sub j-spaced">La evidencia se conserva en memoria. No se carga un archivo ni se comunica con un servicio.</p></aside></div>${versionsMarkup(record)}`;
+    return `<div class="j-two-columns"><section class="j-panel"><h2>Respuesta a la versión ${sent.version}</h2><p class="j-muted">La respuesta identifica exactamente la oferta registrada y conserva su evidencia.</p>${existing ? `<p class="j-confirm">Respuesta registrada: ${({accepted:'Aceptada', changes:'Cambios solicitados', rejected:'Rechazada'})[existing.result]} · V${existing.version}</p><p>${escape(existing.evidence)}</p><div class="j-actions j-spaced">${existing.result === 'accepted' ? button(record.project ? 'Consultar proyecto' : 'Preparar conversión','stage','data-screen="project"',true) : ''}${!record.project ? button('Abrir nueva versión','new-version') : ''}</div>` : `<div class="j-grid j-spaced"><label class="j-field"><span>Respuesta</span><select id="j-response-choice" class="j-input"><option value="accepted" ${draft.choice === 'accepted' ? 'selected' : ''}>Aceptada</option><option value="changes" ${draft.choice === 'changes' ? 'selected' : ''}>Solicita cambios</option><option value="rejected" ${draft.choice === 'rejected' ? 'selected' : ''}>Rechazada</option></select></label><label class="j-field"><span>Canal del ejemplo</span><select id="j-response-channel" class="j-input"><option>Correo de ejemplo</option><option>Reunión de ejemplo</option><option>Mensaje de ejemplo</option></select></label><label class="j-field j-wide"><span>Evidencia de la respuesta</span><textarea id="j-evidence" class="j-input" rows="3" placeholder="Ejemplo: El contacto ficticio acepta la oferta V${sent.version}.">${escape(draft.evidence)}</textarea></label></div><label class="j-check"><input id="j-exact-version" type="checkbox" ${draft.exact ? 'checked' : ''}><span>La respuesta corresponde a <strong>${record.id} · V${sent.version}</strong>, total ${money(sent.snapshot?.summary?.totalCents)}.</span></label>${button('Registrar respuesta','register-response','',true)}`}</section><aside class="j-panel"><p class="j-eyebrow">Versión enviada</p><h2>${escape(sent.snapshot?.request?.title)}</h2>${row('Versión',`V${sent.version}`)}${row('Total enviado',money(sent.snapshot?.summary?.totalCents))}${row('Entrega',date(sent.snapshot?.request?.deliveryDate))}${button('Consultar oferta enviada','stage','data-screen="offer"')}<p class="j-sub j-spaced">La evidencia registrada queda vinculada a la versión enviada.</p></aside></div>${versionsMarkup(record)}`;
   }
 
   function projectMarkup(record) {
     const project = record.project;
     if (project) {
       projectOperations(record);
-      return `<section class="j-panel j-project"><p class="j-eyebrow">Proyecto</p><h2>${escape(project.title)}</h2><p class="j-confirm">Conversión registrada en esta sesión · ${project.id}</p><div class="j-grid"><div>${row('Solicitud de origen',record.id)}${row('Versión aceptada',`V${project.version}`)}${row('Cliente',project.baseline.request.client)}${row('Account',project.baseline.request.account)}</div><div>${row('Presupuesto base interno',money(project.baseline.summary.costCents))}${row('Total comercial aceptado',money(project.baseline.summary.totalCents))}${row('Entrega estimada',date(project.baseline.request.deliveryDate))}${row('Responsable de diseño',project.baseline.request.designer)}</div></div><p class="j-muted j-spaced">Proyecto único vinculado con la versión aceptada. El seguimiento no modifica esta base ni crea cobros, cuentas por cobrar o compras reales.</p><div class="j-actions j-spaced">${button('Consultar versión aceptada','stage','data-screen="offer"')}${button('Todos los proyectos','projects')}</div></section>${projectViews.detail(record,state.opTab||'plan',projectDraft(record))}${versionsMarkup(record)}`;
+      return `<section class="j-panel j-project"><p class="j-eyebrow">Proyecto</p><h2>${escape(portfolio.projectTitle(project))}</h2><p class="j-confirm">${privateApi ? 'Proyecto guardado en este equipo' : 'Conversión registrada'} · ${escape(portfolio.compactFolio(portfolio.projectFolio(project)))}</p><div class="j-grid"><div>${row('Solicitud de origen',record.id)}${row('Versión aceptada',`V${project.version}`)}${row('Cliente',project.baseline.request.client)}${row('Account',project.baseline.request.account)}</div><div>${row('Presupuesto base interno',money(project.baseline.summary.costCents))}${row('Total comercial aceptado',money(project.baseline.summary.totalCents))}${row('Entrega estimada',date(project.baseline.request.deliveryDate))}${row('Responsable de diseño',project.baseline.request.designer)}</div></div><p class="j-muted j-spaced">Proyecto único vinculado con la versión aceptada. El seguimiento no modifica esta base ni crea cobros, cuentas por cobrar o compras reales.</p><div class="j-actions j-spaced">${button('Consultar versión aceptada','stage','data-screen="offer"')}${button('Todos los proyectos','projects')}</div></section>${projectViews.detail(record,state.opTab||'plan',projectDraft(record))}${versionsMarkup(record)}`;
     }
     return `<section class="j-panel"><p class="j-eyebrow">Conversión ilustrativa</p><h2>De cotización aceptada a proyecto</h2><p>Se conservarán la solicitud, la versión aceptada, su alcance y el presupuesto base.</p><div class="j-grid j-spaced"><div>${row('Solicitud',record.id)}${row('Versión aceptada',`V${record.sent?.version}`)}${row('Cliente',record.sent?.snapshot?.request?.client || record.request.client)}</div><div>${row('Total aceptado',money(record.sent?.snapshot?.summary?.totalCents))}${row('Entrega',date(record.sent?.snapshot?.request?.deliveryDate))}</div></div><p class="j-notice">No se registra ningún anticipo. Las condiciones de pagos y permisos siguen pendientes.</p>${button('Convertir en proyecto','convert',`${accepted(record) && !state.busy ? '' : 'disabled'}`,true)}</section>`;
   }
@@ -445,6 +602,10 @@
     else if (target.right > viewport.right) navigation.scrollLeft += target.right-viewport.right;
   }
 
+  function crumbFolio(record) {
+    return state.screen==='project' && record.project
+      ? portfolio.compactFolio(portfolio.projectFolio(record.project)) : record.folio || record.id;
+  }
   function render() {
     const active = current();
     const atKpis = state.screen === 'kpis';
@@ -452,38 +613,45 @@
     const atList = !atKpis && !atOperations && (state.screen === 'list' || !active);
     if(atOperations)for(const record of records)if(record.project)projectOperations(record);
     const operationsTitle={projects:'Proyectos',production:'Producción',deliveries:'Entregas',workflow:'Mapa del proceso'}[state.screen];
-    const operationsBody=atOperations?(state.screen==='workflow'?projectViews.workflow():projectViews.list(records,state.screen)):'';
+    const operationsBody=atOperations?(state.screen==='workflow'?projectViews.workflow():projectViews.list(records,state.screen,state.projectSearch || '')):'';
     const activeElement = document.activeElement;
-    const restoreSearch = activeElement?.id === 'j-search';
+    const restoreSearch = ['j-search','j-project-search'].includes(activeElement?.id);
     const selection = restoreSearch ? activeElement.selectionStart : null;
-    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions"><span class="j-demo">SÓLO EN ESTA SESIÓN</span>${button('Reiniciar sesión','reset')}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(active.id)}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
+    const sessionControls=privateApi
+      ? '<span class="j-demo">COPIA PRIVADA</span>'+button('Cerrar sesión','private-logout')
+      : browserStore ? '<span class="j-demo">DATOS DE PRUEBA</span>'+button('Recargar demo','reset')
+      : '<span class="j-demo">SÓLO EN ESTA SESIÓN</span>'+button('Reiniciar sesión','reset');
+    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${sessionControls}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(crumbFolio(active))}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
     host.hidden = atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
     root.dataset.journeyScreen = state.screen;
     host.dataset.journeyScreen = state.screen;
+    refreshCommercialType(active);
     revealCommercialStage();
-    if (restoreSearch) { const input = document.getElementById('j-search'); input?.focus(); if (selection != null) input?.setSelectionRange(selection,selection); }
+    if (restoreSearch) { const input = document.getElementById(activeElement.id); input?.focus(); if (selection != null) input?.setSelectionRange(selection,selection); }
     renderFooter();
   }
 
   function guardMarkup() {
     if (!state.guard) return '';
     const type = state.guard;
-    const heading = type === 'reset' ? '¿Reiniciar esta sesión?' : type === 'pending' ? (api.automaticCapture?'Hay datos por corregir':'Hay captura sin aplicar') : type === 'unknown' ? 'Falta confirmar el guardado' : 'El borrador tiene cambios sin guardar';
-    const copy = type === 'reset' ? 'Se eliminarán los expedientes, versiones y proyectos de esta sesión. Se restaurarán los datos iniciales.' : type === 'pending' ? (api.automaticCapture?'Corrige o descarta los datos pendientes antes de continuar. Los cambios válidos de la sesión se conservan.':'Antes de cambiar de etapa o expediente, aplica o descarta únicamente la captura pendiente. El borrador aplicado se conserva en memoria.') : type === 'unknown' ? 'Consulta el resultado de la operación antes de continuar. No se puede tratar un resultado desconocido como éxito.' : 'Puedes guardarlo o conservarlo en memoria para seguir después. Recargar la página elimina los cambios de la sesión.';
-    const controls = type === 'reset' ? button('Sí, reiniciar','confirm-reset','',true) + button('Conservar la sesión','stay') : type === 'pending' ? (api.automaticCapture?'':button('Aplicar y continuar','apply-and-leave','',true)) + button('Descartar captura y continuar','discard-and-leave') + button('Continuar editando','stay') : type === 'unknown' ? button('Consultar resultado y continuar','resolve-and-leave','',true) + button('Volver al expediente','stay') : button('Guardar y continuar','save-and-leave',complete(current()) ? '' : 'disabled',true) + button('Conservar borrador y continuar','keep-and-leave') + button('Continuar editando','stay');
-    return `<div class="j-modal-backdrop"><section class="j-dialog" role="alertdialog" aria-modal="true" aria-labelledby="j-guard-title" aria-describedby="j-guard-copy"><h2 id="j-guard-title">${heading}</h2><p id="j-guard-copy">${copy}</p><div class="j-actions j-spaced">${controls}</div></section></div>`;
+    const heading = type === 'reset' ? (browserStore?'¿Recargar la demo?':'¿Reiniciar esta sesión?') : type === 'pending' ? (api.automaticCapture?'Hay datos por corregir':'Hay captura sin aplicar') : type === 'unknown' ? 'Falta confirmar el guardado' : 'El borrador tiene cambios sin guardar';
+    const saveReadiness = type === 'dirty' ? summary(current()) : null;
+    const copy = type === 'reset' ? (browserStore?'Se volverá a abrir la versión guardada de cada expediente. Se perderán las ediciones sin guardar.':'Se eliminarán los expedientes, versiones y proyectos de esta sesión. Se restaurarán los datos iniciales.') : type === 'pending' ? (api.automaticCapture?'Corrige o descarta los datos pendientes antes de continuar. Los cambios válidos de la sesión se conservan.':'Antes de cambiar de etapa o expediente, aplica o descarta únicamente la captura pendiente. El borrador aplicado se conserva en esta pestaña.') : type === 'unknown' ? 'Consulta el resultado de la operación antes de continuar. No se puede tratar un resultado desconocido como éxito.' : 'Guarda el borrador para conservar tus cambios. Si continúas sin guardarlos, podrás seguir editándolos en esta pestaña hasta que la cierres o recargues.';
+    const controls = type === 'reset' ? button(browserStore?'Recargar':'Sí, reiniciar','confirm-reset','',true) + button('Conservar la sesión','stay') : type === 'pending' ? (api.automaticCapture?'':button('Aplicar y continuar','apply-and-leave','',true)) + button('Descartar captura y continuar','discard-and-leave') + button('Continuar editando','stay') : type === 'unknown' ? button('Consultar resultado y continuar','resolve-and-leave','',true) + button('Volver al expediente','stay') : button('Guardar y continuar','save-and-leave',saveReadiness.canSaveDraft ? '' : 'disabled',true) + button('Conservar borrador y continuar','keep-and-leave') + button('Continuar editando','stay');
+    return `<div class="j-modal-backdrop"><section class="j-dialog" role="alertdialog" aria-modal="true" aria-labelledby="j-guard-title" aria-describedby="j-guard-copy"><h2 id="j-guard-title">${heading}</h2><p id="j-guard-copy">${escape(saveReadiness?.saveBlockers.length ? saveReadiness.saveBlockers.join(' ') : copy)}</p><div class="j-actions j-spaced">${controls}</div></section></div>`;
   }
 
   function renderFooter() {
     const active = current();
     const s = active ? summary(active) : null;
     const quoteControls = active && state.screen === 'quote' ? `<div class="j-quote-footer"><div class="j-actions">${api.automaticCapture?'':button('Aplicar captura pendiente','apply-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}${button('Descartar captura pendiente','discard-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}</div><div class="j-actions">${s?.saveState === 'unknown' ? button('Consultar resultado del guardado','resolve-save','id="j-resolve-save"',true) : ''}${button('Volver a cotizaciones','list')}${button('Ir a revisión','stage',`data-screen="review" ${canStage(active,'review') ? '' : 'disabled'}`,true)}</div></div>` : '';
-    footer.innerHTML = `<div class="j-footer-inner">${quoteControls}${state.feedback ? `<p id="j-feedback" class="j-feedback ${state.tone}" role="${state.tone === 'error' ? 'alert' : 'status'}">${escape(state.feedback)}</p>` : '<p id="j-feedback" class="j-sr" role="status"></p>'}${active && state.screen === 'quote' && s?.blockers?.length ? `<div class="j-notice" id="j-blockers"><strong>Faltantes del cotizador</strong><ul>${s.blockers.map(blocker => `<li>${escape(blocker)}</li>`).join('')}</ul></div>` : ''}<details class="j-demo-tools"><summary>Opciones de sesión</summary><div class="j-tools-grid"><label class="j-field"><span>Resultado del próximo guardado</span><select id="j-save-outcome" class="j-input"><option value="success" ${state.saveOutcome === 'success' ? 'selected' : ''}>Éxito confirmado</option><option value="fail" ${state.saveOutcome === 'fail' ? 'selected' : ''}>Fallo confirmado</option><option value="unknown" ${state.saveOutcome === 'unknown' ? 'selected' : ''}>Resultado desconocido</option></select></label><label class="j-field"><span>Perfil de trabajo</span><select id="j-profile" class="j-input">${Object.entries(profiles).map(([value,label]) => `<option value="${value}" ${state.profile === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><p class="j-muted">Sin inicio de sesión; los datos desaparecen al recargar.</p></div></details><div class="j-reference-links"><span>Referencias anteriores:</span><a href="cotizador-clasico/index.html" target="_blank" rel="noopener">Cotizador clásico · versión anterior</a><a href="fabricacion/index.html" target="_blank" rel="noopener">Fabricación · versión anterior</a><span>Los cambios se conservan sólo durante esta sesión.</span></div></div>${guardMarkup()}`;
+    footer.innerHTML = `<div class="j-footer-inner">${quoteControls}${state.feedback ? `<p id="j-feedback" class="j-feedback ${state.tone}" role="${state.tone === 'error' ? 'alert' : 'status'}">${escape(state.feedback)}</p>` : '<p id="j-feedback" class="j-sr" role="status"></p>'}<details class="j-demo-tools"><summary>Opciones de sesión</summary><div class="j-tools-grid"><label class="j-field"><span>Resultado del próximo guardado</span><select id="j-save-outcome" class="j-input"><option value="success" ${state.saveOutcome === 'success' ? 'selected' : ''}>Éxito confirmado</option><option value="fail" ${state.saveOutcome === 'fail' ? 'selected' : ''}>Fallo confirmado</option><option value="unknown" ${state.saveOutcome === 'unknown' ? 'selected' : ''}>Resultado desconocido</option></select></label><label class="j-field"><span>Perfil de trabajo</span><select id="j-profile" class="j-input">${Object.entries(profiles).map(([value,label]) => `<option value="${value}" ${state.profile === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><p class="j-muted">${browserStore?'Los borradores y proyectos guardados se conservan en este navegador.':privateApi?'Los borradores y proyectos guardados se conservan en el equipo.':'Sin inicio de sesión; los datos desaparecen al recargar.'}</p></div></details><div class="j-reference-links"><span>Referencias anteriores:</span><a href="cotizador-clasico/index.html" target="_blank" rel="noopener">Cotizador clásico · versión anterior</a><a href="fabricacion/index.html" target="_blank" rel="noopener">Fabricación · versión anterior</a></div></div>${guardMarkup()}`;
     if (state.guard) footer.querySelector('.j-dialog button')?.focus();
   }
 
   function refreshQuoteChrome(record) {
     const s = summary(record);
+    refreshCommercialType(record);
     const heading = root.querySelector('.j-case-head h1');
     if (heading) heading.textContent = record.request.title;
     const statusElement = root.querySelector('#j-status');
@@ -492,16 +660,11 @@
     if (saveText) { saveText.textContent = saveStatus(record); saveText.hidden = !saveText.textContent; }
     for (const container of [root,footer]) for (const stageButton of container.querySelectorAll('[data-action="stage"][data-screen]')) stageButton.disabled = !canStage(record,stageButton.dataset.screen);
     for (const actionButton of footer.querySelectorAll('[data-action="apply-pending"], [data-action="discard-pending"]')) actionButton.disabled = !s.hasPending || locked(record);
-    let blockers = footer.querySelector('#j-blockers');
-    if (state.screen === 'quote' && s.blockers?.length) {
-      if (!blockers) { blockers = document.createElement('div'); blockers.id = 'j-blockers'; blockers.className = 'j-notice'; footer.querySelector('.j-demo-tools')?.before(blockers); }
-      blockers.innerHTML = `<strong>Faltantes del cotizador</strong><ul>${s.blockers.map(blocker => `<li>${escape(blocker)}</li>`).join('')}</ul>`;
-    } else blockers?.remove();
   }
 
   function transition(screen, id = state.id, bypass = false) {
     const record = current();
-    if (!bypass && record && !globalScreens.has(state.screen) && state.screen!=='record' && (screen !== state.screen || id !== state.id)) {
+    if (!bypass && record && !record.asana && !globalScreens.has(state.screen) && state.screen!=='record' && (screen !== state.screen || id !== state.id)) {
       const leaving = api.leave(record.id);
       const s = summary(record);
       const continuingQuote = (screen === 'quote' || api.automaticCapture && screen === 'request') && id === state.id;
@@ -513,9 +676,13 @@
       if (!nextRecord) return;
       if (!canStage(nextRecord,screen)) { notify('Completa y guarda el borrador requerido antes de abrir esta etapa.','error'); return; }
       suppressChanges = true;
-      try { if (screen === 'record') api.hide(); else { if (!api.open(nextRecord.id,clone(nextRecord.request))) { notify('Hay una captura pendiente en el expediente abierto.','error'); return; } if (screen === 'request' || screen === 'quote') api.showStep(screen === 'request' ? 0 : nextRecord.quoteStep || 1); else api.hide(); } }
+      try { if (screen === 'record' || nextRecord.asana) api.hide(); else { if (!api.open(nextRecord.id,clone(nextRecord.request))) { notify('Hay una captura pendiente en el expediente abierto.','error'); return; } if (screen === 'request' || screen === 'quote') api.showStep(screen === 'request' ? 0 : nextRecord.quoteStep || 1); else api.hide(); } }
       finally { suppressChanges = false; }
-      if (screen === 'quote') nextRecord.started = true;
+      if (screen === 'quote') {
+        const previous=storage ? status(nextRecord) : '';
+        nextRecord.started = true;
+        if (storage) noteStatusTransition(nextRecord,previous);
+      }
     } else api.hide();
     state.id = id;
     setScreen(screen);
@@ -535,20 +702,45 @@
     transition(target.screen,target.id);
   }
 
+  async function persistLocal(record, snapshot=api.snapshot(record.id),action) {
+    if(!storage)return;
+    const stored=await storage.put(clone(record),snapshot,storageRevisions.get(record.id)||0,action);
+    storageRevisions.set(record.id,stored.revision);
+    if(browserStore && stored.record)Object.assign(record,stored.record);
+  }
+
+  async function persistStage(record,before,action) {
+    if(!storage)return true;
+    state.busy=true;
+    try {await persistLocal(record,api.snapshot(record.id),action);return true;}
+    catch(error) {
+      Object.assign(record,before);
+      if(!before.sent)api.thaw(record.id);
+      notify(error.message,'error');
+      return false;
+    } finally {state.busy=false;}
+  }
+
   async function saveRecord(record, resolve = false) {
     if (!record || locked(record) || state.busy) return false;
     state.busy = true;
-    notify(resolve ? 'Consultando el resultado del guardado…' : 'Guardando durante esta sesión…');
+    notify(resolve ? 'Consultando el resultado del guardado…' : 'Guardando borrador…');
     try {
-      const result = await (resolve ? api.resolveSave(record.id) : api.save(record.id,state.saveOutcome));
+      const writer=storage?(snapshot)=>{
+        const savedRecord={...clone(record),requestDirty:false,review:null,reviewChecks:{technical:false,commercial:false}};
+        return persistLocal(savedRecord,snapshot);
+      }:null;
+      const result = await (resolve ? api.resolveSave(record.id) : api.save(record.id,privateApi?'success':state.saveOutcome,writer));
       if (result?.ok) {
         record.requestDirty = false;
         record.review = null;
         record.reviewChecks = {technical:false,commercial:false};
-        log(record,'Borrador guardado y confirmado en memoria.');
-        notify('Guardado durante esta sesión.','success');
+        if(!storage)log(record,'Borrador guardado y confirmado en memoria.');
+        notify(browserStore?'Guardado en este navegador.':privateApi?'Borrador guardado en el equipo.':'Guardado durante esta sesión.','success');
       } else if (result?.state === 'unknown' || summary(record)?.saveState === 'unknown') notify('Resultado de guardado desconocido. Consulta el resultado antes de continuar.','error');
-      else notify('El guardado no se confirmó. Revisa los faltantes antes de intentarlo de nuevo.','error');
+      else if (result?.state === 'blocked') notify(result.summary.saveBlockers.join(' '),'error');
+      else if (result?.state === 'conflict') notify(browserStore?'Conflicto de guardado. Tu captura sigue abierta. Revisa la copia guardada en otra pestaña antes de volver a cargarla.':'El borrador cambió durante el guardado. Revisa los cambios y vuelve a guardar.','error');
+      else notify('El guardado no se confirmó. Puedes volver a intentarlo.','error');
       return Boolean(result?.ok);
     } catch {
       notify('No fue posible confirmar el guardado. El borrador se conserva durante esta sesión.','error');
@@ -575,6 +767,7 @@
   }
 
   async function reset() {
+    if(browserStore){window.location.reload();return;}
     suppressChanges = true;
     try { api.reset(); }
     finally { suppressChanges = false; }
@@ -594,6 +787,10 @@
     const action = target.dataset.action;
     const record = current();
     if (target.disabled || state.busy && !['stay'].includes(action)) return;
+    if(action==='private-logout' && privateApi){await privateApi.logout();return;}
+    if(privateApi && localUser?.role!=='account' && ['new-request','save','resolve-save','validate','send','register-response','new-version','convert'].includes(action)){
+      notify('Esta cuenta tiene acceso de consulta y autorización de recetas.','error');return;
+    }
     if (action === 'toggle-menu') {
       if (state.menu) closeMenu();
       else {
@@ -605,29 +802,43 @@
     }
     else if (action === 'close-menu') closeMenu();
     else if (action === 'view') { state.view = target.dataset.view; render(); }
-    else if (action === 'open') { const item = records.find(entry => entry.id === target.dataset.id); transition(item?.historicalPartial ? 'record' : item?.project ? 'project' : 'request',target.dataset.id); }
+    else if (action === 'open') {
+      const item=records.find(entry=>entry.id===target.dataset.id);
+      if(!item)return;
+      const next=item.asana?.kind==='quote'||item.historicalPartial?'record'
+        :item.project||accepted(item)?'project'
+        :item.sent?'response'
+        :reviewCurrent(item)?'offer'
+        :'request';
+      transition(next,item.id);
+    }
     else if (action === 'list') { if (state.menu) closeMenu(); state.returnToKpis=false; transition('list'); }
     else if (['projects','production','deliveries','workflow'].includes(action)) { if(state.menu)closeMenu();state.returnToKpis=false;transition(action); }
     else if (action === 'project-open') {
-      const item=records.find(entry=>entry.id===target.dataset.id&&entry.project&&!entry.historicalPartial);
+      const item=records.find(entry=>entry.id===target.dataset.id&&entry.project&&(!entry.historicalPartial || entry.asana));
       if(!item)return;
       transition('project',item.id);
-      if(!state.guard&&state.screen==='project'&&state.id===item.id){
+      if(!item.asana&&!state.guard&&state.screen==='project'&&state.id===item.id){
         state.opTab=operations.stages.some(stage=>stage.id===target.dataset.tab)?target.dataset.tab:'plan';
         if(!projectDraft(item).task.title)projectDraft(item).task.stage=state.opTab;
         render();
       }
     }
     else if (action === 'op-tab') {
-      if(state.guard||state.screen!=='project'||!record?.project||target.dataset.id!==record.id||target.dataset.project!==record.project.id||!operations.stages.some(stage=>stage.id===target.dataset.tab))return;
+      if(state.guard||state.screen!=='project'||!record?.project||record.asana||target.dataset.id!==record.id||target.dataset.project!==record.project.id||!operations.stages.some(stage=>stage.id===target.dataset.tab))return;
       state.opTab=target.dataset.tab;
       if(!projectDraft(record).task.title)projectDraft(record).task.stage=state.opTab;
       render();root.querySelector('[data-action="op-tab"][data-tab="'+state.opTab+'"]')?.focus();
     }
-    else if (action === 'op-plan-save') { if(record?.project)projectAction(target,'plan',{...projectDraft(record).plan}); }
-    else if (action === 'op-task-add') { if(record?.project)projectAction(target,'task-add',{id:'OP-'+record.project.id+'-'+(++taskSequence),...projectDraft(record).task}); }
-    else if (action === 'op-delivery-save') { if(record?.project)projectAction(target,'delivery',{...projectDraft(record).delivery}); }
-    else if (action === 'op-close') { if(record?.project)projectAction(target,'close',{}); }
+    else if (action === 'op-plan-save') { if(record?.project&&!record.asana)await projectAction(target,'plan',{...projectDraft(record).plan}); }
+    else if (action === 'op-task-add') {
+      if(record?.project&&!record.asana){
+        const sequence=storage ? projectOperations(record).revision+1 : ++taskSequence;
+        await projectAction(target,'task-add',{id:'OP-'+record.project.id+'-'+sequence,...projectDraft(record).task});
+      }
+    }
+    else if (action === 'op-delivery-save') { if(record?.project&&!record.asana)await projectAction(target,'delivery',{...projectDraft(record).delivery}); }
+    else if (action === 'op-close') { if(record?.project&&!record.asana)await projectAction(target,'close',{}); }
     else if (action === 'kpis' || action === 'return-kpis') {if(state.menu) closeMenu();transition('kpis');}
     else if (action === 'kpi-tab') { if (!['summary','sales','times'].includes(target.dataset.tab)) return; state.kpis.tab=target.dataset.tab;state.kpis.detail=null;render();root.querySelector('#j-kpi-tab-'+state.kpis.tab)?.focus(); }
     else if (action === 'kpi-ranking') { if (!['client','category'].includes(target.dataset.ranking)) return;state.kpis.ranking=target.dataset.ranking;render(); }
@@ -637,46 +848,69 @@
     else if (action === 'stage') transition(target.dataset.screen);
     else if (action === 'save') await saveRecord(record);
     else if (action === 'resolve-save') await saveRecord(record,true);
-    else if (action === 'apply-pending') { const ok = api.applyPending(record.id); render(); notify(ok ? 'Captura aplicada al borrador. Guarda para conservarla durante esta sesión.' : 'Revisa los campos pendientes antes de aplicar.',ok ? 'success' : 'error'); }
+    else if (action === 'apply-pending') { const ok = api.applyPending(record.id); render(); notify(ok ? 'Captura aplicada al borrador. Guarda el borrador para conservarla.' : 'Revisa los campos pendientes antes de aplicar.',ok ? 'success' : 'error'); }
     else if (action === 'discard-pending') { api.discardPending(record.id); render(); notify('Se descartó la captura sin aplicar; el borrador aplicado se conserva.'); }
     else if (action === 'validate') {
       if (!saved(record) || !complete(record) || !record.reviewChecks.technical || !record.reviewChecks.commercial) { notify('Falta un borrador completo, guardado y revisado.','error'); return; }
+      const before=clone(record),previous=status(record);
       record.review = {revision:summary(record).revision,requestRevision:record.requestRevision,at:stamp(),profile:state.profile};
+      if(storage)noteStatusTransition(record,previous);
       log(record,`Revisión ilustrativa confirmada para V${record.version}.`);
+      if(!await persistStage(record,before))return;
       render(); notify('Revisión confirmada. Puedes preparar la oferta.','success');
     } else if (action === 'send') {
       if (record.sent || !reviewCurrent(record)) { notify('El envío requiere la versión actual guardada y revisada.','error'); return; }
+      const before=clone(record),previous=status(record);
       const frozen = api.freeze(record.id);
       if (!frozen?.summary || !frozen?.quote) { notify('No se pudo congelar una versión guardada.','error'); return; }
       record.sent = {version:record.version,quoteVersionId:frozen.quote.versionId,snapshot:clone(frozen),sentAt:stamp(),clientId:record.clientId,category:record.category,commercialType:record.commercialType,source:'SYNTHETIC_NATIVE_SNAPSHOT',response:null};
       if (!record.firstSentAt) record.firstSentAt=portfolio.calendarDate(record.sent.sentAt);
       record.versions.push(record.sent);
-      log(record,`Envío registrado en esta sesión V${record.version}; copia congelada.`);
-      render(); notify(`Envío registrado en esta sesión para V${record.version}. No se envió ningún mensaje.`, 'success');
+      if(storage)noteStatusTransition(record,previous);
+      log(record,`Envío registrado V${record.version}; copia congelada.`);
+      if(!await persistStage(record,before))return;
+      render(); notify(`Envío registrado para V${record.version}. No se envió ningún mensaje.`, 'success');
     } else if (action === 'register-response') {
       const draft = record.responseDraft;
       if (!record.sent || record.sent.response) { notify('Esta versión no admite otra respuesta.','error'); return; }
       if (!draft.exact || draft.evidence.trim().length < 8) { notify('Confirma la versión exacta y escribe una evidencia de al menos ocho caracteres.','error'); return; }
+      const before=clone(record),previous=status(record);
       record.sent.response = {result:draft.choice,version:record.sent.version,evidence:draft.evidence.trim(),channel:draft.channel,at:stamp(),profile:state.profile};
+      const sent=record.versions.find(version=>version.version===record.sent.version);
+      if(sent)sent.response=clone(record.sent.response);
       if (draft.choice === 'accepted') {record.acceptedVersion=record.sent.version;record.acceptedAt=portfolio.calendarDate(record.sent.response.at);}
       record.lastResponse = draft.choice;
+      if(storage)noteStatusTransition(record,previous);
       log(record,`Respuesta ${draft.choice === 'accepted' ? 'aceptada' : draft.choice === 'changes' ? 'con cambios' : 'rechazada'} para V${record.sent.version}.`);
+      if(!await persistStage(record,before))return;
       if (draft.choice === 'changes') startNewVersion(record);
       else { render(); notify('Respuesta registrada para la versión enviada.','success'); }
     } else if (action === 'new-version') startNewVersion(record);
     else if (action === 'convert') {
       if (record.project) { render(); return; }
       if (!accepted(record) || record.historicalPartial || !portfolio.hasPrice({netCents:record.sent?.snapshot?.summary?.priceCents})) { notify('La conversión requiere aceptación de la versión enviada exacta y un guardado completo.','error'); return; }
+      const before=clone(record),previous=status(record);
       record.project = {id:`PR-${record.id}`,title:record.sent.snapshot.request.title,version:record.sent.version,baseline:clone(record.sent.snapshot),sourceId:record.id,conversionKey:`${record.id}:V${record.sent.version}`,createdAt:stamp()};
       projectOperations(record);
-      log(record,`Proyecto registrado en esta sesión ${record.project.id} creado desde V${record.project.version}.`);
-      setScreen('project'); render(); notify('Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
+      if(storage)noteStatusTransition(record,previous);
+      log(record,`Proyecto registrado ${record.project.id} creado desde V${record.project.version}.`);
+      if(!await persistStage(record,before,'convert'))return;
+      setScreen('project'); render(); notify(storage?'Proyecto guardado. Puedes abrirlo en Proyectos.':'Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
     } else if (action === 'new-request') {
       let id;
-      do {id=`DEMO-${++sequence}`;} while (records.some(item => item.id === id));
-      const item = makeRecord(id,'complete',{title:'Nueva solicitud de ejemplo',client:'Cliente ficticio nuevo',contact:'Contacto inventado',need:'Describe aquí la necesidad del cliente.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-28',deliveryDate:'2026-11-26'});
-      item.clientId='CL-'+id;
-      clients[item.clientId]={name:item.request.client,firstSaleAt:null};
+      if(privateApi)id='DUCO-'+crypto.randomUUID().replaceAll('-','');
+      else if(browserStore)id='DEMO-'+crypto.randomUUID();
+      else do {id=`DEMO-${++sequence}`;} while (records.some(item => item.id === id));
+      const item = makeRecord(id,'complete',privateApi?{title:'Nueva solicitud',client:'',contact:'',need:'',location:'',
+        contactEmail:'',included:'Fabricación; Empaque',excluded:'Obra civil',account:localUser.username,designer:'',quoteDue:'',deliveryDate:''}
+        :{title:'Nueva solicitud de ejemplo',client:'Cliente ficticio nuevo',contact:'Contacto inventado',need:'Describe aquí la necesidad del cliente.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-28',deliveryDate:'2026-11-26'});
+      item.clientId=privateApi?'':'CL-'+id;
+      if(privateApi){
+        Object.assign(item,{source:'DUCO_LOCAL',category:'',commercialType:null,responsibleId:localUser.username,
+          requestedAt:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City'}).format(new Date())});
+        noteStatusTransition(item,'');
+      }
+      if(item.clientId)clients[item.clientId]={name:item.request.client,firstSaleAt:null};
       suppressChanges = true;
       try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true}); }
       finally { suppressChanges = false; }
@@ -709,20 +943,22 @@
   root.addEventListener('input',event => {
     if(captureOperationField(event.target))return;
     if (event.target.id === 'j-search') { state.search = event.target.value; render(); }
+    if (event.target.id === 'j-project-search') { state.projectSearch = event.target.value; render(); }
     if (event.target.id === 'j-evidence') current().responseDraft.evidence = event.target.value;
   });
 
-  root.addEventListener('change',event => {
+  root.addEventListener('change',async event => {
     const target = event.target;
     const record = current();
     if(target.dataset?.opTask){
-      if(!record?.project)return;
-      projectAction({dataset:{id:record.id,project:target.dataset.opProject,revision:target.dataset.opRevision}},'task-status',{id:target.dataset.opTask,status:target.value});return;
+      if(!record?.project||record.asana)return;
+      await projectAction({dataset:{id:record.id,project:target.dataset.opProject,revision:target.dataset.opRevision}},'task-status',{id:target.dataset.opTask,status:target.value});return;
     }
     if(captureOperationField(target))return;
-    const filterKey = {'j-kpi-period':'period','j-kpi-category':'category','j-kpi-basis':'basis'}[target.id];
-    if (filterKey) {state.kpis[filterKey]=target.value;render();return;}
+    const filterKey = {'j-kpi-period':'period','j-kpi-category':'category','j-kpi-basis':'basis','j-kpi-client':'client','j-kpi-type':'type','j-kpi-customer':'customer'}[target.id];
+    if (filterKey) {state.kpis[filterKey]=target.value;render();document.getElementById(target.id)?.focus();return;}
     if (target.id === 'j-status-filter') { state.filter = target.value; render(); return; }
+    if (target.id === 'j-responsible-filter') { state.responsibleFilter=target.value;render();document.getElementById(target.id)?.focus();return; }
     if (!record) return;
     if (target.id === 'j-review-technical') { record.reviewChecks.technical = target.checked; render(); }
     if (target.id === 'j-review-commercial') { record.reviewChecks.commercial = target.checked; render(); }
@@ -731,11 +967,26 @@
     if (target.id === 'j-exact-version') record.responseDraft.exact = target.checked;
   });
 
+  host.addEventListener('change',event => {
+    const target=event.target, record=current();
+    if (target.id!=='j-commercial-type' || state.screen!=='request' || !record || record.asana || locked(record)) return;
+    const value=Object.hasOwn(portfolio.TYPES,target.value) ? target.value : null;
+    if (record.commercialType===value) return;
+    const previous=status(record);
+    record.commercialType=value;
+    record.requestDirty=true;
+    record.requestRevision++;
+    record.review=null;
+    record.reviewChecks={technical:false,commercial:false};
+    noteStatusTransition(record,previous);
+    refreshQuoteChrome(record);
+  });
+
   function captureOperationField(target) {
     const form=target.dataset?.opForm;
     if(!form)return false;
     const record=current();
-    if(state.busy||state.guard||state.screen!=='project'||!record?.project||target.dataset.opProject!==record.project.id||projectOperations(record).closed||target.isConnected===false)return true;
+    if(state.busy||state.guard||state.screen!=='project'||!record?.project||record.asana||target.dataset.opProject!==record.project.id||projectOperations(record).closed||target.isConnected===false)return true;
     const allowed={plan:['owner','dueDate','route','installation'],task:['title','stage','owner','dueDate'],delivery:['date','recipient','evidence']};
     if(Object.hasOwn(allowed,form)&&allowed[form].includes(target.dataset.opField))projectDraft(record)[form][target.dataset.opField]=target.value;
     return true;
@@ -776,7 +1027,11 @@
   api.onChange(({id, request, step, clientId} = {}) => {
     if (suppressChanges) return;
     const record = records.find(item => item.id === id);
-    if (record && clientId && !locked(record)) record.clientId=clientId;
+    const previous=storage && record && !record.asana ? status(record) : '';
+    if(record&&!locked(record)&&typeof clientId==='string'){
+      record.clientId=clientId;
+      if(privateApi&&clientId&&request?.client&&!Object.hasOwn(clients,clientId))clients[clientId]={name:request.client,firstSaleAt:null};
+    }
     if (record && request && !locked(record) && JSON.stringify(record.request) !== JSON.stringify(request)) { record.request = clone(request); record.requestRevision++; record.requestDirty = true; }
     if (record && !locked(record) && record.review && !reviewCurrent(record)) { record.review = null; record.reviewChecks = {technical:false,commercial:false}; }
     if (!state.busy) {
@@ -785,12 +1040,14 @@
       if (record && ['request','quote'].includes(state.screen) && state.id === id) {
         const screen = step === 0 ? 'request' : 'quote';
         if (step > 0) { record.quoteStep = step; record.started = true; }
+        if (storage) noteStatusTransition(record,previous);
         if (screen !== state.screen) { setScreen(screen); render(); }
         else refreshQuoteChrome(record);
       }
       else render();
     }
   });
-  const ready=(async()=>{state.busy=true;await seed();state.busy=false;render();})();
+  const ready=(async()=>{state.busy=true;try{await seed();}catch(error){state.feedback=error.message;state.tone='error';}
+    finally{state.busy=false;render();}})();
   window.DemoJourney = Object.freeze({ready,inspect:() => clone({state,records,clients,clockTick}),portfolio:() => clone(kpiMetrics()),saveCurrent:() => saveRecord(current()),openReview:() => transition('review')});
 })();

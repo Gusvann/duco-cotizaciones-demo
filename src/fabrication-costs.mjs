@@ -25,12 +25,22 @@ export function createFabricationCosts(math) {
         ['Insumos extras',div(mul(stock,dec(settings.extrasPct)),v(100)),'board-other']];
     }
     const {measure:meters,kg}=metalGeometry(material);
-    return [['Acero',mul(kg,material.purchaseUnit==='kg'?rate(material.unitPrice):null),'metal-tube'],['Mano de obra',mul(kg,rate(detail.laborPrice)),'metal-work'],
-      ['Pintura RAL 7021',mul(mul(meters,dec(settings.paintFactor)),rate(detail.paintPrice)),'metal-finish']];
+    const paintBasis=material.section==='metal-sheet'?detail.paintFaces:settings.paintFactor;
+    return [['Acero',mul(kg,material.purchaseUnit==='kg'?rate(material.unitPrice):null),material.section],['Mano de obra',mul(kg,rate(detail.laborPrice)),'metal-work'],
+      ['Pintura RAL 7021',mul(mul(meters,dec(paintBasis)),rate(detail.paintPrice)),'metal-finish']];
   }
   function overhead(family,s) {
-    return family==='boards'?[['Integración',mul(dec(s.integrationDays),rate(s.dayRate)),'board-days'],['Materiales adicionales',rate(s.extraMaterials),'board-other']]
+    const builtIn=family==='boards'?[['Integración',mul(dec(s.integrationDays),rate(s.dayRate)),'board-days'],['Materiales adicionales',rate(s.extraMaterials),'board-other']]
       :[['Rolado',mul(dec(s.rollingQty),rate(s.rollingPrice)),'metal-other']];
+    const operations=s.operations||[];
+    const amount=op=>mul(dec(op.quantity),rate(op.rate));
+    const documented=operations.map(op=>[op.name,amount(op),op.panel]);
+    const extraBase=operations.filter(op=>op.extraEligible).map(amount);
+    if(extraBase.length){
+      const base=extraBase.reduce(add,v(0));
+      documented.push(['Insumos extras de acabados y consumibles',div(mul(base,dec(s.extrasPct)),v(100)),'board-other']);
+    }
+    return [...builtIn,...documented];
   }
   function sum(rows) {
     const values=rows.map(([,value])=>value),known=values.filter(value=>value!=null);
