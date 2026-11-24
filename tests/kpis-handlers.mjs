@@ -118,12 +118,12 @@ async function harness({mobile=false,portfolioFixtures=false,privateFixture=null
   return {sandbox,root,footer,click,field,key,inspect,metrics,setPortfolioFixtures,Q:sandbox.DemoQuote,app:sandbox.__client.app};
 }
 
-test('public Asana quote list supports Mesa and Flujo by folio and status without exposing details or changing KPI records',async()=>{
+test('public Asana quote list shows escaped titles in Mesa and Flujo without exposing other fields',async()=>{
   const publishedFixture={
     revision:'2026-11-24',coverage:{from:'2026-10-01',through:'2026-11-24',lists:{quote:'2026-11-24'}},projects:[],
     quotes:[
       {folio:'2699',status:'accepted',createdAt:'2026-10-03',quoteDue:'2026-10-05',deliveryDate:null,
-        title:'Título privado ficticio',amount:9999,contact:'persona@example.test'},
+        title:'Título ficticio <obra> & diseño',amount:9999,contact:'persona@example.test'},
       {folio:null,status:'missing',createdAt:'2026-11-17',quoteDue:null,deliveryDate:'2026-11-30'}
     ]
   };
@@ -133,7 +133,8 @@ test('public Asana quote list supports Mesa and Flujo by folio and status withou
   assert.equal(count(),2);
   assert.match(h.root.innerHTML,/Sin folio registrado/);
   assert.match(h.root.innerHTML,/Sin clasificar/);
-  assert.doesNotMatch(h.root.innerHTML,/data-action="open"|Título privado ficticio|persona@example\.test|9999|Responsable de cotización/);
+  assert.match(h.root.innerHTML,/Título ficticio &lt;obra&gt; &amp; diseño/);
+  assert.doesNotMatch(h.root.innerHTML,/data-action="open"|persona@example\.test|9999|Responsable de cotización/);
   await h.field('j-status-filter','accepted');
   assert.equal(count(),1);
   await h.click('view',{view:'flujo'});
@@ -143,6 +144,9 @@ test('public Asana quote list supports Mesa and Flujo by folio and status withou
   assert.equal(count(),0);
   await h.field('j-search','2699',{type:'input'});
   assert.equal(count(),1);
+  await h.field('j-search','ficticio <obra>',{type:'input'});
+  assert.equal(count(),1);
+  assert.match(h.root.innerHTML,/Título ficticio &lt;obra&gt; &amp; diseño/);
   await h.click('quote-source',{source:'browser'});
   assert.equal(count(),0);
   assert.doesNotMatch(h.root.innerHTML,/Cliente ficticio Alba|Consola modular de muestra/);

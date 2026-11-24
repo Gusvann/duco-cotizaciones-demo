@@ -39,7 +39,7 @@ const publicPortfolio=fs.readFileSync(path.join(root,'src/published-portfolio.js
 assert.match(html,/<script src="src\/published-portfolio\.js"><\/script>/);
 const portfolioSandbox={};
 vm.runInNewContext(publicPortfolio,portfolioSandbox);
-const publishedPortfolio=validatePublicPortfolio(portfolioSandbox.DucoPublishedPortfolio);
+const publishedPortfolio=validatePublicPortfolio(portfolioSandbox.DucoPublishedPortfolio,{requireTitles:true});
 assert.ok(publishedPortfolio.projects.length&&publishedPortfolio.quotes.length,'Both approved lists must be present');
 const catalogSource=fs.readFileSync(path.join(root,'src/public-product-catalog.js'),'utf8');
 assert.ok(html.includes(catalogSource),'The gallery and the quote must use the same public catalogue');

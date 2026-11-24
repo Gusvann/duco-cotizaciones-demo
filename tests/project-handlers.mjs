@@ -76,7 +76,7 @@ test('Published Asana projects use the compact folio and show only the public fi
     coverage:{from:'2026-10-01',through:'2026-11-24',lists:{project:'2026-11-23'}},
     projects:[
       {folio:'2611998',status:'in-progress',createdAt:'2026-11-05',startDate:null,dueDate:'2026-11-21',deliveryDate:'2026-12-02',
-        title:'Detalle ficticio que no debe salir',assignee:'Contacto ficticio que no debe salir',url:'https://asana.example.invalid/private',amount:364335},
+        title:'Título ficticio con <obra> & diseño',assignee:'Contacto ficticio que no debe salir',url:'https://asana.example.invalid/private',amount:364335},
       {folio:'2610997',status:'unknown',createdAt:'2026-10-29',startDate:null,dueDate:null,deliveryDate:null}
     ]
   };
@@ -89,7 +89,8 @@ test('Published Asana projects use the compact folio and show only the public fi
   assert.match(publicSection,/Estado sin confirmar/);
   assert.match(publicSection,/Vencimiento en Asana/);
   assert.match(publicSection,/Entrega registrada/);
-  assert.doesNotMatch(publicSection,/ficticio|asana\.example|364335|href|data-action/);
+  assert.match(publicSection,/Título ficticio con &lt;obra&gt; &amp; diseño/);
+  assert.doesNotMatch(publicSection,/Contacto ficticio|asana\.example|364335|href|data-action/);
   assert.doesNotMatch(standard,/data-action="project-open"/,'Unstored demonstration projects do not appear in the published list');
   const withLocal=h.sandbox.DemoProjectViews.list(records,'projects','',{published,hasStoredRecord:id=>id===local.id});
   assert.match(withLocal,/Proyectos de este navegador/);
@@ -98,6 +99,9 @@ test('Published Asana projects use the compact folio and show only the public fi
   const withHyphen=h.sandbox.DemoProjectViews.list(records,'projects','2611-998',{published});
   assert.equal(full.match(/<section\b[^>]*data-public-project-list[\s\S]*?<\/section>/)[0],withHyphen.match(/<section\b[^>]*data-public-project-list[\s\S]*?<\/section>/)[0]);
   assert.doesNotMatch(full,/>2610997</);
+  const byTitle=h.sandbox.DemoProjectViews.list(records,'projects','título ficticio',{published});
+  assert.match(byTitle,/Título ficticio con &lt;obra&gt; &amp; diseño/);
+  assert.doesNotMatch(byTitle,/>2610997</);
   assert.doesNotMatch(h.sandbox.DemoProjectViews.list(records,'production','',{published}),/data-public-project-row/);
 });
 

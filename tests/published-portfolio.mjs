@@ -30,9 +30,28 @@ test('public Asana cut includes only dated, approved fields and canonical states
   const context={};
   vm.runInNewContext(script,context);
   assert.deepEqual(JSON.parse(JSON.stringify(validatePublicPortfolio(context.DucoPublishedPortfolio))),bundle);
-  for(const extra of ['id','amount','notes','title']){
+  for(const extra of ['id','amount','notes','client']){
     assert.throws(()=>portfolioScript({...bundle,quotes:[{...bundle.quotes[0],[extra]:'example'}]}),/campos o valores/);
   }
+});
+
+test('an approved release keeps the complete title as text and omits the other Asana fields',()=>{
+  const title=' 123 Mesa & silla — OC 421 <cotización> ';
+  const first={...source.records[0],request:{...source.records[0].request,title}};
+  const bundle=projectPublicPortfolio({...source,records:[first,source.records[1]]},{
+    quoteFolioFromTitle:true,includeTitles:true
+  });
+  assert.equal(bundle.quotes[0].title,title);
+  assert.equal(bundle.quotes[0].folio,'123');
+  assert.equal(bundle.projects[0].title,source.records[1].request.title);
+  assert.doesNotThrow(()=>validatePublicPortfolio(bundle,{requireTitles:true}));
+  const classic=projectPublicPortfolio(source);
+  assert.throws(()=>validatePublicPortfolio(classic,{requireTitles:true}),/campos o valores/);
+  const script=portfolioScript(bundle);
+  assert.doesNotMatch(script,/<cotizaci|PRIVATE|@|https:|9199900|12345678901/);
+  const context={};
+  vm.runInNewContext(script,context);
+  assert.equal(context.DucoPublishedPortfolio.quotes[0].title,title);
 });
 
 test('quote title prefix is used only when authorized and no explicit folio is present',()=>{

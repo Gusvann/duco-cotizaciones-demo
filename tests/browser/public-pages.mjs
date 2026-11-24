@@ -91,17 +91,20 @@ async function caseTest(name,fn){
 let madeId,productItem,confirmed;
 try{
   let p=await start();
-  await caseTest('El corte de Asana muestra solo folios, estados y fechas en ambas listas',async()=>{
+  await caseTest('El corte de Asana muestra los títulos completos y permite buscar por folio o título',async()=>{
     const quotes=p.locator('[data-published-quote]');
     assert.equal(await quotes.count(),165);
     assert.equal(await quotes.filter({hasText:'Sin folio registrado'}).count(),10);
     assert.equal(await quotes.locator('a, button').count(),0);
-    const folio=await p.evaluate(()=>window.DucoPublishedPortfolio.quotes.find(row=>row.folio!==null).folio);
-    const matching=await p.evaluate(value=>window.DucoPublishedPortfolio.quotes.filter(row=>row.folio===value).length,folio);
+    const publishedQuotes=await p.evaluate(()=>window.DucoPublishedPortfolio.quotes);
+    assert.deepEqual(await quotes.locator('[data-public-title]').allTextContents(),publishedQuotes.map(row=>row.title));
+    const {folio,title}=publishedQuotes.find(row=>row.folio!==null);
     await p.locator('#j-search').fill(folio);
-    assert.equal(await quotes.count(),matching);
+    assert.ok((await quotes.locator('[data-public-folio]').allTextContents()).includes(folio));
+    await p.locator('#j-search').fill(title);
+    assert.ok((await quotes.locator('[data-public-title]').allTextContents()).includes(title));
     await action(p,'view','[data-view="flujo"]').click();
-    assert.equal(await quotes.count(),matching);
+    assert.ok((await quotes.locator('[data-public-title]').allTextContents()).includes(title));
     await p.locator('#j-search').fill('');
     assert.equal(await quotes.count(),165);
     await action(p,'view','[data-view="mesa"]').click();
@@ -110,7 +113,9 @@ try{
     const projects=p.locator('[data-public-project-row]');
     assert.equal(await projects.count(),36);
     assert.equal(await projects.locator('a, button').count(),0);
-    const projectFolio=await projects.first().getByRole('rowheader').innerText();
+    const publishedProjects=await p.evaluate(()=>window.DucoPublishedPortfolio.projects);
+    assert.deepEqual(await projects.locator('[data-public-title]').allTextContents(),publishedProjects.map(row=>row.title));
+    const projectFolio=await projects.first().locator('[data-public-folio]').innerText();
     assert.match(projectFolio,/^\d{6,8}$/);
     const search=p.locator('#j-project-search');
     await search.fill(projectFolio);
@@ -118,6 +123,8 @@ try{
     assert.ok(matched>0 && matched<36);
     await search.fill(projectFolio.slice(0,4)+'-'+projectFolio.slice(4));
     assert.equal(await projects.count(),matched);
+    await search.fill(publishedProjects[0].title);
+    assert.ok((await projects.locator('[data-public-title]').allTextContents()).includes(publishedProjects[0].title));
     await p.setViewportSize({width:390,height:844});
     assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     await p.setViewportSize({width:1400,height:980});

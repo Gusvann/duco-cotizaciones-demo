@@ -341,16 +341,23 @@
     const stage=publishedQuoteStatus(record);
     return pill(statuses[stage],stage==='accepted'||stage==='project'?'good':'');
   }
+  function publishedQuoteName(record, heading) {
+    const folio=record.folio||'Sin folio registrado';
+    const title=record.title||folio;
+    return '<'+heading+' class="j-published-title" data-public-title>'+escape(title)+'</'+heading+'>'+
+      (title===folio?'':'<div class="j-sub" data-public-folio>'+escape(folio)+'</div>');
+  }
   function publishedQuotesMarkup() {
     const entries=publishedPortfolio.quotes;
     const query=state.search.trim().toLocaleLowerCase('es-MX');
     const compactQuery=portfolio.compactFolio(query);
     const visible=entries.filter(record=>(state.filter==='all'||publishedQuoteStatus(record)===state.filter)&&
-      (!query||record.folio&&[record.folio.toLocaleLowerCase('es-MX'),portfolio.compactFolio(record.folio).toLocaleLowerCase('es-MX')]
-        .some(folio=>folio.includes(query)||folio.includes(compactQuery))));
+      (!query||[record.title,record.folio,portfolio.compactFolio(record.folio)]
+        .some(value=>String(value??'').toLocaleLowerCase('es-MX').includes(query))||
+        (compactQuery!==query&&portfolio.compactFolio(record.folio)===compactQuery)));
     const filter=filterField('j-status-filter','Estado',[['all','Todos los estados'],...Object.entries(statuses)],state.filter);
-    const search='<label class="j-field j-search"><span>Buscar por folio</span><input id="j-search" class="j-input" type="search" '+
-      'placeholder="Folio de cotización" value="'+escape(state.search)+'"></label>';
+    const search='<label class="j-field j-search"><span>Buscar cotizaciones</span><input id="j-search" class="j-input" type="search" '+
+      'placeholder="Nombre o folio" value="'+escape(state.search)+'"></label>';
     const controls='<div class="j-toolbar">'+search+filter+'<p class="j-muted j-record-count" role="status">'+visible.length+
       ' de '+entries.length+' cotizaciones</p></div>';
     const {from,through,lists}=publishedPortfolio.coverage;
@@ -359,15 +366,15 @@
     const coverage='<p class="j-muted j-sub">Corte de Asana'+range+'.</p>';
     if(state.view==='flujo'){
       return controls+coverage+quoteBoard(visible,publishedQuoteStatus,record=>
-        '<article class="j-card" data-published-quote><h3>'+escape(record.folio||'Sin folio registrado')+'</h3>'+
+        '<article class="j-card" data-published-quote>'+publishedQuoteName(record,'h3')+
         publishedQuoteStateMarkup(record)+'<p class="j-sub">Creación: '+date(record.createdAt)+'<br>Cotización: '+
         date(record.quoteDue)+'<br>Entrega: '+date(record.deliveryDate)+'</p></article>');
     }
-    const rows=visible.map(record=>'<tr data-published-quote><td><strong>'+escape(record.folio||'Sin folio registrado')+'</strong></td><td>'+
+    const rows=visible.map(record=>'<tr data-published-quote><td>'+publishedQuoteName(record,'strong')+'</td><td>'+
       publishedQuoteStateMarkup(record)+'</td><td>'+date(record.createdAt)+'</td><td>'+date(record.quoteDue)+'</td><td>'+
       date(record.deliveryDate)+'</td></tr>').join('');
     return controls+coverage+'<div class="j-table-wrap j-list-table" role="region" aria-label="Tabla de cotizaciones" tabindex="0"><table class="j-table"><caption class="j-sr">Cotizaciones de Asana</caption>'+
-      '<thead><tr><th scope="col">Folio</th><th scope="col">Estado</th><th scope="col">Fecha de creación</th>'+
+      '<thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Fecha de creación</th>'+
       '<th scope="col">Fecha límite de cotización</th><th scope="col">Fecha de entrega</th></tr></thead><tbody>'+
       (rows||'<tr><td colspan="5" class="j-empty">No hay cotizaciones que coincidan con los filtros.</td></tr>')+'</tbody></table></div>';
   }

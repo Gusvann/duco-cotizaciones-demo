@@ -83,11 +83,14 @@
       : visible.length+' de '+projects.length+' proyectos';
     const rows = visible.map(project => {
       const status = publicStatuses.get(project.status) || 'Estado sin confirmar';
-      return `<tr data-public-project-row><th scope="row">${escape(portfolio.compactFolio(project.folio))}</th><td><span class="op-phase">${status}</span></td><td>${escape(date(project.createdAt))}</td><td>${escape(date(project.startDate))}</td><td>${escape(date(project.dueDate))}</td><td>${escape(date(project.deliveryDate))}</td></tr>`;
+      const folio = portfolio.compactFolio(project.folio) || 'Sin folio registrado';
+      const title = project.title || folio;
+      const shownReference = title === folio ? '' : '<div class="j-sub" data-public-folio>'+escape(folio)+'</div>';
+      return `<tr data-public-project-row><th scope="row"><span class="j-published-title" data-public-title>${escape(title)}</span>${shownReference}</th><td><span class="op-phase">${status}</span></td><td>${escape(date(project.createdAt))}</td><td>${escape(date(project.startDate))}</td><td>${escape(date(project.dueDate))}</td><td>${escape(date(project.deliveryDate))}</td></tr>`;
     }).join('');
     const content = rows
-      ? `<div class="j-table-wrap op-list-wrap j-list-table" role="region" tabindex="0" aria-labelledby="public-project-title"><table class="j-table op-list"><caption class="op-caption">Folio, estado y fechas de los proyectos de Asana</caption><thead><tr><th scope="col">Folio</th><th scope="col">Estado</th><th scope="col">Creación</th><th scope="col">Inicio</th><th scope="col">Vencimiento en Asana</th><th scope="col">Entrega registrada</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : `<p class="j-muted">${query ? 'Sin coincidencias para el folio.' : 'No hay proyectos publicados en este corte.'}</p>`;
+      ? `<div class="j-table-wrap op-list-wrap j-list-table" role="region" tabindex="0" aria-labelledby="public-project-title"><table class="j-table op-list"><caption class="op-caption">Proyectos de Asana</caption><thead><tr><th scope="col">Proyecto</th><th scope="col">Estado</th><th scope="col">Creación</th><th scope="col">Inicio</th><th scope="col">Vencimiento en Asana</th><th scope="col">Entrega registrada</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="j-muted">${query ? 'Sin coincidencias para el nombre o folio.' : 'No hay proyectos publicados en este corte.'}</p>`;
     return `<section class="op-projects-source" data-public-project-list aria-labelledby="public-project-title"><header class="op-section-head"><div><h2 id="public-project-title">Proyectos de Asana</h2>${coverage ? '<p class="j-muted">'+escape(coverage)+'</p>' : ''}</div><span class="j-muted" role="status">${escape(count)}</span></header>${content}</section>`;
   }
 
@@ -108,7 +111,7 @@
     };
     const count = `<span class="j-muted" role="status">${projects.length} proyecto${projects.length === 1 ? '' : 's'}</span>`;
     const publishedList = mode === 'projects' && hasPublication;
-    const placeholder = publishedList && !allProjects.length ? 'Folio' : 'Nombre, cliente o folio';
+    const placeholder = publishedList && !allProjects.length ? 'Nombre o folio' : 'Nombre, cliente o folio';
     const filter = `<label class="j-field j-search"><span>Buscar proyectos</span><input id="j-project-search" class="j-input" type="search" placeholder="${placeholder}" value="${escape(search)}"></label>`;
     const heading = mode === 'projects'
       ? `<header class="j-head op-projects-head"><div class="j-section-statement"><p class="j-eyebrow">Seguimiento operativo</p><h1 class="j-split-heading"><span class="j-heading-lead">${publishedList ? 'Proyectos.' : 'Tus proyectos.'}</span> <span class="j-heading-emphasis">Del plan a la entrega.</span></h1></div><div class="op-projects-list-meta">${filter}${publishedList ? '' : count}</div></header>`
