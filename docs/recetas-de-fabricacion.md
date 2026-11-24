@@ -54,6 +54,8 @@ La galería y el selector de artículos comparten 135 variantes del corte de fab
 
 La proyección de fabricación se genera con `node tools/publish-recipes.mjs RUTA_EXTRACCIÓN`. La salida `src/published-recipes.js` conserva las unidades, los decimales y los importes en cero. La procedencia identifica el libro por número e incluye los rangos y páginas de corrección disponibles. El respaldo de trabajo conserva la correspondencia con los libros originales.
 
+Para el despliegue `86af449`, se cotejaron las 135 variantes y los 4,468 renglones de referencia económica con la extracción de trabajo. Pasaron las 274 pruebas de Node y los 34 recorridos de Edge sin conexión. En HTTP local se comprobó una actualización de la versión anterior con un borrador guardado en el mismo navegador. En GitHub Pages se verificaron una nueva cotización con despiece real y la consulta móvil de la receta.
+
 Las 34 ilustraciones de la primera serie mantienen su identificador. Las siguientes tienen una foto WebP y una miniatura WebP; sus hashes se comprueban en el manifiesto de imágenes. Una variante conserva su fotografía al cambiar el precio o la cantidad cotizada. Los tonos de tapicería representativos se identifican en la ficha.
 
 ## Verificación histórica del rediseño de despieces

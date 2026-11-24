@@ -181,5 +181,8 @@ try{
   console.log(JSON.stringify({status:'PASS',environment:publishedURL?'GitHub Pages':'HTTP local',checks:assertions}));
 }finally{
   await browser?.close();
-  if(server)await new Promise(resolve=>server.close(resolve));
+  if(server)await new Promise(resolve=>{
+    server.close(resolve);
+    server.closeAllConnections();
+  });
 }
