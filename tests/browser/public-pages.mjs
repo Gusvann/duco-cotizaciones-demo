@@ -88,6 +88,30 @@ async function caseTest(name,fn){
   try {await fn();results.push({name,passed:true});console.log('PASS '+name);}
   catch(error){results.push({name,passed:false,error:String(error.message).slice(0,1200)});throw error;}
 }
+const publishedDetail=(p,kind)=>p.locator('[data-published-detail="'+kind+'"]');
+const publishedHash=(kind,revision,index)=>'#asana-'+kind+'-'+revision+'-'+index;
+async function publishedTableFields(row){
+  return [(await row.locator('[data-public-folio]').innerText()).trim(),
+    ...(await row.locator('td:not(:has([data-public-title]))').allTextContents()).map(value=>value.trim())];
+}
+async function checkPublishedDetail(p,kind,entry,fields){
+  const detail=publishedDetail(p,kind);
+  await detail.waitFor();
+  assert.ok((await detail.locator('h1').textContent()).trim()===entry.title.trim(),'The detail must retain the full public title');
+  const labels=kind==='quote'
+    ?['Folio','Estado','Fecha de creación','Fecha límite de cotización','Fecha de entrega']
+    :['Folio','Estado','Creación','Inicio','Vencimiento en Asana','Entrega registrada'];
+  assert.deepEqual((await detail.locator('dt').allTextContents()).map(value=>value.trim()),labels);
+  assert.ok(JSON.stringify((await detail.locator('dd').allTextContents()).map(value=>value.trim()))===JSON.stringify(fields),
+    'The detail must show the same approved values as the corresponding list row');
+  assert.equal(await detail.locator('form,input,select,textarea,button').count(),0,'Public detail is read-only');
+  const links=detail.getByRole('link');
+  assert.equal(await links.count(),1,'The detail offers only a return link');
+  const back=detail.getByRole('link',{name:kind==='quote'?'Volver a cotizaciones':'Volver a proyectos'});
+  const returnUrl=new URL(await back.getAttribute('href'),base);
+  assert.equal(returnUrl.origin+returnUrl.pathname,base,'The return link stays in the public site');
+  return back;
+}
 let madeId,productItem,confirmed;
 try{
   let p=await start();
@@ -95,7 +119,9 @@ try{
     const quotes=p.locator('[data-published-quote]');
     assert.equal(await quotes.count(),165);
     assert.equal(await quotes.filter({hasText:'Sin folio registrado'}).count(),10);
-    assert.equal(await quotes.locator('a, button').count(),0);
+    assert.equal(await quotes.locator('button').count(),0);
+    assert.equal(await quotes.locator('a[href^="#asana-quote-"]').count(),165);
+    assert.equal(await quotes.locator('a').count(),165);
     const publishedQuotes=await p.evaluate(()=>window.DucoPublishedPortfolio.quotes);
     assert.deepEqual(await quotes.locator('[data-public-title]').allTextContents(),publishedQuotes.map(row=>row.title));
     const {folio,title}=publishedQuotes.find(row=>row.folio!==null);
@@ -112,7 +138,9 @@ try{
     await action(p,'projects').click();
     const projects=p.locator('[data-public-project-row]');
     assert.equal(await projects.count(),36);
-    assert.equal(await projects.locator('a, button').count(),0);
+    assert.equal(await projects.locator('button').count(),0);
+    assert.equal(await projects.locator('a[href^="#asana-project-"]').count(),36);
+    assert.equal(await projects.locator('a').count(),36);
     const publishedProjects=await p.evaluate(()=>window.DucoPublishedPortfolio.projects);
     assert.deepEqual(await projects.locator('[data-public-title]').allTextContents(),publishedProjects.map(row=>row.title));
     const projectFolio=await projects.first().locator('[data-public-folio]').innerText();
@@ -128,6 +156,67 @@ try{
     await p.setViewportSize({width:390,height:844});
     assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     await p.setViewportSize({width:1400,height:980});
+    await p.goto(base);await ready(p);
+  });
+  await caseTest('Las fichas públicas abren la fila exacta y solo muestran los datos autorizados',async()=>{
+    const {revision,quotes,projects}=await p.evaluate(()=>window.DucoPublishedPortfolio);
+    const quotesByFolio=Map.groupBy(quotes.filter(entry=>entry.folio),entry=>entry.folio);
+    const duplicates=[...quotesByFolio.values()].find(entries=>entries.length>1 && entries[0].title!==entries[1].title);
+    assert.ok(duplicates,'The current cut includes duplicate quote folios');
+    await p.locator('#j-search').fill(duplicates[0].folio);
+    const duplicateFields=[];
+    for(const entry of duplicates.slice(0,2)){
+      const hash=publishedHash('quote',revision,quotes.indexOf(entry));
+      const link=p.locator('[data-published-quote] a[href="'+hash+'"]');
+      assert.equal(await link.count(),1);
+      const row=p.locator('[data-published-quote]').filter({has:p.locator('a[href="'+hash+'"]')});
+      const fields=await publishedTableFields(row);
+      duplicateFields.push(fields);
+      await link.press('Enter');
+      await p.waitForURL(url=>url.hash===hash);
+      const back=await checkPublishedDetail(p,'quote',entry,fields);
+      if(duplicateFields.length===1){
+        const shared=await context.newPage();
+        await shared.goto(base+hash);await ready(shared);
+        await checkPublishedDetail(shared,'quote',entry,fields);
+        await shared.close();
+        await p.goBack();
+      }else await back.click();
+      await p.locator('#j-search').waitFor();
+      assert.equal(await p.locator('#j-search').inputValue(),entry.folio,'Returning preserves the quote filter');
+    }
+
+    await action(p,'view','[data-view="flujo"]').click();
+    const quoteHash=publishedHash('quote',revision,quotes.indexOf(duplicates[0]));
+    await p.locator('article[data-published-quote] a[href="'+quoteHash+'"]').click();
+    const flowBack=await checkPublishedDetail(p,'quote',duplicates[0],duplicateFields[0]);
+    await flowBack.click();
+    await p.locator('article[data-published-quote]').first().waitFor();
+    assert.equal(await p.locator('#j-search').inputValue(),duplicates[0].folio,'Returning from the detail preserves the Flow filter');
+
+    await action(p,'projects').click();
+    const index=projects.length-1, project=projects[index];
+    const projectHash=publishedHash('project',revision,index);
+    await p.locator('#j-project-search').fill(project.title);
+    const projectRow=p.locator('[data-public-project-row]').filter({has:p.locator('a[href="'+projectHash+'"]')});
+    const projectFields=await publishedTableFields(projectRow);
+    await projectRow.locator('a[href="'+projectHash+'"]').click();
+    await p.waitForURL(url=>url.hash===projectHash);
+    const projectBack=await checkPublishedDetail(p,'project',project,projectFields);
+
+    const shared=await context.newPage();
+    await shared.goto(base+projectHash);await ready(shared);
+    await checkPublishedDetail(shared,'project',project,projectFields);
+    await shared.goto(base+publishedHash('project','2000-01-01',index));
+    const unavailable=publishedDetail(shared,'project');
+    await unavailable.getByRole('heading',{name:'Ficha no disponible'}).waitFor();
+    assert.equal(await unavailable.locator('dt,dd').count(),0,'An earlier cutoff link cannot open a different record');
+    await unavailable.getByRole('link',{name:'Volver a proyectos'}).click();
+    await shared.locator('[data-public-project-row]').first().waitFor();
+    await shared.close();
+    await projectBack.click();
+    await p.locator('#j-project-search').waitFor();
+    assert.equal(await p.locator('#j-project-search').inputValue(),project.title,'Returning preserves the project filter');
     await p.goto(base);await ready(p);
   });
   await caseTest('Nueva cotización con madera se recupera después de cerrar Edge',async()=>{

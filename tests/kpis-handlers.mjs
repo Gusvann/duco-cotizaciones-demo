@@ -34,10 +34,12 @@ function portfolioRecord(id,netCents,clientId='a'){
     versions:[{version:1,quoteVersionId:'opaque-'+id,clientId,category:'horeca',commercialType:'line',sentAt:'2026-10-03',snapshot:{quote:{id,versionId:'opaque-'+id},request,summary:{priceCents:netCents}},response:{result:'accepted',version:1,at:'2026-10-06'}}]};
 }
 
-async function harness({mobile=false,portfolioFixtures=false,privateFixture=null,publishedFixture=null}={}){
+async function harness({mobile=false,portfolioFixtures=false,privateFixture=null,publishedFixture=null,publishedHash=''}={}){
   const sandbox=vm.createContext({structuredClone,queueMicrotask,URL});
   if(publishedFixture){
-    sandbox.location={protocol:'https:'};
+    sandbox.location={protocol:'https:',hash:publishedHash};
+    sandbox.navigation=new Map();
+    sandbox.addEventListener=(type,listener)=>sandbox.navigation.set(type,listener);
     sandbox.crypto={randomUUID:()=> '00000000-0000-4000-8000-000000000000'};
     sandbox.DucoPublishedPortfolio=structuredClone(publishedFixture);
     sandbox.DemoBrowserStore={initial:async()=>[],put:async(_record,_snapshot,revision)=>({revision:revision+1})};
@@ -134,6 +136,7 @@ test('public Asana quote list shows escaped titles in Mesa and Flujo without exp
   assert.match(h.root.innerHTML,/Sin folio registrado/);
   assert.match(h.root.innerHTML,/Sin clasificar/);
   assert.match(h.root.innerHTML,/Título ficticio &lt;obra&gt; &amp; diseño/);
+  assert.match(h.root.innerHTML,/href="#asana-quote-2026-11-24-0"/);
   assert.doesNotMatch(h.root.innerHTML,/data-action="open"|persona@example\.test|9999|Responsable de cotización/);
   await h.field('j-status-filter','accepted');
   assert.equal(count(),1);
@@ -156,6 +159,32 @@ test('public Asana quote list shows escaped titles in Mesa and Flujo without exp
   await h.click('new-request');
   assert.equal(h.inspect().state.quoteSource,'browser');
   assert.equal(h.inspect().state.screen,'request');
+});
+
+test('public links open the exact record and reject a different cut without looking up private fields',async()=>{
+  const quote={folio:'701',title:'Título de prueba <obra>',status:'sent',createdAt:'2026-10-03',quoteDue:null,deliveryDate:'2026-11-21',id:'PRIVATE-ID',contact:'private@example.test'};
+  const publishedFixture={
+    revision:'2026-11-24',coverage:{from:'2026-10-01',through:'2026-11-24',lists:{quote:'2026-11-24'}},projects:[],
+    quotes:[quote,{...quote,title:'Otro título con mismo folio'}]
+  };
+  const h=await harness({publishedFixture,publishedHash:'#asana-quote-2026-11-24-0'});
+  assert.match(h.root.innerHTML,/data-published-detail="quote"/);
+  assert.match(h.root.innerHTML,/Título de prueba &lt;obra&gt;/);
+  assert.match(h.root.innerHTML,/<dt>Estado<\/dt><dd>Enviada<\/dd>/);
+  assert.doesNotMatch(h.root.innerHTML,/PRIVATE-ID|private@example\.test|Otro título con mismo folio/);
+  const open=async hash=>{
+    h.sandbox.location.hash=hash;
+    await h.sandbox.navigation.get('hashchange')();
+  };
+  await open('#asana-quote-2026-11-24-1');
+  assert.match(h.root.innerHTML,/>Otro título con mismo folio<\/h1>/);
+  for(const hash of ['#asana-quote-2026-11-23-1','#asana-quote-2026-11-24-9','#asana-quote-2026-11-24-01']){
+    await open(hash);
+    assert.match(h.root.innerHTML,/Ficha no disponible/);
+    assert.doesNotMatch(h.root.innerHTML,/Otro título con mismo folio/);
+  }
+  await open('#asana-quotes');
+  assert.equal([...h.root.innerHTML.matchAll(/data-published-quote\b/g)].length,2);
 });
 
 test('offline session presents its lifetime and recovery controls without internal testing labels',async()=>{

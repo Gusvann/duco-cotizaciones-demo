@@ -73,6 +73,7 @@ test('Published Asana projects use the compact folio and show only the public fi
   const records=h.inspect().records;
   const local=records.find(record=>record.project);
   const published={
+    revision:'2026-11-24',
     coverage:{from:'2026-10-01',through:'2026-11-24',lists:{project:'2026-11-23'}},
     projects:[
       {folio:'2611998',status:'in-progress',createdAt:'2026-11-05',startDate:null,dueDate:'2026-11-21',deliveryDate:'2026-12-02',
@@ -90,7 +91,9 @@ test('Published Asana projects use the compact folio and show only the public fi
   assert.match(publicSection,/Vencimiento en Asana/);
   assert.match(publicSection,/Entrega registrada/);
   assert.match(publicSection,/Título ficticio con &lt;obra&gt; &amp; diseño/);
-  assert.doesNotMatch(publicSection,/Contacto ficticio|asana\.example|364335|href|data-action/);
+  assert.doesNotMatch(publicSection,/Contacto ficticio|asana\.example|364335|data-action/);
+  assert.deepEqual([...publicSection.matchAll(/href="([^"]+)"/g)].map(match=>match[1]),
+    ['#asana-project-2026-11-24-0','#asana-project-2026-11-24-1']);
   assert.doesNotMatch(standard,/data-action="project-open"/,'Unstored demonstration projects do not appear in the published list');
   const withLocal=h.sandbox.DemoProjectViews.list(records,'projects','',{published,hasStoredRecord:id=>id===local.id});
   assert.match(withLocal,/Proyectos de este navegador/);

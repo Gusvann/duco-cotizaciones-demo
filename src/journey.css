@@ -108,6 +108,10 @@
 #journey-root .j-table td:first-child .j-btn{padding:0;min-height:0;background:transparent;border:0;color:var(--j-blue);font-size:14px;text-align:left;justify-content:start;box-shadow:none}
 #journey-root .j-sub{font-size:11px;color:var(--j-muted);margin-top:5px;line-height:1.6}
 #journey-root .j-published-title{color:var(--j-list-name);font-size:14px;font-weight:650;overflow-wrap:anywhere}
+#journey-root a.j-published-title{text-decoration:none}
+#journey-root a.j-published-title:is(:hover,:focus-visible){text-decoration:underline}
+#journey-root .j-published-detail h1{overflow-wrap:anywhere}
+#journey-root .j-published-back{color:var(--j-blue);font-weight:600;text-decoration:underline;text-underline-offset:.18em}
 #journey-root .j-money{font-variant-numeric:tabular-nums;white-space:nowrap}
 #journey-root .j-board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
 #journey-root .j-lane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:3px solid var(--j-line);padding:13px 0;margin-bottom:5px}

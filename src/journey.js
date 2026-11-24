@@ -19,16 +19,17 @@
     const signed=negative?(whole===0n?-0:-whole):whole;
     return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).formatToParts(signed).map(part=>part.type==='fraction'?fraction:part.value).join('');
   };
-  const dayFormat = new Intl.DateTimeFormat('es-MX',{day:'numeric',month:'short',year:'numeric'});
+  const dayFormat = new Intl.DateTimeFormat('es-MX',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
   const date = value => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return 'Por definir';
-    const parsed = new Date(value + 'T12:00:00');
-    return Number.isNaN(parsed.valueOf()) ? 'Por definir' : dayFormat.format(parsed);
+    const parsed = new Date(value+'T12:00:00Z');
+    return Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0,10)!==value ? 'Por definir' : dayFormat.format(parsed);
   };
   let clockTick = 0;
   const privateApi=window.DucoPrivateApi;
   const browserStore=!privateApi && window.DemoBrowserStore;
   const publishedPortfolio=!privateApi && window.location?.protocol!=='file:' && window.DucoPublishedPortfolio;
+  let publishedDetail=null;
   const storage=privateApi || browserStore;
   let localUser=null;
   const storageRevisions=new Map();
@@ -162,10 +163,11 @@
       navEntry('Producción','production',state.screen === 'production'),
       navEntry('Entregas','deliveries',state.screen === 'deliveries')
     ]);
+    const screen = publishedDetail ? (publishedDetail.kind==='project'?'projects':'list') : state.screen;
     const portfolioMenu = group('portfolio','Portafolio',[
-      navEntry('KPIs','kpis',state.screen === 'kpis'),
-      navEntry('Cotizador','list',state.screen === 'list'||!globalScreens.has(state.screen)&&state.screen !== 'project'),
-      navEntry('Proyectos','projects',['projects','project'].includes(state.screen))
+      navEntry('KPIs','kpis',screen === 'kpis'),
+      navEntry('Cotizador','list',screen === 'list'||!globalScreens.has(screen)&&screen !== 'project'),
+      navEntry('Proyectos','projects',['projects','project'].includes(screen))
     ]);
     return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(privateApi ? localUser?.username || 'Cuenta local' : profiles[state.profile])}</strong><small>${privateApi ? (localUser?.role==='direction' ? 'Dirección' : 'Sesión local') : 'Sin sesión iniciada'}</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
   }
@@ -341,17 +343,19 @@
     const stage=publishedQuoteStatus(record);
     return pill(statuses[stage],stage==='accepted'||stage==='project'?'good':'');
   }
-  function publishedQuoteName(record, heading) {
+  function publishedQuoteName(record, index, wrapHeading=false) {
     const folio=record.folio||'Sin folio registrado';
     const title=record.title||folio;
-    return '<'+heading+' class="j-published-title" data-public-title>'+escape(title)+'</'+heading+'>'+
+    const link='<a class="j-published-title" data-public-title href="#asana-quote-'+escape(publishedPortfolio.revision)+'-'+index+'">'+escape(title)+'</a>';
+    return (wrapHeading?'<h3>'+link+'</h3>':link)+
       (title===folio?'':'<div class="j-sub" data-public-folio>'+escape(folio)+'</div>');
   }
   function publishedQuotesMarkup() {
     const entries=publishedPortfolio.quotes;
     const query=state.search.trim().toLocaleLowerCase('es-MX');
     const compactQuery=portfolio.compactFolio(query);
-    const visible=entries.filter(record=>(state.filter==='all'||publishedQuoteStatus(record)===state.filter)&&
+    const visible=entries.map((record,index)=>({record,index})).filter(({record})=>
+      (state.filter==='all'||publishedQuoteStatus(record)===state.filter)&&
       (!query||[record.title,record.folio,portfolio.compactFolio(record.folio)]
         .some(value=>String(value??'').toLocaleLowerCase('es-MX').includes(query))||
         (compactQuery!==query&&portfolio.compactFolio(record.folio)===compactQuery)));
@@ -365,12 +369,12 @@
     const range=from&&to?' · Creadas del '+date(from)+' al '+date(to):'';
     const coverage='<p class="j-muted j-sub">Corte de Asana'+range+'.</p>';
     if(state.view==='flujo'){
-      return controls+coverage+quoteBoard(visible,publishedQuoteStatus,record=>
-        '<article class="j-card" data-published-quote>'+publishedQuoteName(record,'h3')+
+      return controls+coverage+quoteBoard(visible,({record})=>publishedQuoteStatus(record),({record,index})=>
+        '<article class="j-card" data-published-quote>'+publishedQuoteName(record,index,true)+
         publishedQuoteStateMarkup(record)+'<p class="j-sub">Creación: '+date(record.createdAt)+'<br>Cotización: '+
         date(record.quoteDue)+'<br>Entrega: '+date(record.deliveryDate)+'</p></article>');
     }
-    const rows=visible.map(record=>'<tr data-published-quote><td>'+publishedQuoteName(record,'strong')+'</td><td>'+
+    const rows=visible.map(({record,index})=>'<tr data-published-quote><td>'+publishedQuoteName(record,index)+'</td><td>'+
       publishedQuoteStateMarkup(record)+'</td><td>'+date(record.createdAt)+'</td><td>'+date(record.quoteDue)+'</td><td>'+
       date(record.deliveryDate)+'</td></tr>').join('');
     return controls+coverage+'<div class="j-table-wrap j-list-table" role="region" aria-label="Tabla de cotizaciones" tabindex="0"><table class="j-table"><caption class="j-sr">Cotizaciones de Asana</caption>'+
@@ -683,11 +687,63 @@
     return state.screen==='project' && record.project
       ? portfolio.compactFolio(portfolio.projectFolio(record.project)) : record.folio || record.id;
   }
+  function publishedPage(hash) {
+    if(!publishedPortfolio)return null;
+    if(hash==='#asana-quotes'||hash==='#asana-projects')return {kind:hash==='#asana-projects'?'project':'quote',list:true};
+    const prefix=/^#asana-(quote|project)-/.exec(hash);
+    if(!prefix)return null;
+    const [,kind]=prefix;
+    const match=/^#asana-(?:quote|project)-(\d{4}-\d{2}-\d{2})-(0|[1-9]\d*)$/.exec(hash);
+    const entries=kind==='quote'?publishedPortfolio.quotes:publishedPortfolio.projects;
+    const index=match?Number(match[2]):-1;
+    const item=match?.[1]===publishedPortfolio.revision && Number.isSafeInteger(index) ? entries[index] : null;
+    return {kind,item,hash};
+  }
+
+  function publishedBackLink(kind, label) {
+    return '<a class="j-published-back" href="#asana-'+(kind==='project'?'projects':'quotes')+'">'+escape(label)+'</a>';
+  }
+
+  function publishedDetailMarkup({kind,item}) {
+    const isProject=kind==='project';
+    const back=publishedBackLink(kind,isProject?'Volver a proyectos':'Volver a cotizaciones');
+    if(!item)return '<section class="j-panel" data-published-detail="'+kind+'" aria-labelledby="j-published-detail-title"><h1 id="j-published-detail-title" tabindex="-1">Ficha no disponible</h1>'+
+      '<p class="j-muted">El enlace no corresponde a una ficha del corte publicado.</p>'+back+'</section>';
+    const folio=(isProject?portfolio.compactFolio(item.folio):item.folio)||'Sin folio registrado';
+    const facts=isProject
+      ? [['Folio',folio],['Estado',projectViews.publishedProjectStatus(item)],['Creación',date(item.createdAt)],
+        ['Inicio',date(item.startDate)],['Vencimiento en Asana',date(item.dueDate)],['Entrega registrada',date(item.deliveryDate)]]
+      : [['Folio',folio],['Estado',statuses[publishedQuoteStatus(item)]],['Fecha de creación',date(item.createdAt)],
+        ['Fecha límite de cotización',date(item.quoteDue)],['Fecha de entrega',date(item.deliveryDate)]];
+    return '<section class="j-panel j-published-detail" data-published-detail="'+kind+'" aria-labelledby="j-published-detail-title"><header class="j-panel-head"><div>'+
+      '<p class="j-eyebrow">'+(isProject?'Proyecto de Asana':'Cotización de Asana')+'</p><h1 id="j-published-detail-title" tabindex="-1">'+escape(item.title||folio)+'</h1>'+
+      '</div>'+back+'</header><dl class="op-facts">'+facts.map(([label,value])=>
+        '<div class="op-fact"><dt>'+escape(label)+'</dt><dd>'+escape(value)+'</dd></div>').join('')+'</dl></section>';
+  }
+
+  function readPublishedPage(focus=false) {
+    const currentPage=publishedPage(window.location?.hash||'');
+    const previous=publishedDetail;
+    if(!currentPage&&!previous)return false;
+    publishedDetail=currentPage&&!currentPage.list?currentPage:null;
+    if(!publishedDetail&&globalScreens.has(state.screen)){
+      setScreen((currentPage||previous).kind==='project'?'projects':'list');
+      if(state.screen==='list')state.quoteSource='asana';
+    }
+    render();
+    if(focus){
+      const next=publishedDetail ? root.querySelector('[data-published-detail] h1')
+        : Array.from(root.querySelectorAll('a[data-public-title]')).find(link=>link.getAttribute('href')===previous?.hash);
+      (next||document.getElementById('j-main'))?.focus();
+    }
+    return true;
+  }
+
   function render() {
-    const active = current();
-    const atKpis = state.screen === 'kpis';
-    const atOperations = globalScreens.has(state.screen)&&!['list','kpis'].includes(state.screen);
-    const atList = !atKpis && !atOperations && (state.screen === 'list' || !active);
+    const active = publishedDetail?null:current();
+    const atKpis = !publishedDetail&&state.screen === 'kpis';
+    const atOperations = !publishedDetail&&globalScreens.has(state.screen)&&!['list','kpis'].includes(state.screen);
+    const atList = !publishedDetail&&!atKpis&&!atOperations&&(state.screen === 'list'||!active);
     if(atOperations)for(const record of records)if(record.project)projectOperations(record);
     const operationsTitle={projects:'Proyectos',production:'Producción',deliveries:'Entregas',workflow:'Mapa del proceso'}[state.screen];
     const operationsBody=atOperations?(state.screen==='workflow'?projectViews.workflow():projectViews.list(records,state.screen,state.projectSearch || '',{
@@ -700,9 +756,16 @@
       ? '<span class="j-demo">COPIA PRIVADA</span>'+button('Cerrar sesión','private-logout')
       : browserStore ? '<span class="j-demo">'+(publishedPortfolio?'CORTE PÚBLICO':'DATOS DE PRUEBA')+'</span>'+button(publishedPortfolio?'Recargar':'Recargar demo','reset')
       : '<span class="j-demo">SÓLO EN ESTA SESIÓN</span>'+button('Reiniciar sesión','reset');
-    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${sessionControls}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>' : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(crumbFolio(active))}</span>`}</nav><main id="j-main" class="j-main" tabindex="-1">${atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active)}</main>`;
-    host.hidden = atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
-    root.dataset.journeyScreen = state.screen;
+    const breadcrumb=publishedDetail
+      ? publishedBackLink(publishedDetail.kind,publishedDetail.kind==='project'?'Proyectos':'Cotizaciones')+
+        '<span aria-hidden="true">›</span><span aria-current="page">Ficha</span>'
+      : atOperations ? `<span>${operationsTitle}</span>` : atKpis ? '<span>KPIs</span>' : atList ? '<span>Cotizaciones</span>'
+        : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(crumbFolio(active))}</span>`;
+    const content=publishedDetail ? publishedDetailMarkup(publishedDetail)
+      : atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active);
+    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${sessionControls}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${breadcrumb}</nav><main id="j-main" class="j-main" tabindex="-1">${content}</main>`;
+    host.hidden = Boolean(publishedDetail) || atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
+    root.dataset.journeyScreen = publishedDetail?'published-detail':state.screen;
     host.dataset.journeyScreen = state.screen;
     refreshCommercialType(active);
     revealCommercialStage();
@@ -721,6 +784,7 @@
   }
 
   function renderFooter() {
+    if(publishedDetail&&!state.guard){footer.innerHTML='';return;}
     const active = current();
     const s = active ? summary(active) : null;
     const quoteControls = active && state.screen === 'quote' ? `<div class="j-quote-footer"><div class="j-actions">${api.automaticCapture?'':button('Aplicar captura pendiente','apply-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}${button('Descartar captura pendiente','discard-pending',!s?.hasPending || locked(active) ? 'disabled' : '')}</div><div class="j-actions">${s?.saveState === 'unknown' ? button('Consultar resultado del guardado','resolve-save','id="j-resolve-save"',true) : ''}${button('Volver a cotizaciones','list')}${button('Ir a revisión','stage',`data-screen="review" ${canStage(active,'review') ? '' : 'disabled'}`,true)}</div></div>` : '';
@@ -765,6 +829,10 @@
     } else api.hide();
     state.id = id;
     setScreen(screen);
+    if(publishedPortfolio&&window.location?.hash?.startsWith('#asana-')){
+      window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search);
+    }
+    publishedDetail=null;
     if(screen==='project')state.opTab='plan';
     state.menu = false;
     state.guard = null;
@@ -1023,6 +1091,11 @@
   }
 
   for (const container of [root,footer]) container.addEventListener('click',event => {
+    if(publishedDetail&&event.target.closest('.j-skip')){
+      event.preventDefault();
+      document.getElementById('j-main')?.focus();
+      return;
+    }
     const heading = event.target.closest('#j-sidebar [data-nav-group] > summary');
     const group = heading?.parentElement;
     if (group?.dataset.navGroup && container === root && root.contains(heading)) {
@@ -1135,7 +1208,7 @@
     if (!state.busy) {
       // Native input blur precedes a click on the journey navigation. Updating
       // stable controls avoids removing the clicked button before dispatch.
-      if (record && ['request','quote'].includes(state.screen) && state.id === id) {
+      if (!publishedDetail && record && ['request','quote'].includes(state.screen) && state.id === id) {
         const screen = step === 0 ? 'request' : 'quote';
         if (step > 0) { record.quoteStep = step; record.started = true; }
         if (storage) noteStatusTransition(record,previous);
@@ -1146,6 +1219,7 @@
     }
   });
   const ready=(async()=>{state.busy=true;try{await seed();}catch(error){state.feedback=error.message;state.tone='error';}
-    finally{state.busy=false;render();}})();
+    finally{state.busy=false;if(!readPublishedPage())render();}})();
+  if(publishedPortfolio)window.addEventListener?.('hashchange',()=>ready.then(()=>readPublishedPage(true)));
   window.DemoJourney = Object.freeze({ready,inspect:() => clone({state,records,clients,clockTick}),portfolio:() => clone(kpiMetrics()),saveCurrent:() => saveRecord(current()),openReview:() => transition('review')});
 })();

@@ -27,7 +27,8 @@
   const row = (label, value) => `<div class="op-fact"><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`;
   const portfolio = globalThis.DemoPortfolio;
   const shownFolio = project => portfolio.compactFolio(portfolio.projectFolio(project));
-  const publicStatuses = new Map([['pending','Pendiente'],['in-progress','En proceso'],['completed','Concluido'],['cancelled','Cancelado']]);
+  const publicStatuses = new Map([['pending','Pendiente'],['in-progress','En proceso'],['completed','Concluido'],['paused','Pausado'],['cancelled','Cancelado']]);
+  const publishedProjectStatus = project => publicStatuses.get(project.status) || 'Estado sin confirmar';
   const shownTitle = (project, record) => portfolio.projectTitle({
     ...project, title:project.title || project.baseline?.request?.title || record.request?.title || 'Proyecto'
   });
@@ -72,7 +73,8 @@
 
   function publishedProjectsMarkup(publication, query) {
     const projects = publication.projects;
-    const visible = query ? projects.filter(project => portfolio.projectMatches(project,query)) : projects;
+    const visible = projects.map((project,index)=>({project,index}))
+      .filter(({project})=>!query || portfolio.projectMatches(project,query));
     const {from,through,lists} = publication.coverage || {};
     const projectThrough = typeof lists?.project === 'string' ? lists.project : lists?.project?.through || through;
     const start = portfolio.calendarDate(from);
@@ -81,12 +83,12 @@
     const count = visible.length === projects.length
       ? visible.length+(visible.length === 1 ? ' proyecto' : ' proyectos')
       : visible.length+' de '+projects.length+' proyectos';
-    const rows = visible.map(project => {
-      const status = publicStatuses.get(project.status) || 'Estado sin confirmar';
+    const rows = visible.map(({project,index}) => {
+      const status = publishedProjectStatus(project);
       const folio = portfolio.compactFolio(project.folio) || 'Sin folio registrado';
       const title = project.title || folio;
       const shownReference = title === folio ? '' : '<div class="j-sub" data-public-folio>'+escape(folio)+'</div>';
-      return `<tr data-public-project-row><th scope="row"><span class="j-published-title" data-public-title>${escape(title)}</span>${shownReference}</th><td><span class="op-phase">${status}</span></td><td>${escape(date(project.createdAt))}</td><td>${escape(date(project.startDate))}</td><td>${escape(date(project.dueDate))}</td><td>${escape(date(project.deliveryDate))}</td></tr>`;
+      return `<tr data-public-project-row><th scope="row"><a class="j-published-title" data-public-title href="#asana-project-${escape(publication.revision)}-${index}">${escape(title)}</a>${shownReference}</th><td><span class="op-phase">${status}</span></td><td>${escape(date(project.createdAt))}</td><td>${escape(date(project.startDate))}</td><td>${escape(date(project.dueDate))}</td><td>${escape(date(project.deliveryDate))}</td></tr>`;
     }).join('');
     const content = rows
       ? `<div class="j-table-wrap op-list-wrap j-list-table" role="region" tabindex="0" aria-labelledby="public-project-title"><table class="j-table op-list"><caption class="op-caption">Proyectos de Asana</caption><thead><tr><th scope="col">Proyecto</th><th scope="col">Estado</th><th scope="col">Creación</th><th scope="col">Inicio</th><th scope="col">Vencimiento en Asana</th><th scope="col">Entrega registrada</th></tr></thead><tbody>${rows}</tbody></table></div>`
@@ -210,5 +212,5 @@
     return `<div class="op-workflow"><div class="op-page-head"><div><h2>Del encargo a la entrega</h2><p class="j-muted">Dos puntos de partida que convergen en la misma revisión comercial y el seguimiento del proyecto.</p></div></div>${scope()}<div class="op-workflow-grid">${maps.map(([title,steps]) => `<section class="j-panel op-map"><h3>${title}</h3><ol class="op-steps">${steps.map(([label,description]) => `<li><strong>${label}</strong><p class="j-muted">${description}</p></li>`).join('')}</ol></section>`).join('')}</div><p class="j-muted op-map-note">Consultar el catálogo no agrega artículos. Cambiar una receta afecta su copia. Las referencias históricas y los costos pendientes requieren revisión; ni la aceptación ni la conversión registran pagos.</p></div>`;
   }
 
-  globalThis.DemoProjectViews = Object.freeze({list,detail,sourceDetail,workflow});
+  globalThis.DemoProjectViews = Object.freeze({list,detail,sourceDetail,workflow,publishedProjectStatus});
 })();
