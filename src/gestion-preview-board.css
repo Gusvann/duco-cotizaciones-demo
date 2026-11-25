@@ -1,0 +1,44 @@
+/* Mismos carriles y tarjetas del flujo de oportunidades. La ficha reduce el ancho disponible. */
+.gp-board-shell { container-type: inline-size; }
+#journey-root .gp-board-card[draggable="true"] { cursor: grab; }
+#journey-root .gp-board-card-heading { display: flex; justify-content: space-between; align-items: center; }
+#journey-root .gp-board-grip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  min-height: 26px;
+  color: var(--j-muted);
+  touch-action: none;
+  user-select: none;
+}
+#journey-root .gp-board-card.gp-dragging { border-color: var(--j-blue); cursor: grabbing; }
+#journey-root .gp-board-lane.gp-drop-target { outline: 2px dashed var(--j-blue); outline-offset: 2px; background: var(--j-soft); }
+@media (any-pointer: coarse) {
+  #journey-root .gp-board-grip { min-width: 44px; min-height: 44px; }
+}
+#journey-root .gp-board-card.is-selected { border-color: var(--j-blue); }
+#journey-root .gp-board-title { overflow-wrap: anywhere; }
+#journey-root .gp-board-title:is(:hover, :focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: .18em;
+}
+#journey-root .gp-board-move { font-size: 12px; min-height: 34px; padding: 6px 8px; }
+#journey-root .gp-board-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 10px;
+  color: var(--j-muted);
+  font-size: 11px;
+}
+#journey-root .gp-board-progress progress { width: 52px; height: 8px; accent-color: var(--j-blue); }
+@container (max-width: 940px) {
+  #journey-root .gp-board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container (max-width: 620px) {
+  #journey-root .gp-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 400px) {
+  #journey-root .gp-board { grid-template-columns: 1fr; }
+}

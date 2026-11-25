@@ -10,7 +10,7 @@ import vm from 'node:vm';
 const read=name=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 const template=read('cotizador.html');
 // A test run uses one immutable source checkpoint, even if a collaborator edits later.
-const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','journey.js'].map(name=>[name,read(name)]);
+const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','astil-chrome.js','journey.js'].map(name=>[name,read(name)]);
 const domain=[...quoteTemplate(template).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])
   .find(source=>source.includes('var QuoteSchema')&&source.includes('var QuoteManufacturing_'));
 if(!domain) throw new Error('The shared public domain is required.');
@@ -187,13 +187,13 @@ test('public links open the exact record and reject a different cut without look
   assert.equal([...h.root.innerHTML.matchAll(/data-published-quote\b/g)].length,2);
 });
 
-test('offline session presents its lifetime and recovery controls without internal testing labels',async()=>{
+test('session presentation hides testing labels without hiding the session and recovery context',async()=>{
   const h=await harness();
   const text=()=>[h.root.innerHTML,h.footer.innerHTML].join(' ').replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ');
   const check=()=>{
     assert.doesNotMatch(text(),/DEMO LOCAL|\b(?:UAT|PREVIEW|PENDING_CONFIG|PARAMETER_PENDING)\b|\bsimulaci[oó]n\b|\bsimulad[ao]s?\b|datos sint[eé]ticos/i);
     assert.match(text(),/SÓLO EN ESTA SESIÓN/);
-    assert.match(text(),/Sin inicio de sesión; los datos desaparecen al recargar/);
+    assert.match(h.footer.innerHTML,/Sin inicio de sesión; los datos desaparecen al recargar\./);
   };
   check();await h.click('open',{id:'DEMO-101'});check();
   await h.click('stage',{screen:'quote'});check();

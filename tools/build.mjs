@@ -76,6 +76,7 @@ ${scripts}
 <script>${read('project-operations.js')}</script>
 <script>${read('project-views.js')}</script>
 <script src="src/published-portfolio.js"></script>
+<script>${read('astil-chrome.js')}</script>
 <script>${read('journey.js')}</script>
 </body></html>\n`;
  [...output.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].forEach((m,i)=>new vm.Script(m[1],{filename:'inline-'+i}));

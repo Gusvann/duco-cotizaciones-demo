@@ -15,11 +15,21 @@ const sessionAge = 8*60*60*1000;
 const contentLimit = 8*1024*1024;
 const now = () => Date.now();
 const secureHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'};
-const privateGallery = new Map([
+const privateAssets = new Map([
   ['/catalogo.html',['catalogo.html','text/html; charset=utf-8']],
   ['/src/galeria.css',['src/galeria.css','text/css; charset=utf-8']],
   ['/src/galeria.js',['src/galeria.js','text/javascript; charset=utf-8']],
-  ['/src/public-product-catalog.js',['src/public-product-catalog.js','text/javascript; charset=utf-8']]
+  ['/src/public-product-catalog.js',['src/public-product-catalog.js','text/javascript; charset=utf-8']],
+  ['/gestion.html',['gestion.html','text/html; charset=utf-8']],
+  ...['journey','integration','list-tables','gestion-fonts','gestion-preview','gestion-preview-board','gestion-preview-table'].map(name=>[
+    '/src/'+name+'.css',['src/'+name+'.css','text/css; charset=utf-8']
+  ]),
+  ...['sora','public-sans'].map(name=>[
+    '/src/assets/fonts/'+name+'.woff2',['src/assets/fonts/'+name+'.woff2','font/woff2']
+  ]),
+  ...['astil-chrome','gestion-chrome','gestion-preview','gestion-preview-model','gestion-preview-board','gestion-preview-table'].map(name=>[
+    '/src/'+name+'.js',['src/'+name+'.js','text/javascript; charset=utf-8']
+  ])
 ]);
 
 function same(a,b) {
@@ -53,7 +63,7 @@ const signInScript = `document.getElementById('login').addEventListener('submit'
   try {
     const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(form))});
     if(!response.ok){feedback.textContent=(await response.json()).message;return;}
-    location.replace('/');
+    location.replace(location.pathname==='/gestion.html'?'/gestion.html':'/');
   } catch {feedback.textContent='El servidor local no respondió.';}
 });`;
 
@@ -106,27 +116,28 @@ export function createPrivateServer({store,port,publicHtml,privateJs,checkQuote=
       }
       const documentNavigation=req.headers['sec-fetch-mode']==='navigate'&&req.headers['sec-fetch-dest']==='document'&&
         ['none','same-origin'].includes(req.headers['sec-fetch-site']);
-      if(requestPath==='/'&&!write&&!active&&documentNavigation&&peerChecks<3&&store.source('windowsBinding',null)){
+      const workspacePage=requestPath==='/'||requestPath==='/gestion.html';
+      if(workspacePage&&!write&&!active&&documentNavigation&&peerChecks<3&&store.source('windowsBinding',null)){
         peerChecks++;
         let sid;
         try {sid=await identifyWindowsPeer(req.socket);}
         catch {sid=null;} // If Windows cannot identify the connection, require manual sign-in.
         finally {peerChecks--;}
         const user=store.windowsAccount(sid);
-        if(user)return respond(res,303,'text/plain','',{Location:'/',...sessionCookie(user,token)});
+        if(user)return respond(res,303,'text/plain','',{Location:requestPath,...sessionCookie(user,token)});
       }
       if(requestPath==='/acceso'&&!write)return signInPage(res);
       if(!active) {
-        if(requestPath==='/'&&!write) return signInPage(res);
+        if(workspacePage&&!write) return signInPage(res);
         throw new LocalError(401,'Inicia sesión para continuar.');
       }
       if(write&&!same(req.headers['x-duco-csrf'],auth.csrf)) throw new LocalError(403,'La sesión no autorizó la escritura.');
       const {user}=auth;
       if(!write&&requestPath==='/')return respond(res,200,'text/html; charset=utf-8',html);
-      const gallery=privateGallery.get(requestPath);
-      if(!write&&gallery){
-        const [filename,mime]=gallery;
-        const source=await fs.promises.readFile(path.join(root,filename),'utf8');
+      const asset=privateAssets.get(requestPath);
+      if(!write&&asset){
+        const [filename,mime]=asset;
+        const source=await fs.promises.readFile(path.join(root,filename),mime==='font/woff2'?null:'utf8');
         return respond(res,200,mime,requestPath==='/catalogo.html'
           ?source.replace('src/published-recipes.js','/private-recipes.js'):source);
       }

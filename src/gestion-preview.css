@@ -1,0 +1,41 @@
+/* La mesa y el tablero usan el shell, las listas y los campos del portafolio. */
+#journey-root { min-height: 100vh; }
+#gp-chrome .j-sidebar-backdrop[hidden] { display: none; }
+#gp-chrome .j-breadcrumb a { color: var(--j-blue); text-decoration: none; }
+#gp-chrome .j-breadcrumb a:is(:hover, :focus-visible) { text-decoration: underline; }
+.gp-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0; }
+.gp-summary > div { display: inline-flex; align-items: baseline; gap: 4px; }
+.gp-summary dd { order: -1; margin: 0; color: var(--j-ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.gp-summary dt { text-transform: lowercase; }
+.gp-summary .gp-attention dd { color: var(--j-error); }
+.gp-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.gp-workspace:has(.gp-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(285px, 320px); }
+#gp-results, .gp-detail { min-width: 0; }
+#journey-root .gp-detail { padding: 16px; }
+.gp-detail-head, .gp-detail-section > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gp-detail-head { margin-bottom: 14px; }
+.gp-detail-head h2 { scroll-margin-top: 76px; overflow-wrap: anywhere; }
+#journey-root .gp-close { flex: none; padding: 3px 9px; min-height: 30px; }
+.gp-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.gp-fields .j-field { min-width: 0; }
+.gp-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 13px; }
+.gp-detail-section { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--j-line); }
+#journey-root .gp-text-button { padding: 2px 0; border: 0; background: none; color: var(--j-blue); font-weight: 550; font-size: 12px; }
+.gp-text-button:is(:hover, :focus-visible) { text-decoration: underline; text-underline-offset: .18em; }
+.gp-task-list, .gp-activity { display: grid; gap: 8px; padding: 0; margin: 6px 0 0; list-style: none; }
+.gp-task-list li { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px; align-items: baseline; }
+.gp-task-list input { align-self: start; margin: 4px 0 0; accent-color: var(--j-blue); }
+.gp-task-list label, .gp-activity li { overflow-wrap: anywhere; }
+.gp-task-list small, .gp-activity small { display: block; color: var(--j-muted); font-size: 11px; }
+.gp-task-list [data-done="true"] label > span { text-decoration: line-through; color: var(--j-muted); }
+#journey-root .gp-status { margin-top: 8px; color: var(--j-good); }
+#journey-root .gp-status[data-tone="error"], #gp-dialog-error { color: var(--j-error); }
+.gp-status:empty { display: none; }
+#journey-root .gp-footnote { margin-top: 15px; }
+#gp-dialog { width: min(calc(100% - 32px), 440px); box-sizing: border-box; padding: 22px; color: var(--j-ink); background: var(--j-paper); border: 1px solid var(--j-line); border-radius: 10px; box-shadow: 0 20px 80px #10233844; }
+#gp-dialog::backdrop { background: #10233870; }
+#gp-dialog h2 { margin-bottom: 12px; }
+#gp-dialog-error:not([hidden]) { margin-top: 10px; }
+@media (max-width: 1090px) {
+  .gp-workspace:has(.gp-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+}

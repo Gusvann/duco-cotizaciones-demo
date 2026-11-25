@@ -429,6 +429,7 @@ try {
     const navSummary=page.locator('#j-sidebar [data-nav-group="portfolio"] > summary');
     const operationSummary=page.locator('#j-sidebar [data-nav-group="operations"] > summary');
     const navProjects=page.locator('#j-sidebar [data-action="projects"]');
+    const navManagement=page.getByRole('link',{name:'Gestión DUCO'});
     const navKpis=page.locator('#j-sidebar [data-action="kpis"]');
     assert.equal(await navSummary.evaluate(element=>element===document.activeElement),true);
     await page.keyboard.press('Tab');
@@ -438,7 +439,11 @@ try {
     await page.keyboard.press('Shift+Tab');
     assert.equal(await operationSummary.evaluate(element=>element===document.activeElement),true,'The closed section still has a reachable heading');
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await navProjects.evaluate(element=>element===document.activeElement),true,'Backward focus wraps to the last visible entry');
+    assert.equal(await navManagement.evaluate(element=>element===document.activeElement),true,'Backward focus wraps to Gestión DUCO, the last visible entry');
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await navProjects.evaluate(element=>element===document.activeElement),true,'Proyectos precedes Gestión DUCO');
+    await page.keyboard.press('Tab');
+    assert.equal(await navManagement.evaluate(element=>element===document.activeElement),true);
     await page.keyboard.press('Tab');
     assert.equal(await operationSummary.evaluate(element=>element===document.activeElement),true,'Forward focus wraps within the open navigation');
     await capture({path:path.join(artifacts,'astil-shell-after-menu-390.png'),fullPage:true});

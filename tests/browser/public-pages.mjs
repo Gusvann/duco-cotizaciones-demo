@@ -20,10 +20,14 @@ const publicURL=process.env.PAGES_TEST_URL;
 if(publicURL && publicURL!==official)throw Error('PAGES_TEST_URL must be the official public demo.');
 const digest=buffer=>createHash('sha256').update(buffer).digest('hex');
 const expectedHash=digest(await fs.readFile(path.join(root,'index.html')));
-const allowedFile=relative=>/^(?:index|catalogo)\.html$/.test(relative) ||
+const managementAsset=relative=>relative==='gestion.html' ||
+  /^src\/(?:astil-chrome|gestion-chrome|gestion-preview(?:-model|-table|-board)?)\.js$/.test(relative) ||
+  /^src\/(?:gestion-fonts|journey|integration|list-tables|gestion-preview(?:-table|-board)?)\.css$/.test(relative) ||
+  /^src\/assets\/fonts\/(?:sora|public-sans)\.woff2$/.test(relative);
+const allowedFile=relative=>managementAsset(relative) || /^(?:index|catalogo)\.html$/.test(relative) ||
   /^src\/(?:(?:public-product-catalog|published-recipes|published-portfolio)\.js|galeria\.(?:js|css))$/.test(relative) ||
   /^(?:assets\/catalogo|src\/assets\/catalogo-sintetico)\/(?:thumb\/)?[A-Za-z0-9_.-]+\.(?:webp|jpg|jpeg|png|json)$/.test(relative);
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.woff2':'font/woff2'};
 const server=publicURL?null:createServer(async(req,res)=>{
   const pathname=new URL(req.url,'http://127.0.0.1').pathname;
   const relative=pathname.slice(prefix.length)||'index.html';
@@ -47,8 +51,11 @@ async function start(profile='tester'){
     page.on('response',res=>{if(res.status()>=400)failures.push(res.status()+' '+new URL(res.url()).pathname);});
   });
   await context.route('**/*',async route=>{
-    const url=route.request().url();
-    if(url.startsWith(base)||/^(?:data|blob|about):/.test(url)){await route.continue();return;}
+    const request=route.request(),url=request.url();
+    if(/^(?:data|blob|about):/.test(url)){await route.continue();return;}
+    if(url.startsWith(base)&&request.method()==='GET'&&allowedFile(new URL(url).pathname.slice(prefix.length)||'index.html')){
+      await route.continue();return;
+    }
     external.push(url);await route.abort();
   });
   const page=await context.newPage();
@@ -115,6 +122,56 @@ async function checkPublishedDetail(p,kind,entry,fields){
 let madeId,productItem,confirmed;
 try{
   let p=await start();
+  await caseTest('Gestión abre desde Portafolio y mueve expedientes de ejemplo en escritorio y móvil',async()=>{
+    const entry=p.getByRole('link',{name:'Gestión DUCO'});
+    const managementUrl=new URL('gestion.html',base).href;
+    assert.equal(new URL(await entry.getAttribute('href'),base).href,managementUrl);
+    const requests=[];
+    const track=request=>requests.push(request.url());
+    context.on('request',track);
+    const [board]=await Promise.all([context.waitForEvent('page'),entry.click()]);
+    await board.waitForURL(managementUrl);
+    const changeView=mode=>board.locator('[data-view="'+mode+'"]').click();
+    const table=board.locator('.j-list-table');
+    await table.waitFor();
+    const name='Expediente ficticio de prueba Pages';
+    await board.getByRole('button',{name:'Nueva cotización'}).click();
+    const modal=board.locator('#gp-dialog');
+    await modal.getByLabel('Nombre').fill(name);
+    await modal.getByRole('button',{name:'Crear cotización'}).click();
+    await board.getByRole('button',{name:'Cerrar ficha'}).click();
+    await changeView('tablero');
+    const card=board.locator('.gp-board-card').filter({has:board.getByRole('button',{name,exact:true})});
+    const lane=stage=>board.locator('.gp-board-lane[data-stage="'+stage+'"]');
+    await card.locator('.gp-board-grip').dragTo(lane('review').locator('.j-lane-head'));
+    await lane('review').getByRole('button',{name,exact:true}).waitFor();
+    await changeView('mesa');
+    assert.equal(await table.getByRole('combobox',{name:'Etapa de '+name,exact:true}).inputValue(),'review');
+
+    await board.setViewportSize({width:390,height:844});
+    await board.locator('.j-mobile-menu').click();
+    await board.locator('[data-kind="project"]').click();
+    await changeView('tablero');
+    const firstProject=lane('plan').locator('.gp-board-card').first();
+    const projectName=await firstProject.locator('[data-select]').textContent();
+    await firstProject.getByRole('combobox').focus();
+    await board.keyboard.press('ArrowDown');
+    await lane('supply').getByRole('button',{name:projectName,exact:true}).waitFor();
+    await changeView('mesa');
+    assert.equal(await table.getByRole('combobox',{name:'Etapa de '+projectName,exact:true}).inputValue(),'supply');
+    assert.ok(await board.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await board.evaluate(()=>document.fonts.ready);
+    context.off('request',track);
+    assert.ok(requests.includes(managementUrl));
+    assert.ok(requests.every(url=>url.startsWith(base)&&managementAsset(new URL(url).pathname.slice(prefix.length))),
+      'La prueba de Gestión solo necesita sus recursos estáticos públicos');
+
+    const back=board.getByRole('link',{name:'Volver al espacio de trabajo'});
+    assert.equal(new URL(await back.getAttribute('href'),managementUrl).href,base);
+    await back.click();
+    await ready(board);
+    await board.close();
+  });
   await caseTest('El corte de Asana muestra los títulos completos y permite buscar por folio o título',async()=>{
     const quotes=p.locator('[data-published-quote]');
     assert.equal(await quotes.count(),165);

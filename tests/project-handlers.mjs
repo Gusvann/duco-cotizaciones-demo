@@ -9,7 +9,7 @@ import vm from 'node:vm';
 // markup only. No browser layout, backend, authentication or real services.
 const read=name=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 const template=read('cotizador.html');
-const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','journey.js'].map(name=>[name,read(name)]);
+const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','astil-chrome.js','journey.js'].map(name=>[name,read(name)]);
 const hash=source=>createHash('sha256').update(source).digest('hex');
 const sourceCheckpoint={native:hash(template),scripts:Object.fromEntries(scripts.map(([name,source])=>[name,hash(source)])),test:hash(readFileSync(new URL(import.meta.url),'utf8'))};
 const domain=[...quoteTemplate(template).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])

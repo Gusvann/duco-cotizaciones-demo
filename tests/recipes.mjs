@@ -13,6 +13,7 @@ const referenceSource=read('src/recipe-reference.js');
 const expansionSource=read('src/public-product-catalog.js')+'\n'+read('src/recipe-expansion.js');
 const catalogSource=read('src/recipe-catalog.js');
 const bridgeSource=read('src/quote-bridge.js');
+const chromeSource=read('src/astil-chrome.js');
 const portfolioSource=read('src/portfolio-kpis.js'),journeySource=read('src/journey.js');
 const operationsSource=read('src/project-operations.js'),projectViewsSource=read('src/project-views.js');
 const extended=quoteTemplate(native);
@@ -699,6 +700,7 @@ function harness({partDraftFault=false,expansion=false,publicCatalog=false,priva
     vm.runInContext(portfolioSource,sandbox,{filename:'portfolio-kpis.js'});
     vm.runInContext(operationsSource,sandbox,{filename:'project-operations.js'});
     vm.runInContext(projectViewsSource,sandbox,{filename:'project-views.js'});
+    vm.runInContext(chromeSource,sandbox,{filename:'astil-chrome.js'});
     vm.runInContext(journeySource,sandbox,{filename:'journey.js'});
     await sandbox.DemoJourney.ready;
     const action=async(action,extra={})=>{

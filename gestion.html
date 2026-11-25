@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'none'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Astil · Gestión de portafolio</title>
+  <link rel="stylesheet" href="src/gestion-fonts.css">
+  <link rel="stylesheet" href="src/journey.css">
+  <link rel="stylesheet" href="src/integration.css">
+  <link rel="stylesheet" href="src/list-tables.css">
+  <link rel="stylesheet" href="src/gestion-preview.css">
+  <link rel="stylesheet" href="src/gestion-preview-table.css">
+  <link rel="stylesheet" href="src/gestion-preview-board.css">
+  <script defer src="src/astil-chrome.js"></script>
+  <script defer src="src/gestion-chrome.js"></script>
+  <script defer src="src/gestion-preview-model.js"></script>
+  <script defer src="src/gestion-preview-table.js"></script>
+  <script defer src="src/gestion-preview-board.js"></script>
+  <script defer src="src/gestion-preview.js"></script>
+</head>
+<body>
+  <div id="journey-root">
+    <a class="j-skip" href="#gp-main">Saltar al contenido</a>
+    <div id="gp-chrome"></div>
+    <div id="gp-app">
+      <main class="j-main" id="gp-main" tabindex="-1">
+        <header class="j-head">
+          <div class="j-section-statement">
+            <p class="j-eyebrow" id="gp-eyebrow">Portafolio comercial</p>
+            <h1 class="j-split-heading"><span class="j-heading-lead" id="gp-heading">Tus cotizaciones.</span> <span class="j-heading-emphasis" id="gp-emphasis">De la solicitud al proyecto.</span></h1>
+            <p class="j-muted" id="gp-intro"></p>
+          </div>
+          <button type="button" class="j-btn j-primary" data-action="new" id="gp-new">Nueva cotización</button>
+        </header>
+        <section aria-label="Vista de gestión">
+          <div class="j-list-switch">
+            <div class="j-switch" role="group" aria-label="Versiones de gestión">
+              <button type="button" class="j-btn" data-view="mesa" aria-pressed="true">Mesa de seguimiento</button>
+              <button type="button" class="j-btn" data-view="tablero" aria-pressed="false">Tablero de trabajo</button>
+            </div>
+            <dl class="gp-summary j-muted" id="gp-metrics" aria-label="Resumen de seguimiento"></dl>
+          </div>
+          <div class="j-toolbar" aria-label="Filtros del portafolio">
+            <label class="j-field j-search" for="gp-query"><span id="gp-search-label">Buscar solicitudes</span><input class="j-input" id="gp-query" type="search" placeholder="Nombre o folio"></label>
+            <label class="j-field" for="gp-status">Estado<select class="j-input" id="gp-status"></select></label>
+            <label class="j-field" for="gp-owner"><span id="gp-owner-label">Responsable de cotización</span><select class="j-input" id="gp-owner"></select></label>
+            <output class="j-muted j-record-count" id="gp-count" aria-live="polite"></output>
+          </div>
+          <div class="gp-workspace">
+            <div id="gp-results"></div>
+            <aside class="j-panel gp-detail" id="gp-detail" aria-label="Ficha del expediente" hidden></aside>
+          </div>
+        </section>
+        <p class="gp-status" id="gp-feedback" role="status" aria-live="polite"></p>
+        <p class="gp-footnote j-muted">Datos de ejemplo. Los cambios duran hasta que recargues la página.</p>
+      </main>
+    </div>
+    <dialog id="gp-dialog" aria-labelledby="gp-dialog-title">
+      <form id="gp-dialog-form">
+        <h2 id="gp-dialog-title"></h2>
+        <div id="gp-dialog-body"></div>
+        <p id="gp-dialog-error" role="alert" hidden></p>
+        <div class="j-actions gp-actions">
+          <button type="button" class="j-btn" data-action="cancel">Cancelar</button>
+          <button type="submit" class="j-btn j-primary" id="gp-dialog-submit"></button>
+        </div>
+      </form>
+    </dialog>
+  </div>
+</body>
+</html>

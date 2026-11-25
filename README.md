@@ -3,6 +3,7 @@
 Interfaz oficial del cotizador seleccionada por el propietario el **5 de noviembre de 2026**. La propuesta antes denominada «B» pasa a ser la base de trabajo del cotizador y sustituye la portada de este repositorio. Las menciones a B en nombres internos o pruebas identifican su origen histórico; no son otra versión vigente.
 
 - [Abrir cotizador](https://gusvann.github.io/duco-cotizaciones-demo/)
+- [Abrir Gestión DUCO](https://gusvann.github.io/duco-cotizaciones-demo/gestion.html)
 - [Ver la galería de productos](https://gusvann.github.io/duco-cotizaciones-demo/catalogo.html)
 - [Repositorio](https://github.com/Gusvann/duco-cotizaciones-demo)
 
@@ -26,6 +27,14 @@ Por corrección directa del propietario del 5 de noviembre, «Mapa del proceso»
 2. Consulta los despieces y tarifas de fabricación en **Ver galería** o aplica la variante. Edita cantidades o despieces y pulsa **Guardar borrador**. Una vez confirmado, puedes cerrar la pestaña y abrir el expediente desde Mesa en el mismo perfil del navegador.
 3. Completa los datos comerciales y las dos revisiones, registra el envío de prueba y la aceptación de esa misma versión. **Convertir en proyecto** crea la ficha en **Portafolio → Proyectos**. La ficha conserva la versión aceptada y su importe.
 4. Los cambios de la prueba se guardan en IndexedDB en el navegador que los creó. Un segundo perfil comienza con los expedientes ficticios de muestra. Borrar los datos del sitio también borra las pruebas de ese perfil.
+
+### Gestión DUCO
+
+En **Portafolio → Gestión DUCO**, la **Mesa de seguimiento** y el **Tablero de trabajo** comparten cotizaciones y proyectos de ejemplo. La mesa reutiliza el diseño «Líneas limpias» y el tablero agrupa las tarjetas por etapa con el diseño del Flujo de oportunidades.
+
+Para cambiar el estado, arrastra una tarjeta a la columna de destino. En pantalla táctil, usa el asa junto al folio. Con teclado, usa **Mover a…**. La Mesa, la ficha y los conteos reflejan el cambio. Abre la ficha de una cotización aceptada y elige **Convertir en proyecto** para crear su proyecto vinculado. Desde la ficha del proyecto puedes asignar tareas y registrar notas.
+
+Los cambios de Gestión duran hasta que recargas su pestaña. Los listados públicos de Asana se consultan desde **Cotizador** y **Proyectos**.
 
 ### Listas de Cotizador y Proyectos
 
@@ -140,7 +149,7 @@ node tools/verify.mjs
 En PowerShell, la suite de Node se ejecuta con todas las pruebas de primer nivel salvo el recorrido de Edge.
 
 ```powershell
-$pruebas = (Get-ChildItem tests -Filter *.mjs -File | Where-Object Name -ne acceptance.mjs).FullName
+$pruebas = (Get-ChildItem tests -Filter *.mjs -File | Where-Object { $_.Name -notin 'acceptance.mjs','gestion-preview-edge.mjs' }).FullName
 node --test --test-concurrency=1 --test-reporter=spec $pruebas
 ```
 
@@ -158,6 +167,7 @@ Remove-Item Env:DEMO_TEST_FILTER -ErrorAction SilentlyContinue
 node tests/acceptance.mjs
 node tests/browser/public-pages.mjs
 node tests/browser/published-recipes.mjs
+node tests/gestion-preview-edge.mjs
 ```
 
 Con `PAGES_TEST_URL=https://gusvann.github.io/duco-cotizaciones-demo/`, las dos pruebas HTTP usan el sitio publicado. Usan perfiles temporales y expedientes ficticios para verificar guardado y consulta.
@@ -175,6 +185,8 @@ La publicación de esta interfaz no modifica el cotizador operativo, Astil, sus 
 Las rutas [Cotizador clásico](cotizador-clasico/) y [Fabricación](fabricacion/) permanecen como referencias anteriores.
 
 ## Catálogo telefónico y atribuciones
+
+Gestión DUCO carga localmente las fuentes [Sora](licenses/sora-OFL.txt) y [Public Sans](licenses/public-sans-OFL.txt), distribuidas con la licencia SIL Open Font License 1.1.
 
 245 regiones geográficas offline: territorio, nombre en español y lada; México (+52) por defecto. La lada sola no se guarda como teléfono. Los códigos compartidos no identifican automáticamente un país.
 

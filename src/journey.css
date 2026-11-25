@@ -187,6 +187,7 @@
 /* KPIs: mismos expedientes, vistas derivadas en memoria. */
 #journey-root .j-nav-submenu .j-nav-link{position:relative;display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;border:0;border-radius:5px;background:transparent;color:#e7f5ffce;text-align:left;font-size:12px}
 #journey-root .j-nav-submenu .j-nav-link:hover{background:#ffffff10;color:#fff}
+#journey-root .j-nav-submenu .j-gestion-entry{text-decoration:none}
 #journey-root .j-kpi-toolbar{display:flex;gap:16px;flex-wrap:wrap;padding:18px 20px;background:var(--j-paper);border:1px solid var(--j-line);border-radius:8px}
 #journey-root .j-kpi-toolbar .j-field{flex:1;min-width:190px}
 #journey-root .j-kpi-toolbar select,#journey-root #j-responsible-filter{max-width:100%}

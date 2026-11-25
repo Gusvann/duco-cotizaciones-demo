@@ -136,40 +136,28 @@
   const pill = (label, tone = '') => `<span class="j-pill ${tone}">${escape(label)}</span>`;
   const row = (label, value) => `<div class="j-row"><span>${escape(label)}</span><strong>${escape(value)}</strong></div>`;
 
-  // Vector wordmark from AstilBrand, including the uniform lowercase s correction.
-  function brandMarkup(className = '') {
-    return `<span class="j-brand ${className}" aria-label="Astil"><svg class="j-sidebar-logo" viewBox="0 0 272 100" aria-hidden="true" focusable="false"><g class="j-wordmark-ink"><path d="M4 92 37 12h16L27 92Z"/><path d="m42 12 15-1 34 81H68Z"/><path d="M156 32h-34c-8 0-13 4-13 9s5 8 13 8h17c15 0 24 8 24 21s-10 22-27 22H98V77h38c7 0 11-3 11-8s-4-7-11-7h-17c-16 0-25-8-25-22 0-13 11-22 28-22h34Z" transform="translate(128.5 92) scale(0.8108108108108109) translate(-128.5 -92)"/><path d="m169 24 16-16v24h14v14h-14v22c0 7 4 10 11 10h5v14h-8c-16 0-24-8-24-23Z"/><path d="M211 32h16v60h-16Z"/><path d="m237 24 16-16v60c0 7 4 10 11 10h3v14h-7c-15 0-23-8-23-23Z"/></g><path class="j-wordmark-accent" d="m35 92 11-27 12 27z"/><rect class="j-wordmark-accent" x="211" y="8" width="16" height="16"/></svg></span>`;
-  }
-
-  function navIcon(name) {
-    const paths = {
-      panorama:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-      finance:'<path d="M4 20V4m0 16h16M8 15l4-5 4 3 5-8"/>',
-      inventory:'<path d="m3 7 9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"/>',
-      portfolio:'<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v3h4v-3"/>',
-      treasury:'<path d="m3 9 9-6 9 6H3zm2 3v7m7-7v7m7-7v7M3 22h18"/>',
-      menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
-      chevron:'<path d="m6 9 6 6 6-6"/>'
-    };
-    return `<svg class="j-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name] || ''}</svg>`;
-  }
+  const {brandMarkup, sidebar, topbar} = window.AstilChrome;
 
   function sidebarMarkup() {
-    const inactive = (name, label) => `<div class="j-module j-nav-disabled" aria-disabled="true" title="No disponible">${navIcon(name)}<span>${label}</span></div>`;
-    const modal = state.menu && window.matchMedia('(max-width:750px)').matches ? ' role="dialog" aria-modal="true"' : '';
     const navEntry = (label,action,active) => `<button type="button" class="${active ? 'j-nav-current' : 'j-nav-link'}" data-action="${action}" ${active ? 'aria-current="page"' : ''}>${label}${active ? '<span class="j-active-dot" aria-hidden="true"></span>' : ''}</button>`;
-    const group = (key,label,entries) => `<details class="j-nav-group" data-nav-group="${key}"${state.navGroup === key ? ' open' : ''}><summary class="j-module">${navIcon('portfolio')}<span>${label}</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${entries.join('')}</div></details>`;
-    const operationMenu = group('operations','Operación',[
+    const operationEntries = [
       navEntry('Producción','production',state.screen === 'production'),
       navEntry('Entregas','deliveries',state.screen === 'deliveries')
-    ]);
+    ];
     const screen = publishedDetail ? (publishedDetail.kind==='project'?'projects':'list') : state.screen;
-    const portfolioMenu = group('portfolio','Portafolio',[
+    const portfolioEntries = [
       navEntry('KPIs','kpis',screen === 'kpis'),
       navEntry('Cotizador','list',screen === 'list'||!globalScreens.has(screen)&&screen !== 'project'),
-      navEntry('Proyectos','projects',['projects','project'].includes(screen))
-    ]);
-    return `<aside id="j-sidebar" class="j-sidebar${state.menu ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(privateApi ? localUser?.username || 'Cuenta local' : profiles[state.profile])}</strong><small>${privateApi ? (localUser?.role==='direction' ? 'Dirección' : 'Sesión local') : 'Sin sesión iniciada'}</small></span></div></aside>${state.menu ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
+      navEntry('Proyectos','projects',['projects','project'].includes(screen)),
+      '<a class="j-nav-link j-gestion-entry" href="gestion.html" target="_blank" rel="noopener">Gestión DUCO <span aria-hidden="true">↗</span></a>'
+    ];
+    return sidebar({
+      openGroup: state.navGroup, menuOpen: state.menu,
+      modal: state.menu && window.matchMedia('(max-width:750px)').matches,
+      operationEntries, portfolioEntries,
+      accountLabel: privateApi ? localUser?.username || 'Cuenta local' : profiles[state.profile],
+      accountDetail: privateApi ? (localUser?.role==='direction' ? 'Dirección' : 'Sesión local') : 'Sin sesión iniciada'
+    });
   }
 
   function closeMenu() {
@@ -763,7 +751,7 @@
         : `${button('Cotizaciones','list')}<span aria-hidden="true">›</span><span>${escape(crumbFolio(active))}</span>`;
     const content=publishedDetail ? publishedDetailMarkup(publishedDetail)
       : atOperations ? operationsBody : atKpis ? kpisMarkup() : atList ? listMarkup() : caseMarkup(active);
-    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${state.menu}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${sessionControls}</div></header><nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${breadcrumb}</nav><main id="j-main" class="j-main" tabindex="-1">${content}</main>`;
+    root.innerHTML = `<a class="j-skip" href="#j-main">Saltar al contenido</a>${sidebarMarkup()}${topbar(state.menu,sessionControls)}<nav class="j-breadcrumb" aria-label="Ubicación">Portafolio <span aria-hidden="true">›</span>${breadcrumb}</nav><main id="j-main" class="j-main" tabindex="-1">${content}</main>`;
     host.hidden = Boolean(publishedDetail) || atOperations || atList || atKpis || !['request','quote'].includes(state.screen);
     root.dataset.journeyScreen = publishedDetail?'published-detail':state.screen;
     host.dataset.journeyScreen = state.screen;
@@ -1177,7 +1165,7 @@
     if (!state.guard && state.menu && window.matchMedia('(max-width:750px)').matches) {
       if (event.key === 'Escape') { event.preventDefault(); closeMenu(); return; }
       if (event.key === 'Tab') {
-        const controls = root.querySelectorAll('.j-sidebar summary, .j-sidebar details[open] button:not(:disabled)');
+        const controls = root.querySelectorAll('.j-sidebar summary, .j-sidebar details[open] button:not(:disabled), .j-sidebar details[open] a[href]');
         const first = controls[0], last = controls[controls.length - 1];
         if (!root.querySelector('.j-sidebar').contains(document.activeElement)) { event.preventDefault(); first?.focus(); }
         else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -1218,6 +1206,10 @@
       else render();
     }
   });
+  if (window.location?.search) {
+    const section = new URLSearchParams(window.location.search).get('modulo');
+    if (['kpis','production','deliveries'].includes(section)) setScreen(section);
+  }
   const ready=(async()=>{state.busy=true;try{await seed();}catch(error){state.feedback=error.message;state.tone='error';}
     finally{state.busy=false;if(!readPublishedPage())render();}})();
   if(publishedPortfolio)window.addEventListener?.('hashchange',()=>ready.then(()=>readPublishedPage(true)));

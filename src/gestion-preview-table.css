@@ -1,0 +1,27 @@
+/* La estructura y el desplazamiento móvil son los de las listas del portafolio. */
+#journey-root .gp-table-name { width: 32%; }
+#journey-root .gp-table .gp-table-name .j-btn { overflow-wrap: anywhere; }
+#journey-root .gp-table .gp-table-name .j-btn:is(:hover, :focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: .18em;
+}
+#journey-root .gp-table .gp-table-current { background: var(--j-list-hover); }
+#journey-root .gp-table-current .gp-table-name { box-shadow: inset 3px 0 var(--j-blue); }
+
+#journey-root .gp-table-stage {
+  max-width: 100%;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+#journey-root .gp-table-stage:is(:hover, :focus-visible) { border-color: var(--j-line); }
+#journey-root .gp-table-stage option { color: var(--j-ink); background: var(--j-paper); }
+#journey-root .gp-table-progress {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  color: var(--j-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+#journey-root .gp-table-progress progress { width: 52px; height: 8px; accent-color: var(--j-blue); }
