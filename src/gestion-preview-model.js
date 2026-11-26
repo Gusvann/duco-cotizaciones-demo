@@ -32,15 +32,17 @@
   const mexicoDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'});
 
   const exampleQuotes = [
-    ['Mobiliario para sala de lectura', 'request', 'Comercial', 9, 'normal'],
+    ['Mobiliario para sala de lectura', 'request', 'Comercial', 9, 'normal', [
+      ['Mesa Florencia · Tzalam', 2], ['Banca de lectura', 4]
+    ]],
     ['Señalética para recepción', 'request', '', 3, 'low'],
-    ['Mesa de trabajo modular', 'draft', 'Diseño', -2, 'high'],
-    ['Bancas para vestíbulo', 'draft', 'Comercial', 4, 'normal'],
-    ['Gabinetes para estudio creativo', 'review', 'Diseño', 1, 'high'],
-    ['Mostrador para tienda temporal', 'sent', 'Comercial', 7, 'normal'],
-    ['Cubiertas para cafetería', 'accepted', 'Comercial', 14, 'normal'],
-    ['Exhibidor modular', 'rejected', 'Comercial', null, 'low'],
-    ['Estaciones de trabajo para biblioteca', 'accepted', 'Operaciones', 21, 'normal']
+    ['Mesa de trabajo modular', 'draft', 'Diseño', -2, 'high', [['Mesa de trabajo modular', 3]]],
+    ['Bancas para vestíbulo', 'draft', 'Comercial', 4, 'normal', [['Banca recta', 2], ['Banca esquinera', 1]]],
+    ['Gabinetes para estudio creativo', 'review', 'Diseño', 1, 'high', [['Gabinete bajo', 4]]],
+    ['Mostrador para tienda temporal', 'sent', 'Comercial', 7, 'normal', [['Mostrador de recepción', 1]]],
+    ['Cubiertas para cafetería', 'accepted', 'Comercial', 14, 'normal', [['Cubierta redonda Ø61 cm · Tzalam', 6], ['Cubierta cuadrada 61 × 61 cm · Encino rojo', 2]]],
+    ['Exhibidor modular', 'rejected', 'Comercial', null, 'low', [['Exhibidor modular', 1]]],
+    ['Estaciones de trabajo para biblioteca', 'accepted', 'Operaciones', 21, 'normal', [['Estación de trabajo doble', 3]]]
   ];
   const exampleProjects = [
     ['Biblioteca de muestras', 'plan', 'Diseño', 12, 'normal', [
@@ -64,6 +66,7 @@
 
   const copy = record => ({
     ...record,
+    ...(record.kind==='quote'?{items:record.items.map(item=>({...item}))}:{}),
     tasks:record.tasks.map(task => ({...task})),
     activity:record.activity.map(event => ({...event}))
   });
@@ -129,6 +132,7 @@
       const index=++sequence[kind];
       const record={id:kind+'-'+index,kind,folio:prefix+'-'+String(index).padStart(3,'0'),...parsed,
         status,tasks:[],activity:[],projectId:null,quoteId:null};
+      if(kind==='quote')record.items=[];
       activity(record,kind==='quote'?'Se creó la cotización.':'Se creó el proyecto.');
       records.set(record.id,record);
       return record;
@@ -191,8 +195,9 @@
         when.setUTCDate(when.getUTCDate()+offset);
         return when.toISOString().slice(0,10);
       };
-      for(const [title,status,owner,offset,priority] of exampleQuotes){
-        addRecord('quote',{title,owner,priority,dueDate:relative(offset)},status);
+      for(const [title,status,owner,offset,priority,items=[]] of exampleQuotes){
+        const quote=addRecord('quote',{title,owner,priority,dueDate:relative(offset)},status);
+        quote.items=items.map(([description,quantity])=>({description,quantity,unit:'Pieza'}));
       }
       for(const [title,status,owner,offset,priority,tasks] of exampleProjects){
         const project=addRecord('project',{title,owner,priority,dueDate:relative(offset)},status);

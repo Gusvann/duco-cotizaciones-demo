@@ -1,4 +1,11 @@
 /* Shell Astil de la demostración. Sin estilos globales del cotizador. */
+.j-products-panel { margin-bottom: 16px; }
+.j-quote-products { width: 100%; margin-top: 8px; border-collapse: collapse; text-align: left; font-size: .875rem; }
+.j-quote-products th, .j-quote-products td { padding: 7px 4px; border-bottom: 1px solid var(--j-line); overflow-wrap: anywhere; }
+.j-quote-products thead th { color: var(--j-muted); font-size: .8em; }
+.j-quote-products tbody th { font-weight: 550; }
+.j-quote-products :is(th,td):nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
+.j-quote-products :is(th,td):last-child { padding-left: 12px; }
 #journey-root,#journey-footer,#quote-host{--j-canvas:#f6faff;--j-paper:#fff;--j-ink:#13293d;--j-muted:#526779;--j-line:#d4e4f2;--j-blue:#0f74d9;--j-soft:#edf6ff;--j-brand-gradient:linear-gradient(135deg,#073b72 0%,#0f74d9 58%,#47b5ff 100%);--j-panel-shadow:0 14px 40px #073b7212;--j-good:#23684c;--j-good-bg:#edf8f2;--j-warn:#815300;--j-warn-bg:#fff6e0;--j-error:#a43232}
 #journey-root,#journey-footer{background:var(--j-canvas);color:var(--j-ink);font:14px/1.55 AstilPreviewPublic,"Public Sans",Arial,sans-serif;overflow-wrap:anywhere;box-sizing:border-box;width:calc(100% - var(--demo-sidebar-width,237px));margin-left:var(--demo-sidebar-width,237px)}
 #journey-root *,#journey-footer *{box-sizing:border-box}
@@ -46,6 +53,7 @@
 #journey-root .j-sidebar-bottom strong{display:block;font-family:AstilPreviewPublic,"Public Sans",Arial,sans-serif;font-size:11px;font-weight:500;color:#fff}
 #journey-root .j-sidebar-bottom small{display:block;font-size:9px;color:#e7f5ffad;margin-top:3px}
 #journey-root .j-sidebar-backdrop{display:none}
+#journey-root .j-sidebar-backdrop[hidden]{display:none}
 #journey-root{padding-top:65px}
 #journey-root .j-top{height:65px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 var(--j-content-inset);position:fixed;top:0;left:var(--demo-sidebar-width,237px);width:calc(100% - var(--demo-sidebar-width,237px));z-index:20;background:#ffffffe0;backdrop-filter:blur(14px);border-bottom:1px solid var(--j-line);box-shadow:0 5px 24px #073b720a}
 #journey-root .j-top-identity,#journey-root .j-top-actions{display:flex;align-items:center;gap:16px;min-width:0}
@@ -187,7 +195,7 @@
 /* KPIs: mismos expedientes, vistas derivadas en memoria. */
 #journey-root .j-nav-submenu .j-nav-link{position:relative;display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;border:0;border-radius:5px;background:transparent;color:#e7f5ffce;text-align:left;font-size:12px}
 #journey-root .j-nav-submenu .j-nav-link:hover{background:#ffffff10;color:#fff}
-#journey-root .j-nav-submenu .j-gestion-entry{text-decoration:none}
+#journey-root .j-nav-submenu a.j-nav-link{text-decoration:none}
 #journey-root .j-kpi-toolbar{display:flex;gap:16px;flex-wrap:wrap;padding:18px 20px;background:var(--j-paper);border:1px solid var(--j-line);border-radius:8px}
 #journey-root .j-kpi-toolbar .j-field{flex:1;min-width:190px}
 #journey-root .j-kpi-toolbar select,#journey-root #j-responsible-filter{max-width:100%}

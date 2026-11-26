@@ -4,18 +4,18 @@
   const mobile = window.matchMedia('(max-width:750px)');
   const workspace = window.location.protocol === 'file:' ? 'index.html' : './';
   const workspaceLink = (label,section) =>
-    '<a class="j-nav-link j-gestion-entry" href="'+workspace+'?modulo='+section+'" target="_blank" rel="noopener">'+label+' <span aria-hidden="true">↗</span></a>';
+    '<a class="j-nav-link" href="'+workspace+'?modulo='+section+'" target="_blank" rel="noopener">'+label+' <span aria-hidden="true">↗</span></a>';
   const moduleButton = (kind,label) =>
     '<button type="button" class="j-nav-link" data-kind="'+kind+'" aria-pressed="false">'+label+'<span class="j-active-dot" aria-hidden="true" hidden></span></button>';
 
   chrome.innerHTML = window.AstilChrome.sidebar({
     openGroup:'portfolio', menuOpen:false, modal:false,
     operationEntries:[workspaceLink('Producción','production'),workspaceLink('Entregas','deliveries')],
-    portfolioEntries:[workspaceLink('KPIs','kpis'),moduleButton('quote','Cotizador'),moduleButton('project','Proyectos')],
+    portfolioEntries:['<a class="j-nav-link" href="'+workspace+'?modulo=kpis">KPIs</a>',moduleButton('quote','Cotizador'),moduleButton('project','Proyectos')],
     accountLabel:'Gestión DUCO', accountDetail:'Vista de prueba'
-  }) + '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú" hidden></button>' +
+  }) +
     window.AstilChrome.topbar(false,'<span class="j-demo">SÓLO EN ESTA SESIÓN</span><button type="button" class="j-btn" id="gp-reset" data-action="reset">Reiniciar prueba</button>') +
-    '<nav class="j-breadcrumb" aria-label="Ubicación"><a href="'+workspace+'" aria-label="Volver al espacio de trabajo">Portafolio</a> <span aria-hidden="true">›</span> <span id="gp-crumb-kind" aria-current="page">Cotizaciones</span></nav>';
+    '<nav class="j-breadcrumb" aria-label="Ubicación"><a href="'+workspace+'">Ir al cotizador</a> <span aria-hidden="true">›</span> <span id="gp-crumb-kind" aria-current="page">Cotizaciones</span></nav>';
 
   const sidebar = chrome.querySelector('#j-sidebar');
   const toggle = chrome.querySelector('.j-mobile-menu');
@@ -36,20 +36,12 @@
   }
 
   function setMenu(open) {
-    sidebar.classList.toggle('j-sidebar-open',open);
-    toggle.setAttribute('aria-expanded',String(open));
-    backdrop.hidden = !open;
+    window.AstilChrome.setMenuOpen(chrome,open,mobile.matches);
     content.inert = open;
     if (open) {
-      sidebar.setAttribute('role','dialog');
-      sidebar.setAttribute('aria-modal','true');
       const group = groups.find(element=>element.open) || groups[0];
       group.querySelector('summary').focus();
-    } else {
-      sidebar.removeAttribute('role');
-      sidebar.removeAttribute('aria-modal');
-      if (mobile.matches) toggle.focus();
-    }
+    } else if (mobile.matches) toggle.focus({preventScroll:true});
   }
 
   chrome.addEventListener('click',event=>{

@@ -148,8 +148,7 @@
     const portfolioEntries = [
       navEntry('KPIs','kpis',screen === 'kpis'),
       navEntry('Cotizador','list',screen === 'list'||!globalScreens.has(screen)&&screen !== 'project'),
-      navEntry('Proyectos','projects',['projects','project'].includes(screen)),
-      '<a class="j-nav-link j-gestion-entry" href="gestion.html" target="_blank" rel="noopener">Gestión DUCO <span aria-hidden="true">↗</span></a>'
+      navEntry('Proyectos','projects',['projects','project'].includes(screen))
     ];
     return sidebar({
       openGroup: state.navGroup, menuOpen: state.menu,
@@ -160,10 +159,12 @@
     });
   }
 
-  function closeMenu() {
-    state.menu = false;
-    render();
-    root.querySelector('.j-mobile-menu')?.focus();
+  function setMenu(open) {
+    state.menu = open;
+    window.AstilChrome.setMenuOpen(root,open,window.matchMedia('(max-width:750px)').matches);
+    const group = state.navGroup || sidebarGroupFor(state.screen);
+    const control = open ? `[data-nav-group="${group}"] > summary` : '.j-mobile-menu';
+    root.querySelector(control)?.focus({preventScroll:true});
   }
 
   function makeRecord(id, scenario, request) {
@@ -395,9 +396,9 @@
     const quoteOpen = record => `data-id="${escape(record.id)}"`;
     let body;
     if (state.view === 'mesa') {
-      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${escape(record.id)}"><td>${button(record.request.title,'open',quoteOpen(record))}<div class="j-sub">${escape(record.folio || record.id)} · ${escape(record.request.client)}</div></td><td>${quoteStateMarkup(record)}${record.version ? `<div class="j-sub">Versión ${escape(record.version)}</div>` : ''}</td><td>${escape(responsibleName(record))}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!record.asana && !complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',quoteOpen(record))}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
+      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${escape(record.id)}"><td>${button(record.request.title,'quote-detail',quoteOpen(record))}<div class="j-sub">${escape(record.folio || record.id)} · ${escape(record.request.client)}</div></td><td>${quoteStateMarkup(record)}${record.version ? `<div class="j-sub">Versión ${escape(record.version)}</div>` : ''}</td><td>${escape(responsibleName(record))}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!record.asana && !complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',quoteOpen(record))}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
     } else {
-      body = quoteBoard(visible,status,record=>`<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'open',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`);
+      body = quoteBoard(visible,status,record=>`<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'quote-detail',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`);
     }
     return heading+controls+sourceNotice+body;
   }
@@ -528,9 +529,26 @@
     const currentTotal = amountValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,totalCents:metrics.totalCents});
     return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">${publishedPortfolio ? "Indicadores de demostración y cotizaciones de este navegador." : "Cotizaciones, clientes y tiempos en una misma vista."}</p></div></header>${kpiFiltersMarkup(metrics)}<p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${metrics.byType.map(group=>stat('type',group.label,decimal(group.closeDays)+(group.n ? ' días' : ''),'Cierre · '+group.n+' intervalos válidos',group.key)).join('')}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','Proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · ${escape(coverageLabel(metrics))}</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">${!metrics.coverage ? 'Los indicadores muestran los expedientes de esta sesión.' : metrics.coverage.localOnly ? 'El tablero muestra los expedientes guardados en el equipo.' : 'Asana aporta el corte importado. Los expedientes locales se consultan en su período correspondiente.'}</p>`;
   }
+  function quoteProductsMarkup(record) {
+    const version=record.sent;
+    const items=record.asana ? null : version || record.historicalPartial
+      ? version?.snapshot?.quote?.items : api.productLines(record.id);
+    const description=record.asana && (record.asana.description || record.request.need);
+    let body;
+    if(Array.isArray(items)) {
+      body=items.length ? window.DucoQuoteProducts.table(items,escape)
+        : '<p class="j-muted">Aún no se han agregado productos.</p>';
+    } else {
+      body='<p class="j-muted">El expediente de origen no incluye un desglose de productos y cantidades.</p>';
+      if(description)body+='<h3 class="j-spaced">Descripción de origen</h3><p class="op-evidence">'+escape(description)+'</p>';
+    }
+    return '<section class="j-panel j-products-panel" aria-labelledby="j-products-title"><h2 id="j-products-title">Productos de la cotización</h2>'+
+      (version?'<p class="j-sub">Versión enviada · V'+escape(version.version)+'</p>':'')+body+'</section>';
+  }
+
   function recordMarkup(record) {
     const projected = portfolio.project([record],clients)[0];
-    return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia histórica parcial. No tiene un guardado confirmado. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${!record.historicalPartial ? button('Abrir recorrido de este expediente','stage','data-screen="request"',true) : button('Consultar referencia histórica','stage','data-screen="offer"')}${button('Regresar a KPIs','return-kpis')}</div>${versionsMarkup(record)}</section>`;
+    return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia histórica parcial. No tiene un guardado confirmado. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${record.historicalPartial ? button('Consultar referencia histórica','stage','data-screen="offer"') : button(nextLabel(record),'open','data-id="'+escape(record.id)+'"',true)}${state.returnToKpis ? button('Regresar a KPIs','return-kpis') : button('Volver a cotizaciones','list')}</div>${versionsMarkup(record)}</section>`;
   }
   function canStage(record, key) {
     if (record.asana) return key==='record' && record.asana.kind==='quote' || key==='project' && Boolean(record.project);
@@ -554,7 +572,7 @@
     const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)} · Versión ${record.version}</p><h1>${escape(title)}</h1>${metadata}</div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
     const back = state.returnToKpis ? `<div class="j-kpi-return">${button('Regresar a KPIs','return-kpis')}<span class="j-muted">Se conservarán los filtros y el detalle.</span></div>` : '';
     const phoneNotice = phone.recordNeedsAttention(record) ? '<p class="j-notice" role="status">Un teléfono de este expediente requiere revisión para retirar una posible extensión.</p>' : '';
-    if (state.screen === 'record') return crumbs+back+phoneNotice+recordMarkup(record);
+    if (state.screen === 'record') return crumbs+back+phoneNotice+quoteProductsMarkup(record)+recordMarkup(record);
     const nav = isEditing ? '' : `<nav class="j-stages" aria-label="Etapas del expediente">${stages.map(stage => button(stage.label,'stage',`data-screen="${stage.key}" aria-pressed="${state.screen === stage.key}" ${canStage(record,stage.key) ? '' : 'disabled'}`)).join('')}</nav>`;
     let body = '';
     if (state.screen === 'request' || state.screen === 'quote') body = nativeFormMarkup(record);
@@ -584,9 +602,9 @@
       ? button(project?'Consultar cotización':'Consultar proyecto','open',`data-id="${escape(relatedRecord.id)}"`)
       : !project && record.project && button('Consultar proyecto','stage','data-screen="project"');
     const details = project ? projectViews.detail(record) : projectViews.sourceDetail(record.asana,record.request,{
-      heading:'Detalles de la cotización',folio:record.folio,status:statuses[status(record)]
+      heading:'Detalles de la cotización',folio:record.folio,status:statuses[status(record)],showDescription:false
     });
-    return `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)}</p><h1>${escape(title)}</h1></div>${!project ? quoteStateMarkup(record) : ''}</div><div class="j-actions j-spaced">${back}${related || ''}</div>${details}`;
+    return `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)}</p><h1>${escape(title)}</h1></div>${!project ? quoteStateMarkup(record) : ''}</div><div class="j-actions j-spaced">${back}${related || ''}</div>${project ? '' : quoteProductsMarkup(record)}${details}`;
   }
 
   function saveStatus(record) {
@@ -918,7 +936,7 @@
     notify('Se restauraron los datos iniciales de la sesión.','success');
   }
 
-  async function handleAction(target) {
+  async function handleAction(target,gestion=null) {
     const action = target.dataset.action;
     const record = current();
     if (target.disabled || state.busy && !['stay'].includes(action)) return;
@@ -926,16 +944,8 @@
     if(privateApi && localUser?.role!=='account' && ['new-request','save','resolve-save','validate','send','register-response','new-version','convert'].includes(action)){
       notify('Esta cuenta tiene acceso de consulta y autorización de recetas.','error');return;
     }
-    if (action === 'toggle-menu') {
-      if (state.menu) closeMenu();
-      else {
-        state.menu = true;
-        render();
-        const focusGroup = state.navGroup || sidebarGroupFor(state.screen);
-        root.querySelector(`[data-nav-group="${focusGroup}"] > summary`)?.focus();
-      }
-    }
-    else if (action === 'close-menu') closeMenu();
+    if (action === 'toggle-menu') setMenu(!state.menu);
+    else if (action === 'close-menu') setMenu(false);
     else if (action === 'view' && ['mesa','flujo'].includes(target.dataset.view)) {
       state.view = target.dataset.view;
       render();
@@ -950,6 +960,10 @@
       render();
       root.querySelector(`[data-action="quote-source"][data-source="${source}"]`)?.focus();
     }
+    else if (action === 'quote-detail') {
+      const item=records.find(entry=>entry.id===target.dataset.id && listableQuote(entry));
+      if(item){state.returnToKpis=false;transition('record',item.id);}
+    }
     else if (action === 'open') {
       const item=records.find(entry=>entry.id===target.dataset.id);
       if(!item)return;
@@ -960,8 +974,8 @@
         :'request';
       transition(next,item.id);
     }
-    else if (action === 'list') { if (state.menu) closeMenu(); state.returnToKpis=false; transition('list'); }
-    else if (['projects','production','deliveries','workflow'].includes(action)) { if(state.menu)closeMenu();state.returnToKpis=false;transition(action); }
+    else if (action === 'list') { if (state.menu) setMenu(false); state.returnToKpis=false; transition('list'); }
+    else if (['projects','production','deliveries','workflow'].includes(action)) { if(state.menu)setMenu(false);state.returnToKpis=false;transition(action); }
     else if (action === 'project-open') {
       const item=records.find(entry=>entry.id===target.dataset.id&&entry.project&&(!entry.historicalPartial || entry.asana));
       if(!item)return;
@@ -987,7 +1001,10 @@
     }
     else if (action === 'op-delivery-save') { if(record?.project&&!record.asana)await projectAction(target,'delivery',{...projectDraft(record).delivery}); }
     else if (action === 'op-close') { if(record?.project&&!record.asana)await projectAction(target,'close',{}); }
-    else if (action === 'kpis' || action === 'return-kpis') {if(state.menu) closeMenu();transition('kpis');}
+    else if (action === 'kpis' || action === 'return-kpis') {
+      if (state.menu) setMenu(false);
+      if (state.screen !== 'kpis' || publishedDetail) transition('kpis');
+    }
     else if (action === 'kpi-tab') { if (!['summary','sales','times'].includes(target.dataset.tab)) return; state.kpis.tab=target.dataset.tab;state.kpis.detail=null;render();root.querySelector('#j-kpi-tab-'+state.kpis.tab)?.focus(); }
     else if (action === 'kpi-ranking') { if (!['client','category'].includes(target.dataset.ranking)) return;state.kpis.ranking=target.dataset.ranking;render(); }
     else if (action === 'kpi-detail') {state.kpis.detail={kind:target.dataset.kind,key:target.dataset.key || ''};render();const panel=root.querySelector('#j-kpi-detail');panel?.focus();panel?.scrollIntoView({block:'nearest',behavior:'auto'});}
@@ -1046,12 +1063,14 @@
       setScreen('project'); render(); notify(storage?'Proyecto guardado. Puedes abrirlo en Proyectos.':'Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
     } else if (action === 'new-request') {
       let id;
-      if(privateApi)id='DUCO-'+crypto.randomUUID().replaceAll('-','');
+      if(gestion)id=gestion.id;
+      else if(privateApi)id='DUCO-'+crypto.randomUUID().replaceAll('-','');
       else if(browserStore)id='DEMO-'+crypto.randomUUID();
       else do {id=`DEMO-${++sequence}`;} while (records.some(item => item.id === id));
       const item = makeRecord(id,'complete',privateApi?{title:'Nueva solicitud',client:'',contact:'',need:'',location:'',
         contactEmail:'',included:'Fabricación; Empaque',excluded:'Obra civil',account:localUser.username,designer:'',quoteDue:'',deliveryDate:''}
         :{title:'Nueva solicitud de ejemplo',client:'Cliente ficticio nuevo',contact:'Contacto inventado',need:'Describe aquí la necesidad del cliente.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-28',deliveryDate:'2026-11-26'});
+      if(gestion){item.request.title=gestion.title;if(gestion.dueDate)item.request.quoteDue=gestion.dueDate;}
       item.clientId=privateApi?'':'CL-'+id;
       if(privateApi){
         Object.assign(item,{source:'DUCO_LOCAL',category:'',commercialType:null,responsibleId:localUser.username,
@@ -1060,7 +1079,7 @@
       }
       if(item.clientId)clients[item.clientId]={name:item.request.client,firstSaleAt:null};
       suppressChanges = true;
-      try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true}); }
+      try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true,initialProducts:gestion?.items}); }
       finally { suppressChanges = false; }
       if(publishedPortfolio){
         state.quoteSource='browser';
@@ -1163,7 +1182,7 @@
       event.preventDefault();const keys=['summary','sales','times'],position=keys.indexOf(state.kpis.tab);state.kpis.tab=event.key === 'Home' ? keys[0] : event.key === 'End' ? keys.at(-1) : keys[(position+(event.key === 'ArrowRight' ? 1 : 2))%3];state.kpis.detail=null;render();root.querySelector('#j-kpi-tab-'+state.kpis.tab)?.focus();return;
     }
     if (!state.guard && state.menu && window.matchMedia('(max-width:750px)').matches) {
-      if (event.key === 'Escape') { event.preventDefault(); closeMenu(); return; }
+      if (event.key === 'Escape') { event.preventDefault(); setMenu(false); return; }
       if (event.key === 'Tab') {
         const controls = root.querySelectorAll('.j-sidebar summary, .j-sidebar details[open] button:not(:disabled), .j-sidebar details[open] a[href]');
         const first = controls[0], last = controls[controls.length - 1];
@@ -1210,8 +1229,42 @@
     const section = new URLSearchParams(window.location.search).get('modulo');
     if (['kpis','production','deliveries'].includes(section)) setScreen(section);
   }
-  const ready=(async()=>{state.busy=true;try{await seed();}catch(error){state.feedback=error.message;state.tone='error';}
-    finally{state.busy=false;if(!readPublishedPage())render();}})();
+  async function openGestionDraft(){
+    const key=/^#gestion-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/.exec(window.location?.hash||'')?.[1];
+    if(!key||!storage)return false;
+    const location=window.location;
+    const officialPages=location.protocol==='https:' && location.host==='gusvann.github.io' &&
+      ['/duco-cotizaciones-demo/','/duco-cotizaciones-demo/index.html'].includes(location.pathname);
+    if(!officialPages&&!['localhost','127.0.0.1','[::1]'].includes(location.hostname))return false;
+    const id=privateApi?'DUCO-'+key.replaceAll('-',''):'DEMO-'+key;
+    const existing=records.find(record=>record.id===id&&!record.asana);
+    if(existing){
+      if(publishedPortfolio)state.quoteSource='browser';
+      transition(locked(existing)?'record':existing.started?'quote':'request',id,true);
+      return true;
+    }
+    if((privateApi&&localUser?.role!=='account')||typeof BroadcastChannel!=='function')return false;
+    const data=await new Promise(resolve=>{
+      const channel=new BroadcastChannel('duco-gestion-'+key);
+      const finish=value=>{clearTimeout(timer);channel.close();resolve(value);};
+      const timer=setTimeout(()=>finish(null),2500);
+      channel.onmessage=({data})=>{if(data&&typeof data==='object')finish(data);};
+      channel.postMessage('request');
+    });
+    if(!data||typeof data.title!=='string'||!data.title.trim()||data.title.length>160||
+        data.dueDate&&!/^\d{4}-\d{2}-\d{2}$/.test(data.dueDate)||!Array.isArray(data.items)||data.items.length>100||
+        data.items.some(row=>!row||typeof row.description!=='string'||!row.description.trim()||row.description.length>1000||
+          !/^[1-9]\d{0,4}$/.test(String(row.quantity))||row.unit!=='Pieza')){
+      state.feedback='Abre la ficha de Gestión para iniciar esta cotización.';
+      state.tone='error';
+      return false;
+    }
+    await handleAction({dataset:{action:'new-request'}},{id,title:data.title,dueDate:data.dueDate,items:data.items});
+    return true;
+  }
+  const ready=(async()=>{state.busy=true;try{await seed();state.busy=false;if(await openGestionDraft())return;}
+    catch(error){state.feedback=error.message;state.tone='error';}
+    finally{state.busy=false;}if(!readPublishedPage())render();})();
   if(publishedPortfolio)window.addEventListener?.('hashchange',()=>ready.then(()=>readPublishedPage(true)));
   window.DemoJourney = Object.freeze({ready,inspect:() => clone({state,records,clients,clockTick}),portfolio:() => clone(kpiMetrics()),saveCurrent:() => saveRecord(current()),openReview:() => transition('review')});
 })();

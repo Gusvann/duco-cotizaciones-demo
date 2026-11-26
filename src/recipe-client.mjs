@@ -3,8 +3,7 @@ export const recipeClient = String.raw`
   function recipeCanEdit(){return !!globalThis.DemoQuote?.canEdit(app.q?.id)&&editable()&&!app.busy&&!app.operation;}
   function recipeEntry(id){return partSameContext(app.syntheticRecipes?.context)&&app.q?.items.some(item=>item.id===id)?app.syntheticRecipes.articles?.[id]||null:null;}
   function recipeModes(id){return app.partDraft?.itemId===id&&partSameContext(app.partDraft.context)?app.partDraft.syntheticRecipeModes||{}:{};}
-  function recipeMaterialPrice(id,component){
-    const config=app.solidWoodUatConfig,meta=recipeEntry(id);
+  function recipeMaterialPrice(id,component,config=app.solidWoodUatConfig,meta=recipeEntry(id)){
     if(!meta)return config.prices.find(price=>price.species===component.woodKind)||null;
     const thickness=SolidWoodAutoPreview.calculate({component:{thickness:component.thickness}}).thicknessIn;
     if(component.woodKind==='Tzalam'){

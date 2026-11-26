@@ -193,8 +193,10 @@
     blockers.push(...saveBlockers);
     if (entry.saveState === 'unknown') blockers.push('Resultado del guardado pendiente de confirmar.');
     const totals = evaluated?.totals;
+    const estimate=persistentCapture&&evaluated?.structuralValid?c.quoteEstimate(state,evaluated):null;
     return {
-      costCents: totals?.cost ?? null, priceCents: totals?.net ?? null, taxCents: totals?.tax ?? null, totalCents: totals?.total ?? null,
+      ...(estimate?{estimatedCosts:estimate}:{}),
+      costCents: estimate?estimate.netCents:totals?.cost??null, priceCents: totals?.net ?? null, taxCents: totals?.tax ?? null, totalCents: totals?.total ?? null,
       complete: !!evaluated?.structuralValid && !!evaluated?.calculationsComplete && blockers.length === 0,
       canSaveDraft: !locked(entry) && saveBlockers.length === 0, saveBlockers, workflowIssues,
       blockers: [...new Set(blockers)], revision: entry.revision, savedRevision: entry.savedRevision,
@@ -242,6 +244,15 @@
       state.q.resources=state.q.resources.filter(resource=>!resource.itemId);
       state.q.workUnits=state.q.workUnits.filter(work=>!work.itemId);
       state.q.scopeReview.confirmations=[];
+      if(options.initialProducts?.length){
+        state.q.items=options.initialProducts.map(product=>{
+          const item=D.newItem(uid);
+          return {...item,description:product.description,quantity:String(product.quantity),unit:product.unit};
+        });
+        state.q.manufacturing.items=M.blank(state.q,uid).items;
+        for(const item of state.q.items)
+          for(const topic of [...S.itemRubros,'Personal'])state.q.needs.push(D.newNeed(uid,item.id,topic));
+      }
       // Rebuild generated coverage and general costs against the now-empty request.
       state.q=M.apply(state.q);
     } else if (state.q.needs.some(need => need.confirmedHash)) {
@@ -278,6 +289,9 @@
     app.step = step; render(get(active)); notify(); return true;
   }
   function snapshot(id) { return clone(get(id).saved); }
+  function productLines(id) {
+    return currentState(get(id)).q.items.map(({description,quantity,unit})=>({description,quantity,unit}));
+  }
   function snapshotCandidate(entry, evaluation) {
     const state = currentState(entry);
     const snapshot={quote:clone(D.sanitize(state.q)),summary:{...clone(evaluation),dirty:false,saveState:'success',savedRevision:entry.revision},request:clone(entry.request)};
@@ -402,7 +416,7 @@
     const error = new Error('Acción no disponible. No hay conexión con este servicio.'); error.code = 'DEMO_ONLY'; throw error;
   };
   function thaw(id) {const entry=get(id);entry.frozen=false;if(active===id)paintLock(entry);}
-  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, leave, applyPending, discardPending, freeze, thaw, hydrate, revise, reset, setProfile, canEdit,
+  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, productLines, leave, applyPending, discardPending, freeze, thaw, hydrate, revise, reset, setProfile, canEdit,
     setLocalUser(user){if(privatePreview)localRole=user?.role||'';},
     onChange(callback) { listeners.add(callback); return () => listeners.delete(callback); } };
   for (const eventName of ['input', 'change', 'click']) document.addEventListener(eventName, event => { if (HOST()?.contains(event.target)) scheduleNotify(); });

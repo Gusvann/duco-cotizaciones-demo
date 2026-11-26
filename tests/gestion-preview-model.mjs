@@ -8,6 +8,19 @@ runInNewContext(readFileSync(new URL('../src/gestion-preview-model.js',import.me
 const date=new Date('2026-11-25T03:00:00Z');
 const newStore=()=>browser.DucoGestionPreview.create(()=>date);
 
+test('quote lines belong to the selected folio and remain isolated from list and detail consumers',()=>{
+  const store=newStore();
+  const lines=store.get('quote-1').items;
+  assert.deepEqual(Array.from(lines,x=>[x.description,x.quantity,x.unit]),[
+    ['Mesa Florencia · Tzalam',2,'Pieza'],['Banca de lectura',4,'Pieza']
+  ]);
+  lines[0].quantity=99;
+  store.list('quote')[0].items.pop();
+  assert.equal(store.get('quote-1').items[0].quantity,2);
+  assert.equal(store.update('quote-1',{title:'Nombre actualizado'}).items.length,2);
+  assert.equal(store.create('quote',{title:'Nombre actualizado'}).items.length,0);
+});
+
 test('both views can read the same sample records and track changes across forms',()=>{
   const store=newStore();
   const list=store.list('quote');

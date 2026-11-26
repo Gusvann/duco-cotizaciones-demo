@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {createPrivateServer} from '../tools/private-server.mjs';
 import {PrivateStore} from '../tools/private-store.mjs';
 import {build} from '../tools/build.mjs';
+import {prepareFurniture} from './browser/furniture-fixture.mjs';
 
 const require=createRequire(import.meta.url);
 let playwright;
@@ -28,7 +29,7 @@ const password='contraseña-para-gestion-ficticia';
 const sid='S-1-5-21-111-222-333-1111';
 store.provision(account,'account',password);
 store.linkWindows(sid,account,password);
-const privateJs="window.DucoPrivateApi={initial:async()=>({user:{username:'cuenta-prueba',role:'account'},records:[],drafts:[],coverage:null}),catalog:async()=>({products:[]})};";
+const privateJs=await readFile(new URL('../src/private-client.js',import.meta.url),'utf8');
 const server=createPrivateServer({
   store,port,publicHtml:build(),privateJs,identifyWindowsPeer:async()=>sid
 });
@@ -74,6 +75,47 @@ async function loadedFonts(page){
   });
 }
 
+async function checkKpiNavigation(page,viewport) {
+  await page.setViewportSize(viewport);
+  const mobile=viewport.width<=750;
+  const menu=page.locator('.j-mobile-menu');
+  const kpis=page.locator('#j-sidebar').getByRole('button',{name:'KPIs',exact:true});
+  const origin=await page.evaluate(()=>performance.timeOrigin);
+  const pageCount=page.context().pages().length;
+  const probe=await page.evaluateHandle(()=>{
+    const state={draws:0};
+    const observer=new MutationObserver(changes=>{
+      for(const change of changes) if([...change.addedNodes].some(node=>node.id==='j-main')) state.draws++;
+    });
+    observer.observe(document.querySelector('#journey-root'),{childList:true});
+    return {state,stop:()=>observer.disconnect()};
+  });
+  try {
+    if(mobile) await menu.click();
+    await kpis.click();
+    await page.locator('#journey-root[data-journey-screen="kpis"]').waitFor();
+    assert.equal(await probe.evaluate(p=>p.state.draws),1,'Al abrir KPIs solo se pinta el panel de destino');
+    await page.locator('#j-kpi-type').selectOption('line');
+    await page.getByRole('tab',{name:'Ventas y clientes'}).click();
+    const before=await probe.evaluate(p=>p.state.draws);
+    const scroll=await page.evaluate(()=>{window.scrollTo(0,180);return window.scrollY;});
+    if(mobile) await menu.click();
+    await kpis.press('Enter');
+    assert.equal(await probe.evaluate(p=>p.state.draws),before,'El panel abierto sobrevive al menú y a la segunda selección de KPIs');
+    assert.equal(await page.evaluate(()=>window.scrollY),scroll);
+    assert.equal(await page.locator('#j-kpi-type').inputValue(),'line');
+    assert.equal(await page.getByRole('tab',{name:'Ventas y clientes'}).getAttribute('aria-selected'),'true');
+    assert.equal(await (mobile?menu:kpis).evaluate(e=>e===document.activeElement),true);
+    assert.equal(await page.evaluate(()=>performance.timeOrigin),origin);
+    assert.equal(page.context().pages().length,pageCount);
+  } finally {
+    await probe.evaluate(p=>p.stop());
+    await probe.dispose();
+  }
+  if(mobile) await menu.click();
+  await page.locator('#j-sidebar [data-action="list"]').click();
+}
+
 let browser;
 try{
   await mkdir(screenshots,{recursive:true});
@@ -84,8 +126,12 @@ try{
   page.on('request',request=>network.push({url:request.url(),method:request.method()}));
   assert.equal((await page.request.get(home+'/src/gestion-preview-model.js')).status(),401);
   await page.goto(home);
-  const entry=page.getByRole('link',{name:'Gestión DUCO'});
-  await entry.waitFor();
+  await page.locator('#journey-root[data-journey-screen="list"]').waitFor();
+  assert.equal(await page.locator('#j-sidebar a[href*="gestion.html"]').count(),0);
+  assert.doesNotMatch(await page.locator('#j-sidebar').textContent(),/Gestión DUCO/i);
+  await checkKpiNavigation(page,viewports[0]);
+  await checkKpiNavigation(page,viewports[2]);
+  await page.setViewportSize(viewports[0]);
   const quoteHeading=await heading(page);
   assert.equal(quoteHeading.length,2);
   const referenceFonts=await loadedFonts(page);
@@ -105,7 +151,6 @@ try{
     reference.set(viewport.width,{table,shell,board:await appearance(page,boardStyles)});
   }
   await page.setViewportSize(viewports[0]);
-  assert.equal(await entry.evaluate(link=>link.href),home+'/gestion.html');
   await page.goto(home+'/gestion.html');
   assert.equal(await page.locator('[data-select]').count(),9);
   assert.deepEqual(await loadedFonts(page),referenceFonts,'Fuentes de marca cargadas en el navegador');
@@ -136,6 +181,16 @@ try{
     await view('tablero').click();
   }
   assert.deepEqual(await heading(page),quoteHeading);
+  for(const mode of ['mesa','tablero']){
+    await view(mode).click();
+    await page.getByRole('button',{name:'Mobiliario para sala de lectura',exact:true}).click();
+    const products=detail.getByRole('table',{name:'Productos de la cotización'});
+    assert.deepEqual(await products.locator('tbody tr').allTextContents(),['Mesa Florencia · Tzalam2Pieza','Banca de lectura4Pieza']);
+    await page.getByRole('button',{name:'Señalética para recepción',exact:true}).click();
+    assert.equal(await products.count(),0);
+    assert.ok(await detail.getByText('Aún no se han agregado productos.').isVisible());
+    await detail.getByRole('button',{name:'Cerrar ficha'}).click();
+  }
   await view('tablero').click();
   await shot('b-tablero.png');
   await view('mesa').click();
@@ -145,6 +200,85 @@ try{
   await modal.getByLabel('Responsable').selectOption('Comercial');
   await modal.getByRole('button',{name:'Crear cotización'}).click();
   await detail.getByRole('heading',{name:'Mostrador de prueba'}).waitFor();
+  async function openDraft(){
+    const receiving=page.context().waitForEvent('page');
+    await detail.getByRole('button',{name:'Abrir en Cotizador'}).click();
+    const draft=await receiving;
+    await draft.locator('#quote-host .mainform').waitFor();
+    return draft;
+  }
+  const firstDraft=await openDraft();
+  const quoteId=await firstDraft.evaluate(()=>window.DemoJourney.inspect().state.id);
+  assert.equal(await firstDraft.locator('#quote-host [data-path="name"]').inputValue(),'Mostrador de prueba');
+  assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,0,'Abrir la ficha no crea escrituras');
+  await firstDraft.locator('#quote-host [data-path="name"]').fill('Mostrador con cambios de prueba');
+  await firstDraft.setViewportSize(viewports[2]);
+  await firstDraft.locator('.j-mobile-menu').click();
+  await firstDraft.locator('#j-sidebar').getByRole('button',{name:'KPIs',exact:true}).click();
+  const guard=firstDraft.getByRole('alertdialog');
+  await guard.waitFor();
+  assert.equal(await firstDraft.locator('.j-mobile-menu').getAttribute('aria-expanded'),'false');
+  await guard.getByRole('button',{name:'Continuar editando'}).click();
+  assert.equal(await firstDraft.locator('#quote-host [data-path="name"]').inputValue(),'Mostrador con cambios de prueba');
+  assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,0);
+  await firstDraft.setViewportSize(viewports[0]);
+  const section=(p,step)=>p.locator('#quote-host .steps [data-step="'+step+'"]');
+  await section(firstDraft,1).click();
+  const furniture=await prepareFurniture(firstDraft);
+  const qty=firstDraft.locator('#quote-host .header-quantity-control input').nth(1);
+  await qty.click();await qty.fill('6');await qty.press('Tab');
+  await section(firstDraft,2).click();
+  const orderNet=p=>p.locator('#quote-host [data-estimate-order]').innerText();
+  assert.match(await orderNet(firstDraft),/1,040\.02/);
+  await firstDraft.locator('#quote-host .panel-actions [data-action="save"]').click();
+  await firstDraft.waitForFunction(id=>window.DemoQuote.snapshot(id)?.quote.name==='Mostrador con cambios de prueba',quoteId);
+  const saved=await firstDraft.evaluate(id=>window.DemoQuote.snapshot(id),quoteId);
+  assert.equal(saved.summary.costCents,104002);
+  assert.deepEqual(saved.summary.estimatedCosts.items.map(x=>[x.itemId,x.directNet]),[[furniture[0],25000],[furniture[1],75000]]);
+  await firstDraft.close();
+  const continued=await openDraft();
+  assert.equal(await continued.evaluate(()=>window.DemoJourney.inspect().state.id),quoteId);
+  await section(continued,2).click();
+  assert.match(await orderNet(continued),/1,040\.02/);
+  const reopened=await continued.evaluate(id=>window.DemoQuote.snapshot(id),quoteId);
+  assert.deepEqual(reopened.local.wood,saved.local.wood);
+  assert.deepEqual(reopened.quote.items.map(item=>item.quantity),['1','6']);
+  assert.equal(reopened.summary.costCents,104002);
+  await section(continued,0).click();
+  assert.equal(await continued.locator('#quote-host [data-path="name"]').inputValue(),'Mostrador con cambios de prueba');
+  // Reproduce a legacy article with a manual estimate and an edited wood piece.
+  await section(continued,1).click();
+  await continued.evaluate(id=>{
+    const c=window.__client;c.partDiscard();
+    c.app.q.manufacturing.items.find(row=>row.itemId===id).mode='manual';
+    c.app.q=QuoteManufacturing_.apply(c.app.q);c.restoreManufacturing();
+    c.app.openPartId='';c.editor();
+  },furniture[1]);
+  await continued.locator('#quote-host .header-quantity-control input').nth(1).click();
+  const article=continued.locator('#part-detail-'+furniture[1]);
+  const wood=article.locator('[data-article-fold="wood"]');
+  const dimensions=wood.locator('[data-fab-panel="workshop-dimensions"]');
+  for(const panel of [wood,dimensions]){
+    if(!await panel.evaluate(element=>element.open))await panel.locator(':scope > summary').click();
+  }
+  await wood.locator('[data-row-open="wood"][data-row-field="width"]').first().focus();
+  const width=wood.locator('[data-solid-field="width"]');
+  await width.fill('28');
+  const useBreakdown=article.getByRole('button',{name:'Usar desglose calculado'}).first();
+  let extraConfirms=0;
+  continued.on('dialog',async dialog=>{extraConfirms++;await dialog.dismiss();});
+  await useBreakdown.click();
+  const choice=continued.locator('#breakdown-unsaved');
+  await choice.getByRole('button',{name:'Continuar editando'}).click();
+  assert.equal(await width.inputValue(),'28');
+  await useBreakdown.click();
+  await choice.getByRole('button',{name:'Incluir la pieza y usar el desglose'}).click();
+  await continued.waitForFunction(id=>{
+    const c=window.__client,edit=c.app.partDraft;
+    return !c.app.breakdownEditor&&(edit?.quote??c.app.q).manufacturing.items.find(row=>row.itemId===id)?.mode==='detailed';
+  },furniture[1]);
+  assert.equal(extraConfirms,0,'La decisión de la pieza sustituye la segunda confirmación');
+  await continued.close();
   await detail.getByLabel('Prioridad').selectOption('high');
   await detail.getByRole('button',{name:'Guardar cambios'}).click();
   await view('tablero').click();
@@ -265,7 +399,16 @@ try{
   const detailBox=await detail.boundingBox();
   assert.ok(detailBox && detailBox.width>0 && detailBox.x>=0 && detailBox.x+detailBox.width<=page.viewportSize().width,'Ficha móvil recortada');
   await detail.getByRole('button',{name:'Cerrar ficha'}).click();
-  assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,0);
+  await mobileMenu.click();
+  const kpiLink=sidebar.getByRole('link',{name:'KPIs',exact:true});
+  assert.equal(await kpiLink.getAttribute('target'),null);
+  assert.equal((await kpiLink.textContent()).trim(),'KPIs');
+  const pageCount=page.context().pages().length;
+  await kpiLink.press('Enter');
+  await page.locator('#journey-root[data-journey-screen="kpis"]').waitFor();
+  assert.equal(page.context().pages().length,pageCount);
+  assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,1,'Solo el guardado explícito del borrador escribe una cotización');
+  assert.equal(store.readQuote(quoteId).snapshot.quote.name,'Mostrador con cambios de prueba');
   assert.deepEqual(network.filter(item=>!item.url.startsWith(home+'/')||item.method!=='GET'),[]);
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({status:'PASS',views:2,modules:2,session:'SQLite de prueba en memoria',widths:viewports.map(size=>size.width)}));

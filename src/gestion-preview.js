@@ -29,6 +29,26 @@
   const dialog=$('gp-dialog');
   const state={kind:'quote',view:'mesa',query:'',status:'',owner:'',selectedId:null};
   let dialogAction=null;
+  const officialPages=location.protocol==='https:' && location.host==='gusvann.github.io' &&
+    location.pathname==='/duco-cotizaciones-demo/gestion.html';
+  const editorAvailable=(officialPages||['localhost','127.0.0.1','[::1]'].includes(location.hostname)) &&
+    typeof BroadcastChannel==='function';
+  const editorLinks=new Map();
+  function openQuote(record){
+    if(!editorAvailable||record?.kind!=='quote'||!['request','draft'].includes(record.status))return;
+    let link=editorLinks.get(record.id);
+    if(!link){
+      const key=crypto.randomUUID(),channel=new BroadcastChannel('duco-gestion-'+key);
+      channel.onmessage=({data})=>{
+        const current=model.get(record.id);
+        if(data==='request'&&current?.kind==='quote'&&['request','draft'].includes(current.status))
+          channel.postMessage({title:current.title,dueDate:current.dueDate,items:current.items});
+      };
+      link={key,channel};editorLinks.set(record.id,link);
+    }
+    const url=new URL('./',location.href);url.hash='gestion-'+link.key;
+    window.open(url.href,'_blank','noopener');
+  }
 
   function options(entries,current){
     return entries.map(({id,label})=>'<option value="'+escape(id)+'"'+(id===current?' selected':'')+'>'+escape(label)+'</option>').join('');
@@ -116,6 +136,9 @@
     detail.innerHTML='<header class="gp-detail-head"><div><p class="j-eyebrow">'+escape(record.folio)+'</p>'+
       '<h2 id="gp-detail-title" tabindex="-1">'+escape(record.title)+'</h2></div>'+
       '<button type="button" class="j-btn gp-close" aria-label="Cerrar ficha" data-action="close">×</button></header>'+
+      (editorAvailable&&record.kind==='quote'&&['request','draft'].includes(record.status)?'<div class="gp-actions"><button type="button" class="j-btn j-primary" data-action="open-quote">Abrir en Cotizador</button></div>':'')+
+      (record.kind==='quote' ? '<section class="gp-quote-products"><h3>Productos de la cotización</h3>'+
+        (record.items.length ? window.DucoQuoteProducts.table(record.items,escape) : '<p class="j-muted">Aún no se han agregado productos.</p>')+'</section>' : '')+
       '<form id="gp-record-form">'+fields({...record,...pendingFields,status:record.status})+'<div class="gp-actions"><button type="submit" class="j-btn">Guardar cambios</button></div></form>'+
       (record.status==='accepted'?'<div class="gp-actions"><button type="button" class="j-btn j-primary" data-action="convert">Convertir en proyecto</button></div>':'')+
       (link?'<div class="gp-detail-section">'+link+'</div>':'')+(record.kind==='project'?taskSection(record):'')+
@@ -194,6 +217,7 @@
       state.view=view;
       renderControls();renderResults();
     }else if(select||related)selectRecord(select||related);
+    else if(action==='open-quote')openQuote(model.get(state.selectedId));
     else if(['new','task','note','reset'].includes(action))openDialog(action);
     else if(action==='cancel')dialog.close();
     else if(action==='close'){
@@ -247,6 +271,8 @@
       else if(operation==='task')model.addTask(id,data);
       else if(operation==='note')model.addNote(id,data.note);
       else if(operation==='reset'){
+        for(const link of editorLinks.values())link.channel.close();
+        editorLinks.clear();
         model.reset();
         state.selectedId=null;state.query=state.status=state.owner='';
         renderControls();renderDetail();renderResults();

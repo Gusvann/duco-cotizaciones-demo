@@ -2622,6 +2622,13 @@ input[data-money]{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 
 <style>/* Shell Astil de la demostración. Sin estilos globales del cotizador. */
+.j-products-panel { margin-bottom: 16px; }
+.j-quote-products { width: 100%; margin-top: 8px; border-collapse: collapse; text-align: left; font-size: .875rem; }
+.j-quote-products th, .j-quote-products td { padding: 7px 4px; border-bottom: 1px solid var(--j-line); overflow-wrap: anywhere; }
+.j-quote-products thead th { color: var(--j-muted); font-size: .8em; }
+.j-quote-products tbody th { font-weight: 550; }
+.j-quote-products :is(th,td):nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
+.j-quote-products :is(th,td):last-child { padding-left: 12px; }
 #journey-root,#journey-footer,#quote-host{--j-canvas:#f6faff;--j-paper:#fff;--j-ink:#13293d;--j-muted:#526779;--j-line:#d4e4f2;--j-blue:#0f74d9;--j-soft:#edf6ff;--j-brand-gradient:linear-gradient(135deg,#073b72 0%,#0f74d9 58%,#47b5ff 100%);--j-panel-shadow:0 14px 40px #073b7212;--j-good:#23684c;--j-good-bg:#edf8f2;--j-warn:#815300;--j-warn-bg:#fff6e0;--j-error:#a43232}
 #journey-root,#journey-footer{background:var(--j-canvas);color:var(--j-ink);font:14px/1.55 AstilPreviewPublic,"Public Sans",Arial,sans-serif;overflow-wrap:anywhere;box-sizing:border-box;width:calc(100% - var(--demo-sidebar-width,237px));margin-left:var(--demo-sidebar-width,237px)}
 #journey-root *,#journey-footer *{box-sizing:border-box}
@@ -2669,6 +2676,7 @@ input[data-money]{text-align:right;font-variant-numeric:tabular-nums}
 #journey-root .j-sidebar-bottom strong{display:block;font-family:AstilPreviewPublic,"Public Sans",Arial,sans-serif;font-size:11px;font-weight:500;color:#fff}
 #journey-root .j-sidebar-bottom small{display:block;font-size:9px;color:#e7f5ffad;margin-top:3px}
 #journey-root .j-sidebar-backdrop{display:none}
+#journey-root .j-sidebar-backdrop[hidden]{display:none}
 #journey-root{padding-top:65px}
 #journey-root .j-top{height:65px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 var(--j-content-inset);position:fixed;top:0;left:var(--demo-sidebar-width,237px);width:calc(100% - var(--demo-sidebar-width,237px));z-index:20;background:#ffffffe0;backdrop-filter:blur(14px);border-bottom:1px solid var(--j-line);box-shadow:0 5px 24px #073b720a}
 #journey-root .j-top-identity,#journey-root .j-top-actions{display:flex;align-items:center;gap:16px;min-width:0}
@@ -2810,7 +2818,7 @@ input[data-money]{text-align:right;font-variant-numeric:tabular-nums}
 /* KPIs: mismos expedientes, vistas derivadas en memoria. */
 #journey-root .j-nav-submenu .j-nav-link{position:relative;display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;border:0;border-radius:5px;background:transparent;color:#e7f5ffce;text-align:left;font-size:12px}
 #journey-root .j-nav-submenu .j-nav-link:hover{background:#ffffff10;color:#fff}
-#journey-root .j-nav-submenu .j-gestion-entry{text-decoration:none}
+#journey-root .j-nav-submenu a.j-nav-link{text-decoration:none}
 #journey-root .j-kpi-toolbar{display:flex;gap:16px;flex-wrap:wrap;padding:18px 20px;background:var(--j-paper);border:1px solid var(--j-line);border-radius:8px}
 #journey-root .j-kpi-toolbar .j-field{flex:1;min-width:190px}
 #journey-root .j-kpi-toolbar select,#journey-root #j-responsible-filter{max-width:100%}
@@ -6247,6 +6255,7 @@ var QuoteDomain = (function () {
     q.items = list(input.items, 80, 'items').map((r, i) => ({
       id: id(r.id),
       description: str(r.description, 1000),
+      ...(Object.hasOwn(r,'targetMargin')?{targetMargin:num(r.targetMargin,2,99.99,'items.'+i+'.targetMargin')}:{}),
       ...(Object.hasOwn(r,'prototype') ? {prototype:bool(r.prototype),prototypeMargin:num(r.prototypeMargin??'40',2,99.99,`items.${i}.prototypeMargin`)} : {}),
       quantity: num(r.quantity, ['Pieza','Juego'].includes(r.unit)?0:3, 100000, `items.${i}.quantity`, true),
       unit: str(r.unit, 30),
@@ -7536,7 +7545,7 @@ var QuoteManufacturing_ = (function () {
         items.push({itemId:row.itemId,complete:false,manufacturingNetCents:0,manufacturingGrossCents:0,materials:materialResults});continue;
       }
       const commercial=dec(item.quantity),purchaseGroups=new Map(),materialReady=new Map();
-      if(!commercial||!row.materials.length&&!row.processes.length)issue('manufacturing.items','Define el despiece o procesos y cantidad del producto.',item.id);
+      if(!commercial||!row.materials.length&&!row.processes.length&&!context.commercialWood?.has(item.id))issue('manufacturing.items','Define el despiece o procesos y cantidad del producto.',item.id);
       for(const m of row.materials){
         const group=row.groups.find(g=>g.id===m.groupId),d=dimensions(item,m),quantity=dec(m.quantity),surface=d.surface&&!d.pending;
         const areaPerProduct=surface&&quantity?d.length*d.width*quantity/1000:null,totalArea=areaPerProduct!==null&&commercial?areaPerProduct*commercial/1000:null;
@@ -7591,9 +7600,11 @@ var QuoteManufacturing_ = (function () {
         workUnits.push({id:work,itemId:item.id,description:p.name||'Proceso pendiente',source:internal?'Proceso interno':'Servicio externo'});
         cost(identity('CST_MFG_',item.id,'P_'+p.id),item.id,p.name||'Proceso pendiente',net,taxRate,complete,internal?'Proceso interno':'Servicio externo',work,basis,state);
       }
+      const supplemental=context.commercialWood?.get(item.id);
+      if(supplemental?.partial)issue('manufacturing.items.wood','Completa el desglose de madera del artículo.',item.id);
       for(const system of row.finishSystems)if(!system.name||!system.layerIds.length)issue('manufacturing.items.finishSystems','Nombra el sistema y agrega sus capas.',item.id,system.id);
       const eligible=costs.slice(start).filter(c=>c.status!=='Pendiente'),complete=issues.every(i=>i.target.parentId!==item.id);
-      items.push({itemId:item.id,complete,manufacturingNetCents:sum(eligible.map(c=>c.netCents)),manufacturingGrossCents:sum(eligible.map(c=>c.grossCents)),materials:materialResults});
+      items.push({itemId:item.id,complete,manufacturingNetCents:sum([...eligible.map(c=>c.netCents),supplemental?.cents??0]),manufacturingGrossCents:sum(eligible.map(c=>c.grossCents)),materials:materialResults});
     }
     if(model.packaging.method==='percent'){
       for(const item of items){
@@ -7623,7 +7634,7 @@ var QuoteManufacturing_ = (function () {
       if(c.status==='Pendiente'||!eligibility.costIds.includes(c.id)){additionalComplete=false;continue;}additional.push(D().costFiscal(c).net);
     }
     for(const r of q.resources||[]){if(r.status==='No aplica'||ex.excludedResourceIds.includes(r.id))continue;const l=D().labor(r);if(!eligibility.resourceIds.includes(r.id))additionalComplete=false;else additional.push(l.cost);}
-    const eligible=costs.filter(c=>c.status!=='Pendiente'),base=sum([...eligible.map(c=>c.netCents),...additional]),baseReady=issues.length===0&&additionalComplete,
+    const eligible=costs.filter(c=>c.status!=='Pendiente'),base=sum([...eligible.map(c=>c.netCents),...additional,...Array.from(context.commercialWood?.values()||[],entry=>entry.cents??0)]),baseReady=issues.length===0&&additionalComplete,
       complete=baseReady&&(model.indirectMethod==='none'||model.indirectMethod==='percent'&&model.indirectRate!=='');
     if(model.indirectMethod!=='none'){
       if(!complete)issue('manufacturing.indirectRate','Indirectos pendientes: declara aplicabilidad, porcentaje y resuelve todos los costos aplicables.');
@@ -7665,11 +7676,14 @@ var QuoteManufacturing_ = (function () {
     const q=clone(input),row=q.manufacturing?.items.find(r=>r.itemId===itemId);
     if(!row||q.manufacturing.contract!==CURRENT_CONTRACT)fail('manufacturing.itemCostPreview');
     row.mode='detailed';
-    const result=evaluate(q,context),conflicts=new Set();
+    return captureFromResult(evaluate(q,context),row);
+  }
+  function captureFromResult(result,row){
+    const itemId=row.itemId,conflicts=new Set();
     for(const issue of result.issues){if(issue.target?.parentId===itemId&&issue.field.endsWith('.purchaseGroup')){
       const m=row.materials.find(m=>m.id===issue.target.id);if(m)conflicts.add(identity('CST_MFG_',itemId,'M_'+(m.purchaseGroup||m.id)));
     }}
-    const costs=result.costs.filter(c=>c.itemId===itemId&&/^CST_MFG_/.test(c.id)),amounts=[];
+    const costs=result.costs.filter(c=>c.itemId===itemId&&/^CST_MFG_[0-9a-f]{32}$/i.test(c.id)),amounts=[];
     let pendingCount=0,pricedCount=0;
     for(const c of costs){const amount=conflicts.has(c.id)?null:dec(c.netAmount,2);if(amount!==null){amounts.push(amount);pricedCount++;}if(amount===null||c.status==='Pendiente')pendingCount++;}
     return {itemId,capturedNetCents:sum(amounts),eligibleNetCents:sum(costs.filter(c=>c.netCents!==null).map(c=>c.netCents)),count:costs.length,pricedCount,pendingCount,financiallyComplete:false};
@@ -7709,7 +7723,7 @@ var QuoteManufacturing_ = (function () {
     q.scopeReview.confirmations=q.scopeReview.confirmations.filter(c=>q.needs.some(n=>n.id===c.needId));
     return q;
   }
-  return Object.freeze({contract:CURRENT_CONTRACT,evaluator:CURRENT_EVALUATOR,priorContract:V2_CONTRACT,priorEvaluator:V2_EVALUATOR,woodRule:WOOD_RULE,normalize,evaluate,apply,tariff,processTypes,generated,issueCostId,dimensions,woodMeasurements,itemCostPreview,lineSubtotal,supplyCategories,maquilaCategories,materialSections,processSections,exclusions,upgrade,blank,commercialSummary});
+  return Object.freeze({contract:CURRENT_CONTRACT,evaluator:CURRENT_EVALUATOR,priorContract:V2_CONTRACT,priorEvaluator:V2_EVALUATOR,woodRule:WOOD_RULE,normalize,evaluate,apply,tariff,processTypes,generated,issueCostId,dimensions,woodMeasurements,itemCostPreview,captureFromResult,lineSubtotal,supplyCategories,maquilaCategories,materialSections,processSections,exclusions,upgrade,blank,commercialSummary});
 })();
 if(typeof module!=='undefined')module.exports=QuoteManufacturing_;
 
@@ -8257,6 +8271,9 @@ var SolidWoodAutoPreview = (function () {
     const tx=app.partDraft;if(!tx||!partSameContext(tx.context))throw new Error('El contexto de edición cambió.');
     if(app.breakdownEditor?.itemId===tx.itemId&&breakdownDraftDirty()&&!breakdownSave())throw new Error('Revisa el editor del artículo.');
     if(Object.keys(tx.raw).length)throw new Error('Corrige los valores del artículo antes de aplicarlo.');
+    const row=tx.quote.manufacturing?.items.find(r=>r.itemId===tx.itemId);
+    const manual=tx.quote.costs.find(c=>c.id==='CST_EST_'+tx.itemId);
+    if(row?.mode==='manual'&&!(manual?.netAmount||manual?.amount)&&solidWoodDirty(tx.itemId)&&solidWoodEntries(tx.itemId).length)row.mode='detailed';
     let candidate=QuotePartDraft.build(tx,app.q);
     // Validate isolation, but a pure F edit must not reorder/reproject legacy arrays.
     if(solidWoodEnabled()&&!QuotePartDraft.changed(tx))return QuotePartDraft.clone(app.q);
@@ -8332,6 +8349,7 @@ var SolidWoodAutoPreview = (function () {
     let value=el.value;
     try{if(numericControl(el)){if(el.validity.badInput)throw new Error('Entrada numérica incompleta.');value=numericControlValue(el);D.decimal(value,Number(el.dataset.digits??2),Number(el.max||100000000));}}
     catch(error){tx.raw[key]={value:el.value,message:error.message,badInput:el.validity.badInput};tx.error=error.message;el.setCustomValidity?.(error.message);}
+    if(path==='items.'+index+'.quantity'&&!tx.raw[key]&&String(tx.quote.items[index].quantity)!==String(value)){for(const process of tx.quote.manufacturing?.items.find(row=>row.itemId===id)?.processes||[]){if(process.section==='maquilas'&&process.quantityScope==='product'&&process.source?.kind==='manual'&&process.detail?.unitPrice&&process.quantity)process.source.netAmount='';}}
     if(estimate){const entry=ensurePartEstimate(index);if(entry){entry.cost[{net:'netAmount',tax:'taxRate',basis:'basis'}[estimate]]=value;syncPartEstimate(entry);}}
     else if(measure){tx.quote.items[index].specs.filter(spec=>(!spec.na||!spec.value)&&(tx.quote.items[index].unit!=='Metro'||spec.type==='Largo')).forEach(spec=>spec.unit=el.value);}
     else {const match=/^items\.\d+\.specs\.(\d+)\.value$/.exec(path||'');const item=tx.quote.items[index],spec=match?item.specs[Number(match[1])]:null,shared=spec?.na?itemMeasureUnit(item):'';set(path,el.type==='checkbox'?el.checked:value);if(spec?.na&&value!==''&&!tx.raw[key]&&Number(value)>0){spec.na=false;if(shared)spec.unit=shared;}if(/specs\.\d+\.na$/.test(path)&&el.checked)set(path.replace(/na$/,'value'),'');}
@@ -8365,7 +8383,7 @@ var SolidWoodAutoPreview = (function () {
   }
   function solidWoodResult(id,component){
     const article=partViewQuote()?.items.find(item=>item.id===id),config=app.solidWoodUatConfig;
-    return SolidWoodAutoPreview.calculate({article,component,parameterPreview:config.parameters,adminWoodPricePreview:recipeMaterialPrice(id,component),quotePriceAdjustment:component.adjustment});
+    return SolidWoodAutoPreview.calculate({article,component:app.solidWoodLocal?.articles.get(id)?.workshop?.wasteRate!=null?{...component,wasteRate:app.solidWoodLocal.articles.get(id).workshop.wasteRate}:component,parameterPreview:config.parameters,adminWoodPricePreview:recipeMaterialPrice(id,component),quotePriceAdjustment:component.adjustment});
   }
   function solidWoodSummary(id){return solidWoodEnabled()?SolidWoodAutoPreview.aggregate(solidWoodEntries(id,true).map(c=>solidWoodResult(id,c))):{count:0,quality:'PENDING'};}
   function solidWoodBlockPersistence(){
@@ -8990,15 +9008,16 @@ var SolidWoodAutoPreview = (function () {
   }
   // B-01: field locations are explicit. IDs are resolved at use time, never by label/index.
   function financialEvaluation() {
-    if(!app.dirty && app.storedEvaluation)return app.storedEvaluation;
+    if(!app.dirty&&app.storedEvaluation){const saved=app.storedEvaluation;return app.meta?.current===false?saved:estimatedEvaluation(app,saved);}
     // Rendering is a read: compose on an explicit candidate, never on app.q.
     // Save/confirmation retain their existing intentional applied composition.
     const candidate=JSON.parse(JSON.stringify(app.q));
     composeCoverageDetails(candidate);
-    return D.evaluate(candidate,{base:app.baseQuote,preview:true,date:new Date().toISOString().slice(0,10)});
+    const result=D.evaluate(candidate,{base:app.baseQuote,preview:true,date:new Date().toISOString().slice(0,10)});
+    return estimatedEvaluation(app,result);
   }
   function financialTotals() {
-    if(!app.dirty && app.storedTotals)return app.storedTotals;
+    if(!app.dirty&&app.storedTotals&&app.meta?.current===false)return app.storedTotals;
     return financialEvaluation().totals;
   }
   function evaluateIssues() {
@@ -11218,8 +11237,7 @@ function expandedCatalogReference(recipe) {
   function recipeCanEdit(){return !!globalThis.DemoQuote?.canEdit(app.q?.id)&&editable()&&!app.busy&&!app.operation;}
   function recipeEntry(id){return partSameContext(app.syntheticRecipes?.context)&&app.q?.items.some(item=>item.id===id)?app.syntheticRecipes.articles?.[id]||null:null;}
   function recipeModes(id){return app.partDraft?.itemId===id&&partSameContext(app.partDraft.context)?app.partDraft.syntheticRecipeModes||{}:{};}
-  function recipeMaterialPrice(id,component){
-    const config=app.solidWoodUatConfig,meta=recipeEntry(id);
+  function recipeMaterialPrice(id,component,config=app.solidWoodUatConfig,meta=recipeEntry(id)){
     if(!meta)return config.prices.find(price=>price.species===component.woodKind)||null;
     const thickness=SolidWoodAutoPreview.calculate({component:{thickness:component.thickness}}).thicknessIn;
     const selectedRecipe=DemoRecipeCatalog.recipe(meta.recipeId); if(component.woodKind==='Tzalam'&&!selectedRecipe?.referenceTotals&&!selectedRecipe?.syntheticPricing){
@@ -11488,13 +11506,13 @@ function expandedCatalogReference(recipe) {
   }
   function costOverview() {
     let evaluation;try{evaluation=financialEvaluation();}catch(_){/* Keep navigation, but never invent a financial result. */}
-    const allocation=evaluation?.structuralValid===true?evaluation.allocations:null,byId=new Map((allocation?.items||[]).map(x=>[x.itemId,x]));
+    const estimate=evaluation?.totals?.estimate;const allocation=estimate||(evaluation?.structuralValid===true?evaluation.allocations:null),byId=new Map((allocation?.items||[]).map(x=>[x.itemId,x]));
     const general=allocation?allocation.items.reduce((sum,row)=>sum+row.generalNet,0)+(allocation.unallocatedGeneralNet||0):null;
     const money=value=>value==null?'Sin evaluar':QuotePdf.money(value);
     return '<div class="cost-overview" aria-label="Resumen rápido de costos adicionales sin IVA"><div class="cost-overview-item general"><span>General</span><strong>'+money(general)+'</strong><small>Costo común distribuido entre los artículos</small></div>'+app.q.items.map(item=>{
       const row=byId.get(item.id),name=esc(D.articleName(item));
-      return '<button type="button" class="cost-overview-item navigable" data-action="goto-part-cost" data-id="'+esc(item.id)+'" aria-label="Ir al artículo: '+name+'"><span>'+name+'</span><strong>'+money(row?.assignedNet)+'</strong><small>Directo '+money(row?.directNet)+' · General '+money(row?.generalNet)+'</small></button>';
-    }).join('')+'</div>';
+      return '<button type="button" class="cost-overview-item navigable" data-action="goto-part-cost" data-id="'+esc(item.id)+'" aria-label="Ir al artículo: '+name+'"><span>'+name+'</span><strong>'+money(row?.hasAmount===false?null:row?.assignedNet)+(row?.partial?' · parcial':'')+'</strong><small>Directo '+money(row?.directNet)+(estimate?' · Común '+money(row.generalNet-row.indirectNet)+' · Indirectos '+money(row.indirectNet):' · General '+money(row?.generalNet))+'</small></button>';
+    }).join('')+(estimate?'<div class="cost-overview-item"><span>Costo estimado del pedido</span><strong data-estimate-order>'+money(estimate.netCents)+'</strong><small>'+(estimate.complete?'Sin IVA':'Importe conocido · parcial')+'</small></div>':'')+'</div>';
   }
   function costs() {
     if(app.q.contract!==QuoteSchema.contract)return '<p class="note">Cobertura histórica no evaluada. Crea una versión nueva para capturarla.</p>';
@@ -11577,7 +11595,7 @@ function expandedCatalogReference(recipe) {
       app.issues=DemoQuoteIssues.collect(app.q,evaluation,{inputErrors:app.inputErrors.values(),scopeState:app.scopeUatState}).filter(issue=>issue.step===3&&issue.severity!=='info'&&issue.code!=='PAYMENT_DISTRIBUTION');
     } catch(error) { app.issues=[D.issue(app.q,error.field||'',error.message||'Revisa los importes.',{},error.code||'VALIDATION')]; }
     const assigned=new Map((totals.allocation?.items||[]).map(row=>[row.itemId,row]));
-    const prices=app.q.items.map((r,i)=>{const line=totals.lines?.[i]||null,cost=assigned.get(r.id)?.assignedNet??null,margin=line&&cost!=null&&line.net>0?(line.net-cost)*100/line.net:null,status=margin==null?'Pendiente':margin<0?'Utilidad negativa':margin<30?'Bajo 30%':'Saludable';return '<tr><td><span class="part-code">ARTÍCULO</span><strong>'+esc(D.articleName(r))+'</strong></td><td>'+esc((r.quantity||'—')+' '+(r.unit||''))+'</td><td class="compact-cell">'+field(`items.${i}.unitPrice`,'Precio unitario · MXN',{type:'number'})+'</td><td class="compact-cell">'+field(`items.${i}.discount`,'Descuento %',{type:'number',max:100})+'</td><td class="compact-cell">'+field(`items.${i}.tax`,'IVA %',{type:'number',max:100})+'</td><td class="money"><strong>'+QuotePdf.money(line?.total??null)+'</strong></td><td><span class="cost-compare '+(margin!=null&&margin<30?'warn':'')+'"><small>Costo '+QuotePdf.money(cost)+'</small><strong>'+(margin==null?'Margen incompleto':margin.toFixed(1)+'%')+'</strong><em>'+status+'</em></span>'+prototypePriceControl(r,i,totals)+'</td></tr>';}).join('');
+    const prices=app.q.items.map((r,i)=>{const line=totals.lines?.[i]||null,cost=totals.estimate?(totals.estimate.items.find(row=>row.itemId===r.id&&row.hasAmount)?.assignedNet??null):assigned.get(r.id)?.assignedNet??null,margin=line&&cost!=null&&line.net>0?(line.net-cost)*100/line.net:null,status=margin==null?'Pendiente':margin<0?'Utilidad negativa':margin<30?'Bajo 30%':'Saludable';return '<tr><td><span class="part-code">ARTÍCULO</span><strong>'+esc(D.articleName(r))+'</strong></td><td>'+esc((r.quantity||'—')+' '+(r.unit||''))+'</td><td class="compact-cell">'+field(`items.${i}.unitPrice`,'Precio unitario · MXN',{type:'number'})+'</td><td class="compact-cell">'+field(`items.${i}.discount`,'Descuento %',{type:'number',max:100})+'</td><td class="compact-cell">'+field(`items.${i}.tax`,'IVA %',{type:'number',max:100})+'</td><td class="money"><strong>'+QuotePdf.money(line?.total??null)+'</strong></td><td><span class="cost-compare '+(margin!=null&&margin<30?'warn':'')+'"><small>Costo '+QuotePdf.money(cost)+'</small><strong>'+(margin==null?'Margen incompleto':margin.toFixed(1)+'%')+'</strong><em>'+status+'</em></span>'+prototypePriceControl(r,i,totals)+'</td></tr>';}).join('');
     const distribution=D.paymentDistribution(app.q),paymentSum=distribution.points/100;
     return (
       '<div class="quote-table-wrap"><table class="quote-table price-table"><thead><tr><th>Artículo</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>IVA</th><th>Total</th><th>Costo / margen</th></tr></thead><tbody>'+prices+'</tbody></table></div><div class="commercial-totals"><span><small>Total sin IVA</small><strong>'+QuotePdf.money(totals.net)+'</strong></span><span><small>IVA</small><strong>'+QuotePdf.money(totals.tax)+'</strong></span><span class="featured"><small>Total con IVA</small><strong>'+QuotePdf.money(totals.total)+'</strong></span></div>'+
@@ -12686,9 +12704,9 @@ function review() {
     if(applyPrice){
       if(!editable()||app.busy||app.operation||app.step!==3)return;
       const item=app.q.items.find(row=>row.id===applyPrice.dataset.applyPrototypePrice);
-      if(!item?.prototype)return;
+      if(!item)return;
       const estimate=prototypeEstimate(item,financialTotals());
-      const suggestion=suggestPrototypePrice(D,item,estimate.complete?estimate.cents:null);
+      const suggestion=suggestMarginPrice(D,item,estimate.complete?estimate.cents:null,item.prototype?item.prototypeMargin:item.targetMargin);
       if(!suggestion)return;
       beginCapture();item.unitPrice=suggestion.unitPrice;
       const index=app.q.items.indexOf(item);
@@ -13283,7 +13301,8 @@ function review() {
       if(['contact','contactPhone','contactEmail'].includes(el.dataset.path)&&app.contactLookup)app.contactLookup.edited=true;
       dirty();
       const p = el.dataset.path;
-      const refreshDerived = /^(items\.\d+\.(quantity|unit|unitPrice|discount|tax|prototypeMargin)|costs\.\d+\.(netAmount|taxRate|status|itemId|external|providerMode)|resources\.\d+\.(itemId|people|mode|hours|days|hoursPerDay|status)|payments\.\d+\.(percent|days|dayType))$/.test(p);
+      if(/^items\.\d+\.(?:prototypeMargin|targetMargin)$/.test(p)&&!app.inputErrors.size){const item=app.q.items[Number(p.split('.')[1])];if(item&&!item.unitPrice){const estimate=prototypeEstimate(item,financialTotals()),suggestion=suggestMarginPrice(D,item,estimate.complete?estimate.cents:null,value);if(suggestion)item.unitPrice=suggestion.unitPrice;}}
+      const refreshDerived = /^(items\.\d+\.(quantity|unit|unitPrice|discount|tax|prototypeMargin|targetMargin)|costs\.\d+\.(netAmount|taxRate|status|itemId|external|providerMode)|resources\.\d+\.(itemId|people|mode|hours|days|hoursPerDay|status)|payments\.\d+\.(percent|days|dayType))$/.test(p);
       if (el.dataset.dynamic) {
         captureInputErrors();
         if (/specs\.\d+\.na$/.test(p) && el.checked) set(p.replace(/na$/, 'value'), '');
@@ -14026,7 +14045,8 @@ const localRows=(function installRowVariant(boardCalculator,createCosts) {
   const nativeHeaderCost=articleHeaderRead;
   articleHeaderRead=function(id){
     const cost=nativeHeaderCost(id);
-    if(cost.source!=='LOCAL_CAPTURE'||cost.status!=='Costo incompleto')return cost;
+    const applied=app.meta?.current!==false&&breakdownRow(id)?.mode==='detailed'&&solidWoodEnabled()&&solidWoodEntries(id,true).length;
+    if(!applied&&(cost.source!=='LOCAL_CAPTURE'||cost.status!=='Costo incompleto'))return cost;
     const families=familyTotals(id),groups=Object.values(families);
     const amounts=groups.map(group=>group.cents).filter(Number.isSafeInteger);
     const precise=groups.filter(group=>group.exact).map(group=>group.exact);
@@ -14036,7 +14056,7 @@ const localRows=(function installRowVariant(boardCalculator,createCosts) {
     if(!amounts.length||!Number.isSafeInteger(cents))return cost;
     if(families.wood.workshop&&groups.every(group=>group.complete))
       return {...cost,cents,status:'Costo capturado',reason:'Costo calculado de los rubros del artículo, sin IVA.'};
-    return {...cost,cents,reason:'Costo actual de los rubros capturados, sin IVA. Hay importes pendientes.'};
+    return {...cost,cents,status:'Costo incompleto',reason:'Costo actual de los rubros capturados, sin IVA. Hay importes pendientes.'};
   };
   function refreshFamilyTotals(onlyId){
     const cache=new Map();
@@ -14135,7 +14155,9 @@ const localRows=(function installRowVariant(boardCalculator,createCosts) {
     const measureUnit=wood ? takeField(state,attr,'lengthUnit') || pending('Unidad de medidas') : '';
     const faces=wood ? takeField(state,attr,'finishFaces') || pending('Caras de acabado') : '';
     const jointed=wood ? takeField(state,attr,'jointed') || pending('Entablerado') : '';
-    const waste=wood ? takeField(state,attr,'wasteRate') || pending('Desperdicio') : '';
+    const individualWaste=wood?takeField(state,attr,'wasteRate'):'';
+    const articleWaste=wood?solidWoodState(app.openPartId)?.workshop?.wasteRate:null;
+    const waste=wood?(articleWaste!=null?'<span class="field" title="Desperdicio del artículo">'+esc(articleWaste)+' %</span>':individualWaste||pending('Desperdicio')):'';
     const reason=wood ? takeField(state,attr,'adjustment.reason') : '';
     const reset=wood ? takeRegion(state,'data-solid-action="reset"','button') : '';
     const group=wood ? takeRegion(state,'data-solid-action="group-price"','button') : '';
@@ -14402,7 +14424,8 @@ const localRows=(function installRowVariant(boardCalculator,createCosts) {
     const price=labor?pending('Precio unitario'):f(wood?'adjustment.price':process?'detail.unitPrice':'unitPrice',priceLabel,priceValue==null?'':String(priceValue));
     const amount=wood?solidWoodMoney(result.articleCosts.woodCost):displayAmount(value,item,process,costMap);
     const jointLabel=value.jointed==null||value.jointed===''?'':String(value.jointed)==='1'?'Sí':String(value.jointed)==='0'?'No':'Por revisar';
-    const measures=wood?'<div class="rv-wood-measure-grid">'+f('width','Ancho',value.width)+f('length','Largo',value.length)+f('lengthUnit','Unidad de medidas',value.lengthUnit,true)+f('finishFaces','Caras de acabado',value.finishFaces,true)+f('jointed','Entablerado',jointLabel,true)+f('wasteRate','Desperdicio (%)',value.wasteRate)+'</div>':'';
+    const articleWaste=wood?solidWoodState(item.id)?.workshop?.wasteRate:null;
+    const measures=wood?'<div class="rv-wood-measure-grid">'+f('width','Ancho',value.width)+f('length','Largo',value.length)+f('lengthUnit','Unidad de medidas',value.lengthUnit,true)+f('finishFaces','Caras de acabado',value.finishFaces,true)+f('jointed','Entablerado',jointLabel,true)+(articleWaste!=null?'<span class="field" title="Desperdicio del artículo">'+esc(articleWaste)+' %</span>':f('wasteRate','Desperdicio (%)',value.wasteRate))+'</div>':'';
     const choice=wood?value.cnc?.decision==='yes'?'Sí':value.cnc?.decision==='no'?'No':'—':'';
     const cnc=wood?f('cnc.decision','CNC / láser',choice,true):'';
     const row=wood?woodGrid(concept,woodQuantityCell(item.id,value,quantity,unit,result),f('woodKind','Material',value.woodKind,true),f('thickness','Espesor (in)',value.thickness),measures,price,cnc,amountHtml(amount,'',false,'Calculado con medidas')):supply?supplyGrid(f('category','Tipo de insumo',value.category,true),concept,f('sku','SKU',value.sku),quantity,unit,price,amountHtml(amount)):grid(concept,quantity,unit,price,amountHtml(amount));
@@ -14856,10 +14879,10 @@ const localWorkshop=(function installWorkshop(calculator) {
     if(value===null||value===undefined)return 'Pendiente';
     const amount=BigInt(value);return '$ '+String(amount/100n).replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+String(amount%100n).padStart(2,'0');
   };
-  function defaults(itemId) {
-    const entry=recipeEntry(itemId),recipe=entry&&DemoRecipeCatalog.recipe(entry.recipeId),doc=recipe?.documentary;
+  function defaults(itemId,entry=recipeEntry(itemId),pieces=solidWoodEntries(itemId,true)) {
+    const recipe=entry&&DemoRecipeCatalog.recipe(entry.recipeId),doc=recipe?.documentary;
     const rows=(doc?.sections||[]).flatMap(section=>section.rows),find=kind=>rows.find(row=>row.kind===kind);
-    const source=key=>find(key)?.unitPrice??'',pieces=solidWoodEntries(itemId,true);
+    const source=key=>find(key)?.unitPrice??'';
     const first=entry?.woodIds?.[0],cover=pieces.find(piece=>piece.id===first&&piece.name==='CUBIERTA');
     const florencia=cover&&['SYN-NUBE-C','SYN-NUBE-O'].includes(entry.variantId);
     const values={'domino.componentId':cover?.id||'','domino.quantity':'','domino.lengthCm':'','domino.unions':florencia?'4':'','domino.perMl':'4','domino.extra':'','domino.price':source('DOMINO_CONSUMPTION'),
@@ -14885,19 +14908,66 @@ const localWorkshop=(function installWorkshop(calculator) {
     if(persist)local.workshop=initial;
     return initial;
   }
-  function geometry(itemId) {
-    return solidWoodEntries(itemId,true).map(piece=>{
-      const result=solidWoodResult(itemId,piece),cnc=result.automaticProcesses.find(process=>process.id==='cnc');
+  // The Florencia reference records these two products, a yield of 7 m²/L
+  // and the historical price per litre. Free capture remains available.
+  function finishReferences(){
+    const original=row=>row.publicVisualKey==='SYN-NUBE-C'||row.id==='SYN-NUBE-C';
+    const source=globalThis.DucoPrivateRecipeUpdates?.rows.find(original)||globalThis.DucoPublishedRecipes?.rows.find(original)||
+      globalThis.DemoRecipeReference?.recipe('SYN-NUBE-C');
+    const rows=source?.economics?.consumables||[];
+    return rows.filter(row=>
+      ['FINISH','FINISH_PRIMER'].includes(row.kind)&&row.unitPrice!=null&&row.priceUnit==='SOURCE_MONEY_PER_L'
+    ).map(row=>({kind:row.kind,name:row.name,price:row.unitPrice,
+      yield:source.workshopDefaults?.values?.['finish.'+(row.kind==='FINISH'?0:1)+'.yield']??'7'}));
+  }
+  function wasteControl(itemId,stored,pieces){
+    const rates=[...new Set(pieces.map(piece=>piece.wasteRate))];
+    const value=stored.wasteRate??(rates.length===1?rates[0]:'');
+    const id='waste-'+esc(itemId),disabled=recipeCanEdit()?'':' disabled';
+    return '<div class="workshop-article-waste field"><label for="'+id+'">Desperdicio de madera del artículo (%)</label>'+
+      '<input id="'+id+'" type="number" min="0" max="1000" step="any" required value="'+esc(value)+'" placeholder="'+(rates.length>1?'Varía por pieza':'Por definir')+'"'+disabled+'>'+
+      '<button type="button" class="quiet" data-apply-waste="'+esc(itemId)+'"'+disabled+'>Aplicar a todas las piezas</button>'+
+      (stored.wasteRate!=null?'<button type="button" class="quiet" data-reset-waste="'+esc(itemId)+'"'+disabled+'>Usar valores por pieza</button>':'')+'</div>';
+  }
+  function geometry(itemId,pieces=solidWoodEntries(itemId,true),evaluate=piece=>solidWoodResult(itemId,piece)) {
+    return pieces.map(piece=>{
+      const result=evaluate(piece),cnc=result.automaticProcesses.find(process=>process.id==='cnc');
       const length=Number(piece.length),factor={cm:1,mm:.1,m:100}[piece.lengthUnit];
       return {id:piece.id,name:piece.name,quantityPerProduct:piece.quantityPerProduct,lengthCm:piece.length!==''&&Number.isFinite(length)&&factor?length*factor:null,
-        ...result.unitMeasurements,woodCostExact:result._exact.unitCost,cncMl:cnc?.unitMl??null};
+        ...result.unitMeasurements,woodCostExact:result._exact.unitCost,cncMl:cnc?.unitMl??null,
+        pending:result.pendingDecisions,cncDecision:piece.cnc?.decision,cncLength:piece.cnc?.length,woodKind:piece.woodKind};
     });
   }
-  function read(itemId) {
+  function read(itemId,pieces) {
     const stored=state(itemId),items=partViewQuote().items,index=items.findIndex(row=>row.id===itemId);
     if(!stored||index<0)return null;
     const articleQuantity=app.partDraft?.raw?.['items.'+index+'.quantity']?'':items[index].quantity;
-    return calculator.calculate({values:stored.values,pieces:geometry(itemId),articleQuantity,installationExcluded:installationExcluded()});
+    return calculator.calculate({values:stored.values,pieces:pieces??geometry(itemId),articleQuantity,installationExcluded:installationExcluded()});
+  }
+  // A saved estimate uses only confirmed pieces. Inactive quotes must never
+  // read the open editor or another quote's material prices.
+  function appliedCosts(state) {
+    const costs=new Map(),config=state.solidWoodUatConfig;
+    if(!config||!state.solidWoodLocal?.articles)return costs;
+    for(const item of state.q.items){
+      const local=state.solidWoodLocal.articles.get(item.id),pieces=local?.applied||[];
+      if(!pieces.length&&!local?.workshop)continue;
+      const row=state.q.manufacturing?.items.find(entry=>entry.itemId===item.id);
+      if(row?.mode!=='detailed')continue;
+      const meta=state.syntheticRecipes?.articles?.[item.id]||null;
+      const values=local.workshop?.values||defaults(item.id,meta,pieces).values;
+      const evaluated=geometry(item.id,pieces,piece=>SolidWoodAutoPreview.calculate({
+        article:item,component:local.workshop?.wasteRate!=null?{...piece,wasteRate:local.workshop.wasteRate}:piece,parameterPreview:config.parameters,
+        adminWoodPricePreview:recipeMaterialPrice(item.id,piece,config,meta),quotePriceAdjustment:piece.adjustment
+      }));
+      const result=calculator.calculate({values,pieces:evaluated,articleQuantity:item.quantity});
+      const overlap=row.materials.some(material=>material.type==='wood'||material.section==='wood');
+      const legacyLabor=row.processes.some(process=>articleStudyFamily(process.section)==='wood');
+      const direct=legacyLabor?result.groups.dimensions:result.total;
+      costs.set(item.id,{cents:overlap||direct.totalCents==null?null:Number(direct.totalCents),
+        partial:overlap||legacyLabor||direct.partial||direct.totalCents==null||result.errors.length>0});
+    }
+    return costs;
   }
   const number=(value,unit='')=>value===null||value===undefined?'Pendiente':esc(value)+(unit?' '+esc(unit):'');
   function field(itemId,key,label,value,options={}) {
@@ -14914,6 +14984,45 @@ const localWorkshop=(function installWorkshop(calculator) {
     const value=row.status==='NOT_APPLICABLE'?'No aplica':money(row.unitCents);
     return '<output class="workshop-amount"'+(key?' data-workshop-live="'+esc(key)+'"':'')+(row.partial?' title="Hay piezas o parámetros por completar"':'')+'><strong>'+value+'</strong>'+(row.partial?'<small>Parcial</small>':'')+'</output>';
   }
+  function pendingFields(itemId,result,v,pieces){
+    const fields=[];
+    const dimensions={QUANTITY_PER_ARTICLE:['quantityPerProduct','Cantidad'],WIDTH:['width','Ancho'],LENGTH:['length','Largo'],
+      THICKNESS:['thickness','Espesor'],WASTE_RATE:['wasteRate','Desperdicio'],FINISH_FACES:['finishFaces','Caras de acabado'],
+      JOINTED:['jointed','Entablerado'],PRICE_ADJUSTMENT_INVALID:['adjustment.price','Ajuste de precio']};
+    for(const piece of pieces){
+      for(const reason of piece.pending||[]){
+        let field=dimensions[reason];
+        if(reason==='WOOD_PRICE')field=piece.woodKind?['adjustment.price','Precio de madera']:['woodKind','Material'];
+        if(reason==='CNC_DECISION_OR_INPUTS')field=piece.cncDecision==='yes'
+          ?(piece.cncLength?['cnc.repetitions','Repeticiones de CNC']:['cnc.length','Recorrido de CNC']):['cnc.decision','CNC / Láser'];
+        if(field)fields.push([field[0],(piece.name||'Pieza')+' · '+field[1],piece.id]);
+      }
+    }
+    function need(row,pairs){
+      if(!row?.applicable||row.unitCents!=null&&!row.partial)return;
+      const field=pairs.find(([key])=>v[key]===''||v[key]==null||!calculator.valid(key,v[key]));
+      if(field)fields.push(field);
+    }
+    const joins=[];
+    if(result.domino.baseQuantity==null||result.domino.lengthCm==null)joins.push(['domino.componentId','Seleccionar pieza para los dóminos']);
+    joins.push(['domino.unions','Capturar uniones'],['domino.perMl','Capturar dóminos por metro'],['domino.price','Capturar precio por dómino']);
+    need(result.domino,joins);
+    const labels={assembly:'Armado',jointing:'Entablerado',joinery:'Ensambles',varnish:'Barniz'};
+    for(const [key,label] of Object.entries(labels))need(result.labor[key],[['labor.'+key+'.rate','Capturar tarifa de '+label]]);
+    const names=state(itemId).dayNames;
+    for(const i of woodDayIndices)need(result.days[i],[['days.'+i+'.quantity','Capturar días de '+names[i]],['days.'+i+'.rate','Capturar tarifa diaria de '+names[i]]]);
+    for(let i=0;i<3;i++)need(result.finish[i],['hands','yield','price'].map((key,j)=>['finish.'+i+'.'+key,['Capturar manos','Capturar rendimiento','Capturar precio por litro'][j]+' de '+v['finish.'+i+'.name']]));
+    need(result.other.glue,[['other.gluePerM2','Capturar consumo de pegamento'],['other.glue.price','Capturar precio del pegamento']]);
+    need(result.other.cnc,[['other.cncMinutesPerMl','Capturar minutos de CNC por metro'],['other.cnc.price','Capturar precio del minuto de CNC']]);
+    need(result.other.extras,[['other.extrasPct','Capturar porcentaje de insumos extras']]);
+    return fields;
+  }
+  function pendingMarkup(itemId,result,values,pieces){
+    const fields=pendingFields(itemId,result,values,pieces);
+    return fields.length?'<details class="recipe-piece-detail"><summary>Datos pendientes del costo ('+fields.length+')</summary><ul>'+fields.map(([key,label,piece])=>
+      '<li><button type="button" class="quiet" data-workshop-goto="'+esc(key)+'" data-workshop-item="'+esc(itemId)+'"'+
+      (piece?' data-workshop-piece="'+esc(piece)+'"':'')+'>'+esc(label)+'</button></li>').join('')+'</ul></details>':'';
+  }
   function tableHead(labels,helps={},itemId='',group='labor'){return '<div class="workshop-table-head">'+labels.map((label,index)=>'<span>'+esc(label)+(helps[index]?help(itemId,group,helps[index],'Ayuda de '+label):'')+'</span>').join('')+'</div>';}
   function section(itemId,key,index,title,body,subtotal,tip='') {
     const open=app.breakdownUi.panels?.[itemId+'|workshop-'+key] === true;
@@ -14921,14 +15030,14 @@ const localWorkshop=(function installWorkshop(calculator) {
     return '<details class="workshop-block" data-fab-item="'+esc(itemId)+'" data-fab-panel="workshop-'+esc(key)+'"'+(open?' open':'')+'><summary><span class="workshop-number">'+esc(index)+'</span><span>'+esc(title)+'</span>'+(tip?'<span class="workshop-info" tabindex="0" aria-label="'+esc(tip)+'" title="'+esc(tip)+'">i</span>':'')+'<output class="workshop-subtotal" data-workshop-live="subtotal-'+esc(key)+'">'+amount+'</output></summary><div class="workshop-block-body">'+body+'</div></details>';
   }
   function markup(itemId,dimensions='') {
-    const stored=state(itemId),result=read(itemId);if(!stored||!result)return '';
-    const v=stored.values,f=(key,label,options={})=>field(itemId,key,label,v[key],options),pieces=geometry(itemId);
+    const stored=state(itemId),pieces=geometry(itemId),result=read(itemId,pieces);if(!stored||!result)return '';
+    const v=stored.values,f=(key,label,options={})=>field(itemId,key,label,v[key],options);
     const amountNote=row=>result.articleQuantity&&result.articleQuantity!=='1'?'<span class="workshop-article-total">Total '+esc(result.articleQuantity)+' artículos: <strong>'+money(row.totalCents)+'</strong></span>':'';
     const dominos=helpPanel(itemId,'domino')+'<div class="workshop-table-scroll" role="region" tabindex="0" aria-label="Dóminos por metro lineal"><div class="workshop-domino-table">'+tableHead(['Pieza','Cantidad','Longitud · cm','Uniones','Dóminos / ML','Extras','Precio / dómino','Costo'],{7:'domino'},itemId,'domino')+'<div class="workshop-table-row">'+f('domino.componentId','Pieza',{choices:[['','Seleccionar'],...pieces.map(piece=>[piece.id,piece.name||'Pieza'])]})+
       f('domino.quantity','Cantidad',{derived:result.domino.baseQuantity??''})+f('domino.lengthCm','Longitud · cm',{derived:result.domino.lengthCm??''})+f('domino.unions','Uniones')+
       f('domino.perMl','Dóminos / ML')+f('domino.extra','Extras',{placeholder:'Opcional'})+f('domino.price','Precio / dómino')+output(result.domino,'domino-row-amount')+'</div></div></div><div class="workshop-totals" data-workshop-live="domino-totals"><span>Longitud de uniones <strong>'+number(result.domino.ml,'ML')+'</strong></span><span>Consumo <strong>'+number(result.domino.quantity,'dóminos')+'</strong></span>'+amountNote(result.domino)+'</div>';
     const laborLabels=[['assembly','MO Armado','m²'],['jointing','MO Entablerado','m²'],['joinery','MO Ensambles','dóminos'],['varnish','MO Barniz','m²']];
-    const labor=helpPanel(itemId,'labor')+'<div class="workshop-table-scroll" role="region" tabindex="0" aria-label="Mano de obra por proceso"><div class="workshop-labor-table">'+tableHead(['Proceso','Base por artículo','Tarifa','Importe'],{1:'base',2:'tariff',3:'amount'},itemId)+laborLabels.map(([key,label,unit])=>'<div class="workshop-table-row"><strong>'+label+help(itemId,'labor',key,'Cómo se calcula '+label)+'</strong><span data-workshop-live="labor-'+key+'-base">'+number(result.labor[key].quantity,unit)+'</span>'+f('labor.'+key+'.rate','Tarifa de '+label,{placeholder:'Por definir'})+output(result.labor[key],'labor-'+key+'-amount')+'</div>').join('')+'</div></div>';
+    const labor=helpPanel(itemId,'labor')+'<div class="workshop-table-scroll" role="region" tabindex="0" aria-label="Mano de obra por proceso"><div class="workshop-labor-table">'+tableHead(['Proceso','Base por artículo','Tarifa','Importe'],{1:'base',2:'tariff',3:'amount'},itemId)+laborLabels.map(([key,label,unit])=>'<div class="workshop-table-row"><strong>'+label+help(itemId,'labor',key,'Cómo se calcula '+label)+'</strong><span><span data-workshop-live="labor-'+key+'-base">'+number(result.labor[key].quantity,unit)+'</span>'+(key==='joinery'?'<button type="button" class="quiet" data-joinery-base="'+esc(itemId)+'">Ver cálculo de dóminos</button>':'')+'</span>'+f('labor.'+key+'.rate','Tarifa de '+label,{placeholder:'Por definir'})+output(result.labor[key],'labor-'+key+'-amount')+'</div>').join('')+'</div></div>';
     const days=helpPanel(itemId,'days')+'<div class="workshop-table-scroll" role="region" tabindex="0" aria-label="Mano de obra por días"><div class="workshop-days-table">'+tableHead(['Especialidad','Días por artículo','Tarifa / día','Importe'],{2:'daily'},itemId,'days')+woodDayIndices.map(i=>{
       const name=stored.dayNames[i];
       return '<div class="workshop-table-row"><strong>'+esc(name)+'</strong>'+f('days.'+i+'.quantity','Días de '+name)+f('days.'+i+'.rate','Tarifa diaria de '+name)+output(result.days[i],'day-'+i+'-amount')+'</div>';
@@ -14938,15 +15047,18 @@ const localWorkshop=(function installWorkshop(calculator) {
       const checkbox='<input id="'+esc(id)+'" type="checkbox" data-workshop-item="'+esc(itemId)+'" data-workshop-field="'+key+'"'+(v[key]?' checked':'')+(!recipeCanEdit()||app.busy||app.operation?' disabled':'')+' aria-label="Incluir '+esc(v['finish.'+i+'.name'])+'">';
       return '<div class="workshop-table-row"><div class="workshop-finish-name">'+checkbox+f('finish.'+i+'.name','Producto',{text:true})+'</div>'+f('finish.'+i+'.hands','Manos')+f('finish.'+i+'.yield','Rendimiento m²/L')+f('finish.'+i+'.price','Precio por litro')+'<span class="workshop-number-value" data-workshop-live="finish-'+i+'-quantity">'+(v[key]?number(result.finish[i].quantity):'No aplica')+'</span>'+output(result.finish[i],'finish-'+i+'-amount')+'</div>';
     }).join('')+'</div></div>';
+    const refs=finishReferences();
+    const presets=refs.length?'<div class="field"><label for="finish-ref-'+esc(itemId)+'">Cargar acabado de referencia</label><select id="finish-ref-'+esc(itemId)+'" data-finish-reference="'+esc(itemId)+'"'+(recipeCanEdit()?'':' disabled')+'><option value="">Seleccionar producto</option>'+refs.map(row=>'<option value="'+esc(row.kind)+'">'+esc(row.name)+' · '+esc(row.yield)+' m²/L · $'+esc(row.price)+'/L</option>').join('')+'</select></div>':'';
     const others='<div class="workshop-table-scroll" role="region" tabindex="0" aria-label="Consumibles y CNC"><div class="workshop-other-table">'+tableHead(['Concepto','Base','Factor','Precio unitario','Importe'])+
       '<div class="workshop-table-row"><strong>Pegamento entablerado</strong><div class="workshop-base"><span data-workshop-live="glue-base">'+number(result.geometry.jointedM2,'m²')+'</span><small data-workshop-live="glue-quantity">Consumo '+number(result.other.glue.quantity,'L')+'</small></div>'+f('other.gluePerM2','Litros / m²')+f('other.glue.price','Precio / L')+output(result.other.glue,'glue-amount')+'</div>'+
       '<div class="workshop-table-row"><strong>CNC / Láser</strong><span data-workshop-live="cnc-length">'+number(result.other.cnc.ml,'m')+'</span>'+f('other.cncMinutesPerMl','Minutos / m')+f('other.cnc.price','Precio / min')+output(result.other.cnc,'cnc-amount')+'</div>'+
       '<div class="workshop-table-row"><strong>Insumos extras</strong><span data-workshop-live="extras-base" title="Madera + acabados + dóminos + pegamento">'+money(result.other.baseCents)+'</span>'+f('other.extrasPct','Porcentaje (%)')+'<span aria-label="No usa precio unitario">—</span>'+output(result.other.extras,'extras-amount')+'</div></div></div>';
     return '<section class="recipe-workshop" data-workshop-article="'+esc(itemId)+'" aria-label="Cálculos por artículo">'+
-      (dimensions===null?'':section(itemId,'dimensions','01','Dimensiones de materia prima',dimensions,result.groups.dimensions))+
+      (dimensions===null?'':section(itemId,'dimensions','01','Dimensiones de materia prima',wasteControl(itemId,stored,solidWoodEntries(itemId,true))+dimensions,result.groups.dimensions))+
       section(itemId,'dominos','02','Dóminos × ML',dominos,result.groups.dominos,'Cantidad × longitud en cm × uniones / 100. El consumo calculado no es un conteo entero de montaje.')+
       section(itemId,'labor','03','Mano de obra',labor,result.groups.labor)+section(itemId,'days','04','Mano de obra por días',days,result.groups.days)+
-      section(itemId,'finish','05','Materiales de acabado',finishes,result.groups.finish)+section(itemId,'other','06','Otros · consumibles y CNC / Láser',others,result.groups.other)+'</section>';
+      section(itemId,'finish','05','Materiales de acabado',presets+finishes,result.groups.finish)+section(itemId,'other','06','Otros · consumibles y CNC / Láser',others,result.groups.other)+
+      '<div data-workshop-pending>'+pendingMarkup(itemId,result,v,pieces)+'</div></section>';
   }
   solidWoodFamilyHtml=function(item,row,fold) {
     let html=previousFamily(item,row,fold);const marker='<details class="recipe-economics-reference">',at=html.indexOf(marker);
@@ -14965,6 +15077,15 @@ const localWorkshop=(function installWorkshop(calculator) {
     // rapid typing, the caret, focus, and each table's horizontal position.
     const template=document.createElement('template');template.innerHTML=markup(itemId);
     const next=template.content?.querySelector('[data-workshop-article]');if(!next)return;
+    const pending=node.querySelector('[data-workshop-pending]');
+    if(pending){
+      const wasOpen=pending.firstElementChild?.open;
+      const updated=next.querySelector('[data-workshop-pending]');
+      if(updated&&updated.innerHTML!==pending.innerHTML){
+        pending.innerHTML=updated.innerHTML;
+        if(wasOpen&&pending.firstElementChild)pending.firstElementChild.open=true;
+      }
+    }
     node.querySelectorAll('[data-workshop-live]').forEach(target=>{
       const replacement=next.querySelector('[data-workshop-live="'+CSS.escape(target.dataset.workshopLive)+'"]');
       if(replacement){target.innerHTML=replacement.innerHTML;const title=replacement.getAttribute('title');if(title)target.setAttribute('title',title);else target.removeAttribute('title');}
@@ -14991,13 +15112,54 @@ const localWorkshop=(function installWorkshop(calculator) {
     let value=target.type==='checkbox'?target.checked:target.value;
     if(monetaryKey(key)){try{value=moneyInputValue(value);}catch(_){/* Invalid grouping stays visible for correction. */}}
     if(key==='domino.componentId'&&value&&!solidWoodEntries(itemId,true).some(piece=>piece.id===value))return;
-    if(stored.values[key]!==value)state(itemId,true).values[key]=value;
+    if(stored.values[key]!==value){state(itemId,true).values[key]=value;app.dirty=true;}
     // Keep invalid raw values in their own article; never coerce them to zero.
     target.setAttribute?.('aria-invalid',String(!calculator.valid(key,value)));
     refresh(itemId);
     localRows.refreshFamilyTotals(itemId);
     articleHeaderRefresh(itemId);
+    breakdownRefreshCapturedCost();
   }
+  quoteRoot.addEventListener('click',event=>{
+    const target=event.target.closest?.('[data-apply-waste],[data-reset-waste],[data-joinery-base],[data-workshop-goto]');
+    if(!target)return;
+    const id=target.dataset.applyWaste||target.dataset.resetWaste||target.dataset.joineryBase||target.dataset.workshopItem;
+    if(id!==app.openPartId)return;
+    if(target.dataset.workshopPiece){
+      if(!recipeCanEdit())return;
+      const piece=target.dataset.workshopPiece,key=target.dataset.workshopGoto;
+      const panels=app.breakdownUi.panels||={};
+      panels[id+'|workshop-dimensions']=true;
+      solidWoodOpen(id,piece);
+      requestAnimationFrame(()=>{
+        if(app.breakdownContinuation||app.breakdownEditor?.solidWoodF?.id!==piece)return;
+        const editor=document.getElementById('wood-piece-editor-'+piece);
+        const field=editor?.querySelector('[data-solid-field="'+CSS.escape(key)+'"]');
+        if(field){for(let node=field.parentElement;node;node=node.parentElement)if(node.tagName==='DETAILS')node.open=true;field.focus();}
+      });
+      return;
+    }
+    if(target.dataset.joineryBase||target.dataset.workshopGoto){
+      const field=document.getElementById('workshop-'+id+'-'+(target.dataset.workshopGoto||'domino.unions').replaceAll('.','-'));
+      if(field){field.closest('details').open=true;field.focus();}return;
+    }
+    if(!recipeCanEdit())return;
+    const field=document.getElementById('waste-'+id);
+    if(target.dataset.applyWaste){
+      if(!field||!field.reportValidity()||!/^\d+(?:\.\d{1,6})?$/.test(field.value))return;
+      state(id,true).wasteRate=field.value;
+    }else delete state(id,true).wasteRate;
+    app.dirty=true;editor();
+  });
+  quoteRoot.addEventListener('change',event=>{
+    const id=event.target?.dataset?.finishReference;
+    if(!id||id!==app.openPartId||!recipeCanEdit())return;
+    const preset=finishReferences().find(row=>row.kind===event.target.value);
+    if(!preset)return;
+    const values=state(id,true).values,base='finish.'+(preset.kind==='FINISH'?0:1)+'.';
+    Object.assign(values,{[base+'enabled']:true,[base+'name']:preset.name,[base+'price']:preset.price,[base+'yield']:preset.yield});
+    app.dirty=true;editor();
+  });
   quoteRoot.addEventListener('input',change);quoteRoot.addEventListener('change',change);
   quoteRoot.addEventListener('focusout',event=>{
     const input=event.target,key=input?.dataset?.workshopField,itemId=input?.dataset?.workshopItem;
@@ -15019,7 +15181,7 @@ const localWorkshop=(function installWorkshop(calculator) {
     const id=button.getAttribute('aria-controls'),panel=id&&quoteRoot.querySelector('#'+CSS.escape(id));if(!panel)return;
     panel.hidden=true;button.setAttribute('aria-expanded','false');button.removeAttribute('aria-describedby');event.preventDefault();event.stopPropagation();
   });
-  return {read,markup,values:itemId=>clone(state(itemId)?.values||{})};
+  return {read,markup,appliedCosts,values:itemId=>clone(state(itemId)?.values||{})};
 })((function createWorkshopCalculator() {
   const woodDayIndices=Object.freeze([0,2,3]);
   const r=(n,d=1n)=>({n:BigInt(n),d:BigInt(d)});
@@ -15128,10 +15290,10 @@ const localLineRequests=new Map(),localLineActions=new Set();let approvedLocalPr
 function privateClientAltaAllowed(){
   return app.localAuthenticatedRole==='account'&&typeof globalThis.DucoPrivateApi?.clientCreate==='function';
 }
-function suggestPrototypePrice(domain, item, articleCostCents) {
-  if (!item?.prototype || !Number.isSafeInteger(articleCostCents) || articleCostCents < 0) return null;
+function suggestMarginPrice(domain,item,articleCostCents,targetMargin) {
+  if (!Number.isSafeInteger(articleCostCents) || articleCostCents < 0) return null;
   try {
-    const margin = domain.decimal(item.prototypeMargin ?? '40', 2, 99.99);
+    const margin = domain.decimal(targetMargin, 2, 99.99);
     const quantity = domain.decimal(item.quantity, 3, 100000);
     const discount = domain.decimal(item.discount, 2, 100);
     if (margin === null || !quantity || discount === null || discount === 10000) return null;
@@ -15154,7 +15316,15 @@ function suggestPrototypePrice(domain, item, articleCostCents) {
     return null; // Invalid capture stays pending; no amount is supplied to the quote.
   }
 }
+function suggestPrototypePrice(domain, item, articleCostCents) {
+  if(!item?.prototype)return null;
+  return suggestMarginPrice(domain,item,articleCostCents,item.prototypeMargin??'40');
+}
 function prototypeEstimate(item, totals) {
+  if(totals.estimate){
+    const row=totals.estimate.items.find(entry=>entry.itemId===item.id);
+    return {cents:row?.hasAmount?row.assignedNet:null,complete:!!row?.hasAmount&&!row.partial&&prototypeCostsReady(app.q,item.id,totals)};
+  }
   const allocation = totals.allocation?.items?.find(row=>row.itemId===item.id);
   const captured = localRows.articleEstimate(item.id);
   const cents = allocation?.assignedNet;
@@ -15183,14 +15353,14 @@ function prototypeCostsReady(quote, itemId, totals) {
   });
 }
 function prototypePriceControl(item, index, totals) {
-  if (!item.prototype) return '';
   const estimate = prototypeEstimate(item, totals);
-  const suggestion = suggestPrototypePrice(D, item, estimate.complete ? estimate.cents : null);
+  const marginField=item.prototype?'prototypeMargin':'targetMargin';
+  const suggestion = suggestMarginPrice(D,item,estimate.complete?estimate.cents:null,item[marginField]);
   const cost = estimate.cents === null ? 'Pendiente' : QuotePdf.money(estimate.cents) + (estimate.complete ? '' : ' · parcial');
-  return '<div class="prototype-price" aria-label="Precio estimado del prototipo">'+
-    '<strong>Prototipo</strong><small>Costo asignado '+esc(cost)+'</small>'+
-    field('items.'+index+'.prototypeMargin','Margen objetivo %',{type:'number',max:99.99})+
-    '<output>'+ (suggestion ? 'Precio unitario sugerido '+QuotePdf.money(suggestion.unitPriceCents) : 'Precio sugerido pendiente')+'</output>'+
+  return '<div class="prototype-price" aria-label="Precio estimado del artículo">'+
+    (item.prototype?'<strong>Prototipo</strong>':'')+'<small>Costo asignado '+esc(cost)+'</small>'+
+    field('items.'+index+'.'+marginField,'Margen objetivo %',{type:'number',max:99.99})+
+    '<output>'+ (suggestion ? 'Precio unitario sugerido '+QuotePdf.money(suggestion.unitPriceCents)+' antes de IVA' : 'Precio sugerido pendiente')+'</output>'+
     (suggestion&&editable()?'<button type="button" class="quiet" data-apply-prototype-price="'+esc(item.id)+'">Usar precio sugerido</button>':'')+'</div>';
 }
 function supplierResultMarkup(rows, status, kind) {
@@ -15387,7 +15557,130 @@ async function handleLocalRecipeAction(button) {
     localLineActions.delete(key);
   }
 }
-globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorkshop.markup,workshopValues:localWorkshop.values,rowAutoFlush:rowSessionAutosave.flush,rowAutoCancel:rowSessionAutosave.cancel,recipeSourceSubtotal:recipePresentation.recipeSourceSubtotal,recipeSourceCostsHtml:recipePresentation.recipeSourceCostsHtml,breakdownSupplyEditor:recipePresentation.breakdownSupplyEditor,breakdownPurchaseFields:recipePresentation.breakdownPurchaseFields,lineAction,lineState,productStart,filterLineCatalog,lineResults,lineVariantSummary,lineCatalogPanel,breakdownSetField,breakdownSave,partInput,partPaint,partCandidate,recipeEntry,recipeDirectoryHtml,recipeSyncQuote,recipeMaterialPrice,recipeWoodResult:solidWoodResult,partApply:typeof partApply==='function'?partApply:null,partDiscard:typeof partDiscard==='function'?partDiscard:null,partDraftDirty:typeof partDraftDirty==='function'?partDraftDirty:null,solidWoodDirty:typeof solidWoodDirty==='function'?solidWoodDirty:null,solidWoodHasPending:typeof solidWoodHasPending==='function'?solidWoodHasPending:null,solidWoodSyncContext:typeof solidWoodSyncContext==='function'?solidWoodSyncContext:null,solidWoodEntries:typeof solidWoodEntries==='function'?solidWoodEntries:null,solidWoodBlockPersistence:typeof solidWoodBlockPersistence==='function'?solidWoodBlockPersistence:null,restoreManufacturing:typeof restoreManufacturing==='function'?restoreManufacturing:null,breakdownApply:typeof breakdownApply==='function'?breakdownApply:null,breakdownDiscard:typeof breakdownDiscard==='function'?breakdownDiscard:null,app,D,save,transition,load,report,api,editor,solidWoodState,solidWoodOpen,openPartEditor,setSolidWoodViewVariant:solidWoodSetViewVariant,scopeState:typeof scopeState==='function'?scopeState:null,scopeAction:typeof scopeAction==='function'?scopeAction:null,scopeLegacyText:typeof scopeLegacyText==='function'?scopeLegacyText:null,scopeEffect:typeof scopeEffect==='function'?scopeEffect:null,scopeProcessCreate:typeof scopeProcessCreate==='function'?scopeProcessCreate:null,
+function commercialCostEstimate(quote, evaluation, wood, manufacturing, domain) {
+  if (!evaluation?.structuralValid || !wood.size) return null;
+  const projected=manufacturing.evaluate(quote,{commercialWood:wood});
+  const components=evaluation.eligibleComponents
+    .filter(c=>c.type!=='Costo'||!manufacturing.generated(c.id))
+    .map(c=>({itemId:c.itemId,amount:c.amount}));
+  const detailId=id=>/^CST_MFG_[0-9a-f]{32}$/i.test(id);
+  const pendingItems=new Set();
+  const indirects=[];
+  for(const row of quote.manufacturing.items){
+    if(row.mode!=='detailed')continue;
+    const result=manufacturing.captureFromResult(projected,row);
+    if(result.pricedCount)components.push({itemId:row.itemId,amount:result.capturedNetCents});
+    const local=wood.get(row.itemId);
+    if(local?.cents!=null)components.push({itemId:row.itemId,amount:local.cents});
+    if(result.pendingCount||local?.partial)pendingItems.add(row.itemId);
+  }
+  for(const cost of projected.costs){
+    if(detailId(cost.id))continue;
+    const cents=domain.decimal(cost.netAmount,2);
+    if(cents!==null){
+      const charge={itemId:cost.itemId,amount:cents};
+      components.push(charge);
+      if(cost.id.startsWith('CST_INDIRECT_'))indirects.push(charge);
+    }
+    if(cost.status==='Pendiente')pendingItems.add(cost.itemId);
+  }
+  const allocation=domain.allocateGeneral(quote.items,components);
+  const known=new Set(components.map(c=>c.itemId));
+  const indirectRows=domain.allocateGeneral(quote.items,indirects).items;
+  const items=allocation.items.map((row,index)=>{
+    const hasAmount=known.has(row.itemId)||known.has('');
+    return {...row,hasAmount,indirectNet:indirectRows[index].assignedNet,partial:pendingItems.has('')||pendingItems.has(row.itemId)};
+  });
+  const cents=items.reduce((sum,row)=>sum+row.assignedNet,allocation.unallocatedGeneralNet);
+  return {items,netCents:components.length?cents:null,complete:projected.complete&&!pendingItems.size&&evaluation.componentsComplete&&evaluation.coverageComplete};
+}
+function perUnitCents(total,quantity) {
+  if(!/^\d+(?:\.\d{1,3})?$/.test(String(quantity))||Number(quantity)>100000)return null;
+  const units=D.decimal(quantity,3,100000);
+  if(!Number.isSafeInteger(total)||!units)return null;
+  const scaled=BigInt(total)*1000n,den=BigInt(units);
+  return Number((2n*scaled+den)/(2n*den));
+}
+function quoteEstimate(state,evaluation){
+  if(!evaluation?.structuralValid)return null;
+  const wood=localWorkshop.appliedCosts(state);
+  if(!wood.size)return null;
+  const projected=D.evaluate(state.q,{base:state.baseQuote,preview:true,commercialWood:wood});
+  return commercialCostEstimate(state.q,projected,wood,QuoteManufacturing_,D);
+}
+function estimatedEvaluation(state,evaluation){
+  const estimate=quoteEstimate(state,evaluation);
+  if(!estimate)return evaluation;
+  const t=evaluation.totals,complete=estimate.complete&&t.completePrices;
+  const profit=complete?t.net-estimate.netCents:null;
+  return {...evaluation,totals:{...t,estimate,cost:estimate.netCents,allocation:estimate,
+    completeCosts:estimate.complete,complete,profit,margin:complete&&t.net>0?profit*100/t.net:null}};
+}
+(function installCostViews() {
+  const nativeCaptured=breakdownCapturedCostHtml,nativeRefresh=breakdownRefreshCapturedCost;
+  const oldDialog=breakdownUnsavedDialog;
+  breakdownUnsavedDialog=function(){
+    const html=oldDialog();
+    return app.breakdownContinuation?.switchesToBreakdown
+      ?html.replace('Hay cambios en este editor','Usar el desglose calculado')
+        .replace('Elige qué hacer antes de continuar.','El desglose sustituirá la estimación manual. Elige si incluyes la pieza que estás editando.')
+        .replace('Aplicar y continuar','Incluir la pieza y usar el desglose')
+        .replace('Descartar y continuar','Usar el desglose sin la edición')
+      :html;
+  };
+  quoteRoot.addEventListener('click',event=>{
+    const button=event.target.closest?.('[data-mfg-mode]');
+    if(!button||!app.breakdownEditor||!breakdownDraftDirty())return;
+    event.stopImmediatePropagation();
+    if(!editable()||app.busy||app.operation)return;
+    const id=button.dataset.mfgMode;
+    const next=()=>{
+      if(!editable()||app.busy||app.operation||app.openPartId!==id)return;
+      const candidate=breakdownClone(partViewQuote());
+      candidate.manufacturing=breakdownModel(candidate);
+      const row=candidate.manufacturing.items.find(r=>r.itemId===id);
+      if(!row||row.mode==='detailed')return;
+      row.mode='detailed';
+      try{breakdownApply(candidate,'Modo de costo');}catch(error){report(error);}
+    };
+    next.switchesToBreakdown=true;
+    if(breakdownGuard(next))next();
+  },true);
+  function label(item,estimate) {
+    const unit=perUnitCents(estimate.cents,item.quantity);
+    return (unit===null?'Pendiente':QuotePdf.money(unit))+' por unidad · '+(item.quantity||'—')+' en la cotización';
+  }
+  breakdownCapturedCostHtml=function(item){
+    const estimate=localRows.articleEstimate(item.id);
+    if(!estimate.hasWork)return nativeCaptured(item);
+    const id=esc(item.id);
+    const manual=breakdownRow(item.id)?.mode!=='detailed';
+    return '<section class="part-estimate" aria-label="Costo acumulado del artículo"><h4>Costo estimado del artículo</h4>'+
+      '<small data-estimate-unit="'+id+'">'+esc(label(item,estimate))+'</small>'+
+      '<div class="part-estimate-total"><small>Subtotal de la cantidad cotizada · sin IVA</small><strong data-part-captured-net="'+id+'">'+QuotePdf.money(estimate.cents)+'</strong>'+
+      '<span data-part-captured-status="'+id+'">'+(estimate.complete?'Desglose completo':'Subtotal parcial')+'</span></div>'+
+      (manual?'<p class="meta">El pedido usa la estimación manual hasta aplicar este desglose.</p><button type="button" data-mfg-mode="'+id+'">Usar desglose calculado</button>':'')+'</section>';
+  };
+  const nativeStrip=articleHeaderStripEstimate;
+  articleHeaderStripEstimate=function(item,markup){
+    const html=nativeStrip(item,markup);
+    if(!html.includes('data-article-study="desglose"')||html.includes('data-estimate-unit=')||
+       !solidWoodEnabled()||!solidWoodEntries(item.id,true).length)return html;
+    return html+breakdownCapturedCostHtml(item);
+  };
+  breakdownRefreshCapturedCost=function(){
+    nativeRefresh();
+    for(const node of quoteRoot.querySelectorAll('[data-estimate-unit]')){
+      const id=node.dataset.estimateUnit,item=partViewQuote().items.find(row=>row.id===id);
+      if(!item)continue;
+      const estimate=localRows.articleEstimate(id),section=node.closest('.part-estimate');
+      node.textContent=label(item,estimate);
+      section.querySelector('[data-part-captured-net]').textContent=QuotePdf.money(estimate.cents);
+      section.querySelector('[data-part-captured-status]').textContent=estimate.complete?'Desglose completo':'Subtotal parcial';
+    }
+  };
+})();
+globalThis.__client = {quoteEstimate,workshopRead:localWorkshop.read,workshopMarkup:localWorkshop.markup,workshopValues:localWorkshop.values,rowAutoFlush:rowSessionAutosave.flush,rowAutoCancel:rowSessionAutosave.cancel,recipeSourceSubtotal:recipePresentation.recipeSourceSubtotal,recipeSourceCostsHtml:recipePresentation.recipeSourceCostsHtml,breakdownSupplyEditor:recipePresentation.breakdownSupplyEditor,breakdownPurchaseFields:recipePresentation.breakdownPurchaseFields,lineAction,lineState,productStart,filterLineCatalog,lineResults,lineVariantSummary,lineCatalogPanel,breakdownSetField,breakdownSave,partInput,partPaint,partCandidate,recipeEntry,recipeDirectoryHtml,recipeSyncQuote,recipeMaterialPrice,recipeWoodResult:solidWoodResult,partApply:typeof partApply==='function'?partApply:null,partDiscard:typeof partDiscard==='function'?partDiscard:null,partDraftDirty:typeof partDraftDirty==='function'?partDraftDirty:null,solidWoodDirty:typeof solidWoodDirty==='function'?solidWoodDirty:null,solidWoodHasPending:typeof solidWoodHasPending==='function'?solidWoodHasPending:null,solidWoodSyncContext:typeof solidWoodSyncContext==='function'?solidWoodSyncContext:null,solidWoodEntries:typeof solidWoodEntries==='function'?solidWoodEntries:null,solidWoodBlockPersistence:typeof solidWoodBlockPersistence==='function'?solidWoodBlockPersistence:null,restoreManufacturing:typeof restoreManufacturing==='function'?restoreManufacturing:null,breakdownApply:typeof breakdownApply==='function'?breakdownApply:null,breakdownDiscard:typeof breakdownDiscard==='function'?breakdownDiscard:null,app,D,save,transition,load,report,api,editor,solidWoodState,solidWoodOpen,openPartEditor,setSolidWoodViewVariant:solidWoodSetViewVariant,scopeState:typeof scopeState==='function'?scopeState:null,scopeAction:typeof scopeAction==='function'?scopeAction:null,scopeLegacyText:typeof scopeLegacyText==='function'?scopeLegacyText:null,scopeEffect:typeof scopeEffect==='function'?scopeEffect:null,scopeProcessCreate:typeof scopeProcessCreate==='function'?scopeProcessCreate:null,
  retryVerified:typeof retryVerified!=='undefined'?retryVerified:null,
  navigateIssue:typeof navigateIssue==='function'?navigateIssue:null,
  resumeIdentity:typeof resumeIdentity==='function'?resumeIdentity:null,
@@ -15711,8 +16004,10 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     blockers.push(...saveBlockers);
     if (entry.saveState === 'unknown') blockers.push('Resultado del guardado pendiente de confirmar.');
     const totals = evaluated?.totals;
+    const estimate=persistentCapture&&evaluated?.structuralValid?c.quoteEstimate(state,evaluated):null;
     return {
-      costCents: totals?.cost ?? null, priceCents: totals?.net ?? null, taxCents: totals?.tax ?? null, totalCents: totals?.total ?? null,
+      ...(estimate?{estimatedCosts:estimate}:{}),
+      costCents: estimate?estimate.netCents:totals?.cost??null, priceCents: totals?.net ?? null, taxCents: totals?.tax ?? null, totalCents: totals?.total ?? null,
       complete: !!evaluated?.structuralValid && !!evaluated?.calculationsComplete && blockers.length === 0,
       canSaveDraft: !locked(entry) && saveBlockers.length === 0, saveBlockers, workflowIssues,
       blockers: [...new Set(blockers)], revision: entry.revision, savedRevision: entry.savedRevision,
@@ -15760,6 +16055,15 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       state.q.resources=state.q.resources.filter(resource=>!resource.itemId);
       state.q.workUnits=state.q.workUnits.filter(work=>!work.itemId);
       state.q.scopeReview.confirmations=[];
+      if(options.initialProducts?.length){
+        state.q.items=options.initialProducts.map(product=>{
+          const item=D.newItem(uid);
+          return {...item,description:product.description,quantity:String(product.quantity),unit:product.unit};
+        });
+        state.q.manufacturing.items=M.blank(state.q,uid).items;
+        for(const item of state.q.items)
+          for(const topic of [...S.itemRubros,'Personal'])state.q.needs.push(D.newNeed(uid,item.id,topic));
+      }
       // Rebuild generated coverage and general costs against the now-empty request.
       state.q=M.apply(state.q);
     } else if (state.q.needs.some(need => need.confirmedHash)) {
@@ -15796,6 +16100,9 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     app.step = step; render(get(active)); notify(); return true;
   }
   function snapshot(id) { return clone(get(id).saved); }
+  function productLines(id) {
+    return currentState(get(id)).q.items.map(({description,quantity,unit})=>({description,quantity,unit}));
+  }
   function snapshotCandidate(entry, evaluation) {
     const state = currentState(entry);
     const snapshot={quote:clone(D.sanitize(state.q)),summary:{...clone(evaluation),dirty:false,saveState:'success',savedRevision:entry.revision},request:clone(entry.request)};
@@ -15920,7 +16227,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const error = new Error('Acción no disponible. No hay conexión con este servicio.'); error.code = 'DEMO_ONLY'; throw error;
   };
   function thaw(id) {const entry=get(id);entry.frozen=false;if(active===id)paintLock(entry);}
-  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, leave, applyPending, discardPending, freeze, thaw, hydrate, revise, reset, setProfile, canEdit,
+  window.DemoQuote = { automaticCapture:typeof c.rowAutoFlush==='function',create, open, hide, showStep, summary, save, resolveSave, snapshot, productLines, leave, applyPending, discardPending, freeze, thaw, hydrate, revise, reset, setProfile, canEdit,
     setLocalUser(user){if(privatePreview)localRole=user?.role||'';},
     onChange(callback) { listeners.add(callback); return () => listeners.delete(callback); } };
   for (const eventName of ['input', 'change', 'click']) document.addEventListener(eventName, event => { if (HOST()?.contains(event.target)) scheduleNotify(); });
@@ -16375,7 +16682,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       const extra=task.notes || taskFacts ? `<details><summary>Detalles</summary>${task.notes ? `<p class="op-evidence">${escape(task.notes)}</p>` : ''}${taskFacts ? `<dl class="op-facts">${taskFacts}</dl>` : ''}</details>` : '';
       return `<li>${sourceLink(task.url,title) || escape(title)}<span class="j-sub"> · ${escape(task.status || (task.completed === true ? 'Terminada' : task.completed === false ? 'Pendiente' : 'Estado sin confirmar'))}${owner ? ' · '+escape(displayField(owner)) : ''}${due ? ' · '+escape(date(due)) : ''}</span>${extra}</li>`;
     }).filter(Boolean);
-    const description = source.description || request.need;
+    const description = options.showDescription!==false && (source.description || request.need);
     return `<section class="j-panel"><div class="j-panel-head"><div><h2>${escape(options.heading || 'Detalles de Asana')}</h2><p class="j-muted">Copia de consulta</p></div></div><dl class="op-facts">${options.displayFolio ? row('Folio',options.displayFolio) : ''}${sourceFolio ? row('Folio de origen',sourceFolio) : ''}${row('Cliente',request.client || 'Por definir')}${row('Responsable',displayField(source.assignee || request.account))}${row('Estado en Asana',displayField(source.statusLabel || source.status || options.status))}${source.section ? row('Sección',source.section) : ''}${row('Fecha de creación',date(created))}${request.quoteDue ? row('Fecha de cotización',date(request.quoteDue)) : ''}${request.deliveryDate ? row('Fecha de entrega',date(request.deliveryDate)) : ''}${sourceFields(source.fields)}</dl>${description ? `<h3 class="j-spaced">Descripción</h3><p class="op-evidence">${escape(description)}</p>` : ''}${subtasks.length ? `<h3 class="j-spaced">Subtareas</h3><ul>${subtasks.join('')}</ul>` : ''}${links.length ? `<h3 class="j-spaced">Enlaces de origen</h3><ul>${links.map(link=>'<li>'+link+'</li>').join('')}</ul>` : ''}</section>`;
   }
 
@@ -16523,6 +16830,21 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
   globalThis.DemoProjectViews = Object.freeze({list,detail,sourceDetail,workflow,publishedProjectStatus});
 })();
 </script>
+<script>/* Read-only commercial line items, shared by the quote detail and Gestión. */
+(() => {
+  'use strict';
+  function table(items, escape) {
+    const rows=items.map(({description,quantity,unit}) =>
+      '<tr><th scope="row">'+escape(description || 'Producto sin nombre')+'</th><td>'+
+      escape(quantity === '' || quantity == null ? 'Por definir' : quantity)+'</td><td>'+
+      escape(unit || 'Por definir')+'</td></tr>').join('');
+    return '<table class="j-quote-products"><caption class="j-sr">Productos de la cotización</caption>'+
+      '<thead><tr><th scope="col">Producto</th><th scope="col">Cantidad</th><th scope="col">Unidad</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table>';
+  }
+  globalThis.DucoQuoteProducts=Object.freeze({table});
+})();
+</script>
 <script src="src/published-portfolio.js"></script>
 <script>/* Shared Astil workspace navigation and wordmark. */
 (() => {
@@ -16552,13 +16874,27 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const group = (key,label,entries) => `<details class="j-nav-group" data-nav-group="${key}"${openGroup === key ? ' open' : ''}><summary class="j-module">${navIcon('portfolio')}<span>${label}</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${entries.join('')}</div></details>`;
     const operationMenu = group('operations','Operación',operationEntries);
     const portfolioMenu = group('portfolio','Portafolio',portfolioEntries);
-    return `<aside id="j-sidebar" class="j-sidebar${menuOpen ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal ? ' role="dialog" aria-modal="true"' : ''}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(accountLabel)}</strong><small>${escape(accountDetail)}</small></span></div></aside>${menuOpen ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
+    return `<aside id="j-sidebar" class="j-sidebar${menuOpen ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal ? ' role="dialog" aria-modal="true"' : ''}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(accountLabel)}</strong><small>${escape(accountDetail)}</small></span></div></aside><button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"${menuOpen ? '' : ' hidden'}></button>`;
+  }
+
+  function setMenuOpen(container, open, mobile) {
+    const nav = container.querySelector('#j-sidebar');
+    nav.classList.toggle('j-sidebar-open',open);
+    if (open && mobile) {
+      nav.setAttribute('role','dialog');
+      nav.setAttribute('aria-modal','true');
+    } else {
+      nav.removeAttribute('role');
+      nav.removeAttribute('aria-modal');
+    }
+    container.querySelector('.j-mobile-menu').setAttribute('aria-expanded',String(open));
+    container.querySelector('.j-sidebar-backdrop').hidden = !open;
   }
 
   function topbar(menuOpen, actions) {
     return `<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${menuOpen}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${actions}</div></header>`;
   }
-  window.AstilChrome = Object.freeze({brandMarkup, sidebar, topbar});
+  window.AstilChrome = Object.freeze({brandMarkup, sidebar, topbar, setMenuOpen});
 })();
 </script>
 <script>/* Commercial workflow for the public demo and the private local service. */
@@ -16711,8 +17047,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const portfolioEntries = [
       navEntry('KPIs','kpis',screen === 'kpis'),
       navEntry('Cotizador','list',screen === 'list'||!globalScreens.has(screen)&&screen !== 'project'),
-      navEntry('Proyectos','projects',['projects','project'].includes(screen)),
-      '<a class="j-nav-link j-gestion-entry" href="gestion.html" target="_blank" rel="noopener">Gestión DUCO <span aria-hidden="true">↗</span></a>'
+      navEntry('Proyectos','projects',['projects','project'].includes(screen))
     ];
     return sidebar({
       openGroup: state.navGroup, menuOpen: state.menu,
@@ -16723,10 +17058,12 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     });
   }
 
-  function closeMenu() {
-    state.menu = false;
-    render();
-    root.querySelector('.j-mobile-menu')?.focus();
+  function setMenu(open) {
+    state.menu = open;
+    window.AstilChrome.setMenuOpen(root,open,window.matchMedia('(max-width:750px)').matches);
+    const group = state.navGroup || sidebarGroupFor(state.screen);
+    const control = open ? `[data-nav-group="${group}"] > summary` : '.j-mobile-menu';
+    root.querySelector(control)?.focus({preventScroll:true});
   }
 
   function makeRecord(id, scenario, request) {
@@ -16958,9 +17295,9 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const quoteOpen = record => `data-id="${escape(record.id)}"`;
     let body;
     if (state.view === 'mesa') {
-      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${escape(record.id)}"><td>${button(record.request.title,'open',quoteOpen(record))}<div class="j-sub">${escape(record.folio || record.id)} · ${escape(record.request.client)}</div></td><td>${quoteStateMarkup(record)}${record.version ? `<div class="j-sub">Versión ${escape(record.version)}</div>` : ''}</td><td>${escape(responsibleName(record))}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!record.asana && !complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',quoteOpen(record))}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
+      body = `<div class="j-table-wrap j-list-table"><table class="j-table"><caption class="j-sr">Solicitudes de cotización</caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Estado</th><th scope="col">Responsables</th><th scope="col">Cotización / entrega</th><th scope="col" class="j-money">Total de oferta</th><th scope="col">Siguiente paso</th></tr></thead><tbody>${visible.map(record => `<tr data-record-id="${escape(record.id)}"><td>${button(record.request.title,'quote-detail',quoteOpen(record))}<div class="j-sub">${escape(record.folio || record.id)} · ${escape(record.request.client)}</div></td><td>${quoteStateMarkup(record)}${record.version ? `<div class="j-sub">Versión ${escape(record.version)}</div>` : ''}</td><td>${escape(responsibleName(record))}<div class="j-sub">${escape(record.request.designer)}</div></td><td>${date(record.request.quoteDue)}<div class="j-sub">Entrega: ${date(record.request.deliveryDate)}</div></td><td class="j-money">${money(displayedSummary(record)?.totalCents)}${!record.asana && !complete(record) ? '<div class="j-sub">Estimación incompleta</div>' : ''}</td><td>${button(nextLabel(record),'open',quoteOpen(record))}</td></tr>`).join('') || '<tr><td colspan="6" class="j-empty">No hay expedientes que coincidan con los filtros.</td></tr>'}</tbody></table></div>`;
     } else {
-      body = quoteBoard(visible,status,record=>`<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'open',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`);
+      body = quoteBoard(visible,status,record=>`<article class="j-card" data-record-id="${escape(record.id)}"><span class="j-sub">${escape(record.folio || record.id)}${record.version ? ' · V'+escape(record.version) : ''}</span><h3>${button(record.request.title,'quote-detail',quoteOpen(record))}</h3><p class="j-muted">${escape(record.request.client)} · ${escape(responsibleName(record))}</p><p class="j-card-amount">${money(displayedSummary(record)?.totalCents)}</p><p class="j-sub">Cotizar: ${date(record.request.quoteDue)}<br>Entrega: ${date(record.request.deliveryDate)}</p>${quoteStateMarkup(record)}<p class="j-next">${escape(nextLabel(record))}</p></article>`);
     }
     return heading+controls+sourceNotice+body;
   }
@@ -17091,9 +17428,26 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const currentTotal = amountValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,totalCents:metrics.totalCents});
     return `<header class="j-head"><div class="j-section-statement"><p class="j-eyebrow">Pulso comercial</p><h1 class="j-split-heading"><span class="j-heading-lead">Tu portafolio.</span> <span class="j-heading-emphasis">El pulso de tus ventas.</span></h1><p class="j-muted">${publishedPortfolio ? "Indicadores de demostración y cotizaciones de este navegador." : "Cotizaciones, clientes y tiempos en una misma vista."}</p></div></header>${kpiFiltersMarkup(metrics)}<p class="j-muted j-kpi-filter-scope">Ventas y tickets: fecha elegida · Actividad: solicitud · Tiempos: aceptación. MXN sin IVA.</p><div class="j-kpi-tabs" role="tablist" aria-label="Análisis de Portafolio">${[['summary','Resumen'],['sales','Ventas y clientes'],['times','Tiempos']].map(([key,label]) => `<button type="button" id="j-kpi-tab-${key}" role="tab" aria-selected="${state.kpis.tab === key}" aria-controls="j-kpi-tab-panel" tabindex="${state.kpis.tab === key ? 0 : -1}" data-action="kpi-tab" data-tab="${key}">${label}</button>`).join('')}</div><div class="j-kpi-stats">${stat('sales','Ventas del período',currentTotal,metrics.priced.length+' con importe · '+metrics.pending.length+' pendientes')}${stat('ticket','Ticket promedio',ticketValue({count:metrics.eligible.length,pricedCount:metrics.priced.length,ticketCents:metrics.ticketCents}),'Suma de ventas válidas / n='+metrics.priced.length)}${stat('prep','Preparación',decimal(metrics.prepDays)+(metrics.prepN ? ' días' : ''),'Solicitud → primer envío · n='+metrics.prepN+' de '+metrics.times.length)}${metrics.byType.map(group=>stat('type',group.label,decimal(group.closeDays)+(group.n ? ' días' : ''),'Cierre · '+group.n+' intervalos válidos',group.key)).join('')}</div><div class="j-kpi-activity">${[['requests','Recibidas',metrics.activity.received],['sent','Con envío',metrics.activity.sent],['won','Aceptadas',metrics.activity.accepted],['projects','Proyecto',metrics.activity.projects]].map(([kind,label,value]) => `<button type="button" data-action="kpi-detail" data-kind="${kind}"><strong>${value}</strong><span>${label}</span></button>`).join('')}</div><div class="j-kpi-coverage"><span role="status">${metrics.eligible.length} ventas elegibles · ${metrics.priced.length} con importe · ${escape(coverageLabel(metrics))}</span>${kpiLink('Cobertura de datos','quality')}${kpiLink('Definiciones y pendientes','definitions')}</div>${kpiDetailMarkup(metrics)}<section id="j-kpi-tab-panel" role="tabpanel" aria-labelledby="j-kpi-tab-${state.kpis.tab}">${state.kpis.tab === 'summary' ? `<div class="j-kpi-panels">${kpiRanking(metrics)}${kpiCategoryDonut(metrics)}</div><div class="j-spaced">${kpiMonthly(metrics)}</div>` : state.kpis.tab === 'sales' ? kpiSalesPanels(metrics) : kpiTimingPanels(metrics)}</section><p class="j-sub j-spaced">${!metrics.coverage ? 'Los indicadores muestran los expedientes de esta sesión.' : metrics.coverage.localOnly ? 'El tablero muestra los expedientes guardados en el equipo.' : 'Asana aporta el corte importado. Los expedientes locales se consultan en su período correspondiente.'}</p>`;
   }
+  function quoteProductsMarkup(record) {
+    const version=record.sent;
+    const items=record.asana ? null : version || record.historicalPartial
+      ? version?.snapshot?.quote?.items : api.productLines(record.id);
+    const description=record.asana && (record.asana.description || record.request.need);
+    let body;
+    if(Array.isArray(items)) {
+      body=items.length ? window.DucoQuoteProducts.table(items,escape)
+        : '<p class="j-muted">Aún no se han agregado productos.</p>';
+    } else {
+      body='<p class="j-muted">El expediente de origen no incluye un desglose de productos y cantidades.</p>';
+      if(description)body+='<h3 class="j-spaced">Descripción de origen</h3><p class="op-evidence">'+escape(description)+'</p>';
+    }
+    return '<section class="j-panel j-products-panel" aria-labelledby="j-products-title"><h2 id="j-products-title">Productos de la cotización</h2>'+
+      (version?'<p class="j-sub">Versión enviada · V'+escape(version.version)+'</p>':'')+body+'</section>';
+  }
+
   function recordMarkup(record) {
     const projected = portfolio.project([record],clients)[0];
-    return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia histórica parcial. No tiene un guardado confirmado. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${!record.historicalPartial ? button('Abrir recorrido de este expediente','stage','data-screen="request"',true) : button('Consultar referencia histórica','stage','data-screen="offer"')}${button('Regresar a KPIs','return-kpis')}</div>${versionsMarkup(record)}</section>`;
+    return `<section class="j-panel"><p class="j-eyebrow">Ficha del mismo expediente</p><h2>${escape(projected.title)}</h2>${record.historicalPartial ? '<p class="j-notice">Referencia histórica parcial. No tiene un guardado confirmado. No permite revisar, enviar ni convertir hasta reconstruir una nueva versión completa por el flujo correspondiente.</p>' : ''}<div class="j-grid"><div>${row('Cliente / identidad',projected.clientName+' · '+(projected.clientId || 'Sin identidad'))}${row('Categoría',portfolio.CATEGORIES[projected.category] || 'Sin clasificar')}${row('Tipo comercial',projected.type === 'line' ? 'Producto de línea' : projected.type === 'project' ? 'Proyecto' : 'Sin clasificar')}${row('Versión aceptada',projected.version ? 'V'+projected.version : 'Sin aceptación')}${row('Precio aceptado sin IVA',portfolio.hasPrice(projected) ? money(projected.netCents) : 'Pendiente')}</div><div>${row('Solicitud',kpiDate(projected.requestedAt))}${row('Primer envío',kpiDate(projected.firstSentAt))}${row('Aceptación',kpiDate(projected.acceptedAt))}${row('Anticipo / PO · hito',kpiDate(projected.poAt))}${row('Primera venta del cliente',kpiDate(projected.firstSaleAt))}</div></div><p class="j-sub j-spaced">Versión actual: V${record.version}. El borrador actual no reemplaza la versión aceptada.</p><div class="j-actions j-spaced">${record.historicalPartial ? button('Consultar referencia histórica','stage','data-screen="offer"') : button(nextLabel(record),'open','data-id="'+escape(record.id)+'"',true)}${state.returnToKpis ? button('Regresar a KPIs','return-kpis') : button('Volver a cotizaciones','list')}</div>${versionsMarkup(record)}</section>`;
   }
   function canStage(record, key) {
     if (record.asana) return key==='record' && record.asana.kind==='quote' || key==='project' && Boolean(record.project);
@@ -17117,7 +17471,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const crumbs = `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)} · Versión ${record.version}</p><h1>${escape(title)}</h1>${metadata}</div><div id="j-status">${pill(statuses[status(record)], accepted(record) || record.project ? 'good' : '')}</div></div>`;
     const back = state.returnToKpis ? `<div class="j-kpi-return">${button('Regresar a KPIs','return-kpis')}<span class="j-muted">Se conservarán los filtros y el detalle.</span></div>` : '';
     const phoneNotice = phone.recordNeedsAttention(record) ? '<p class="j-notice" role="status">Un teléfono de este expediente requiere revisión para retirar una posible extensión.</p>' : '';
-    if (state.screen === 'record') return crumbs+back+phoneNotice+recordMarkup(record);
+    if (state.screen === 'record') return crumbs+back+phoneNotice+quoteProductsMarkup(record)+recordMarkup(record);
     const nav = isEditing ? '' : `<nav class="j-stages" aria-label="Etapas del expediente">${stages.map(stage => button(stage.label,'stage',`data-screen="${stage.key}" aria-pressed="${state.screen === stage.key}" ${canStage(record,stage.key) ? '' : 'disabled'}`)).join('')}</nav>`;
     let body = '';
     if (state.screen === 'request' || state.screen === 'quote') body = nativeFormMarkup(record);
@@ -17147,9 +17501,9 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       ? button(project?'Consultar cotización':'Consultar proyecto','open',`data-id="${escape(relatedRecord.id)}"`)
       : !project && record.project && button('Consultar proyecto','stage','data-screen="project"');
     const details = project ? projectViews.detail(record) : projectViews.sourceDetail(record.asana,record.request,{
-      heading:'Detalles de la cotización',folio:record.folio,status:statuses[status(record)]
+      heading:'Detalles de la cotización',folio:record.folio,status:statuses[status(record)],showDescription:false
     });
-    return `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)}</p><h1>${escape(title)}</h1></div>${!project ? quoteStateMarkup(record) : ''}</div><div class="j-actions j-spaced">${back}${related || ''}</div>${details}`;
+    return `<div class="j-case-head"><div><p class="j-eyebrow">${escape(folio)}</p><h1>${escape(title)}</h1></div>${!project ? quoteStateMarkup(record) : ''}</div><div class="j-actions j-spaced">${back}${related || ''}</div>${project ? '' : quoteProductsMarkup(record)}${details}`;
   }
 
   function saveStatus(record) {
@@ -17481,7 +17835,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     notify('Se restauraron los datos iniciales de la sesión.','success');
   }
 
-  async function handleAction(target) {
+  async function handleAction(target,gestion=null) {
     const action = target.dataset.action;
     const record = current();
     if (target.disabled || state.busy && !['stay'].includes(action)) return;
@@ -17489,16 +17843,8 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     if(privateApi && localUser?.role!=='account' && ['new-request','save','resolve-save','validate','send','register-response','new-version','convert'].includes(action)){
       notify('Esta cuenta tiene acceso de consulta y autorización de recetas.','error');return;
     }
-    if (action === 'toggle-menu') {
-      if (state.menu) closeMenu();
-      else {
-        state.menu = true;
-        render();
-        const focusGroup = state.navGroup || sidebarGroupFor(state.screen);
-        root.querySelector(`[data-nav-group="${focusGroup}"] > summary`)?.focus();
-      }
-    }
-    else if (action === 'close-menu') closeMenu();
+    if (action === 'toggle-menu') setMenu(!state.menu);
+    else if (action === 'close-menu') setMenu(false);
     else if (action === 'view' && ['mesa','flujo'].includes(target.dataset.view)) {
       state.view = target.dataset.view;
       render();
@@ -17513,6 +17859,10 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       render();
       root.querySelector(`[data-action="quote-source"][data-source="${source}"]`)?.focus();
     }
+    else if (action === 'quote-detail') {
+      const item=records.find(entry=>entry.id===target.dataset.id && listableQuote(entry));
+      if(item){state.returnToKpis=false;transition('record',item.id);}
+    }
     else if (action === 'open') {
       const item=records.find(entry=>entry.id===target.dataset.id);
       if(!item)return;
@@ -17523,8 +17873,8 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
         :'request';
       transition(next,item.id);
     }
-    else if (action === 'list') { if (state.menu) closeMenu(); state.returnToKpis=false; transition('list'); }
-    else if (['projects','production','deliveries','workflow'].includes(action)) { if(state.menu)closeMenu();state.returnToKpis=false;transition(action); }
+    else if (action === 'list') { if (state.menu) setMenu(false); state.returnToKpis=false; transition('list'); }
+    else if (['projects','production','deliveries','workflow'].includes(action)) { if(state.menu)setMenu(false);state.returnToKpis=false;transition(action); }
     else if (action === 'project-open') {
       const item=records.find(entry=>entry.id===target.dataset.id&&entry.project&&(!entry.historicalPartial || entry.asana));
       if(!item)return;
@@ -17550,7 +17900,10 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     }
     else if (action === 'op-delivery-save') { if(record?.project&&!record.asana)await projectAction(target,'delivery',{...projectDraft(record).delivery}); }
     else if (action === 'op-close') { if(record?.project&&!record.asana)await projectAction(target,'close',{}); }
-    else if (action === 'kpis' || action === 'return-kpis') {if(state.menu) closeMenu();transition('kpis');}
+    else if (action === 'kpis' || action === 'return-kpis') {
+      if (state.menu) setMenu(false);
+      if (state.screen !== 'kpis' || publishedDetail) transition('kpis');
+    }
     else if (action === 'kpi-tab') { if (!['summary','sales','times'].includes(target.dataset.tab)) return; state.kpis.tab=target.dataset.tab;state.kpis.detail=null;render();root.querySelector('#j-kpi-tab-'+state.kpis.tab)?.focus(); }
     else if (action === 'kpi-ranking') { if (!['client','category'].includes(target.dataset.ranking)) return;state.kpis.ranking=target.dataset.ranking;render(); }
     else if (action === 'kpi-detail') {state.kpis.detail={kind:target.dataset.kind,key:target.dataset.key || ''};render();const panel=root.querySelector('#j-kpi-detail');panel?.focus();panel?.scrollIntoView({block:'nearest',behavior:'auto'});}
@@ -17609,12 +17962,14 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       setScreen('project'); render(); notify(storage?'Proyecto guardado. Puedes abrirlo en Proyectos.':'Conversión confirmada en memoria. Un reintento conserva el mismo proyecto.','success');
     } else if (action === 'new-request') {
       let id;
-      if(privateApi)id='DUCO-'+crypto.randomUUID().replaceAll('-','');
+      if(gestion)id=gestion.id;
+      else if(privateApi)id='DUCO-'+crypto.randomUUID().replaceAll('-','');
       else if(browserStore)id='DEMO-'+crypto.randomUUID();
       else do {id=`DEMO-${++sequence}`;} while (records.some(item => item.id === id));
       const item = makeRecord(id,'complete',privateApi?{title:'Nueva solicitud',client:'',contact:'',need:'',location:'',
         contactEmail:'',included:'Fabricación; Empaque',excluded:'Obra civil',account:localUser.username,designer:'',quoteDue:'',deliveryDate:''}
         :{title:'Nueva solicitud de ejemplo',client:'Cliente ficticio nuevo',contact:'Contacto inventado',need:'Describe aquí la necesidad del cliente.',included:'Fabricación; Empaque',excluded:'Obra civil',account:'Account de ejemplo',designer:'Diseño de ejemplo',quoteDue:'2026-10-28',deliveryDate:'2026-11-26'});
+      if(gestion){item.request.title=gestion.title;if(gestion.dueDate)item.request.quoteDue=gestion.dueDate;}
       item.clientId=privateApi?'':'CL-'+id;
       if(privateApi){
         Object.assign(item,{source:'DUCO_LOCAL',category:'',commercialType:null,responsibleId:localUser.username,
@@ -17623,7 +17978,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       }
       if(item.clientId)clients[item.clientId]={name:item.request.client,firstSaleAt:null};
       suppressChanges = true;
-      try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true}); }
+      try { api.create(id,'complete',clone(item.request),{scopePreset:'fabrication-packaging',clientId:item.clientId,emptyArticles:true,initialProducts:gestion?.items}); }
       finally { suppressChanges = false; }
       if(publishedPortfolio){
         state.quoteSource='browser';
@@ -17726,7 +18081,7 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
       event.preventDefault();const keys=['summary','sales','times'],position=keys.indexOf(state.kpis.tab);state.kpis.tab=event.key === 'Home' ? keys[0] : event.key === 'End' ? keys.at(-1) : keys[(position+(event.key === 'ArrowRight' ? 1 : 2))%3];state.kpis.detail=null;render();root.querySelector('#j-kpi-tab-'+state.kpis.tab)?.focus();return;
     }
     if (!state.guard && state.menu && window.matchMedia('(max-width:750px)').matches) {
-      if (event.key === 'Escape') { event.preventDefault(); closeMenu(); return; }
+      if (event.key === 'Escape') { event.preventDefault(); setMenu(false); return; }
       if (event.key === 'Tab') {
         const controls = root.querySelectorAll('.j-sidebar summary, .j-sidebar details[open] button:not(:disabled), .j-sidebar details[open] a[href]');
         const first = controls[0], last = controls[controls.length - 1];
@@ -17773,8 +18128,42 @@ globalThis.__client = {workshopRead:localWorkshop.read,workshopMarkup:localWorks
     const section = new URLSearchParams(window.location.search).get('modulo');
     if (['kpis','production','deliveries'].includes(section)) setScreen(section);
   }
-  const ready=(async()=>{state.busy=true;try{await seed();}catch(error){state.feedback=error.message;state.tone='error';}
-    finally{state.busy=false;if(!readPublishedPage())render();}})();
+  async function openGestionDraft(){
+    const key=/^#gestion-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/.exec(window.location?.hash||'')?.[1];
+    if(!key||!storage)return false;
+    const location=window.location;
+    const officialPages=location.protocol==='https:' && location.host==='gusvann.github.io' &&
+      ['/duco-cotizaciones-demo/','/duco-cotizaciones-demo/index.html'].includes(location.pathname);
+    if(!officialPages&&!['localhost','127.0.0.1','[::1]'].includes(location.hostname))return false;
+    const id=privateApi?'DUCO-'+key.replaceAll('-',''):'DEMO-'+key;
+    const existing=records.find(record=>record.id===id&&!record.asana);
+    if(existing){
+      if(publishedPortfolio)state.quoteSource='browser';
+      transition(locked(existing)?'record':existing.started?'quote':'request',id,true);
+      return true;
+    }
+    if((privateApi&&localUser?.role!=='account')||typeof BroadcastChannel!=='function')return false;
+    const data=await new Promise(resolve=>{
+      const channel=new BroadcastChannel('duco-gestion-'+key);
+      const finish=value=>{clearTimeout(timer);channel.close();resolve(value);};
+      const timer=setTimeout(()=>finish(null),2500);
+      channel.onmessage=({data})=>{if(data&&typeof data==='object')finish(data);};
+      channel.postMessage('request');
+    });
+    if(!data||typeof data.title!=='string'||!data.title.trim()||data.title.length>160||
+        data.dueDate&&!/^\d{4}-\d{2}-\d{2}$/.test(data.dueDate)||!Array.isArray(data.items)||data.items.length>100||
+        data.items.some(row=>!row||typeof row.description!=='string'||!row.description.trim()||row.description.length>1000||
+          !/^[1-9]\d{0,4}$/.test(String(row.quantity))||row.unit!=='Pieza')){
+      state.feedback='Abre la ficha de Gestión para iniciar esta cotización.';
+      state.tone='error';
+      return false;
+    }
+    await handleAction({dataset:{action:'new-request'}},{id,title:data.title,dueDate:data.dueDate,items:data.items});
+    return true;
+  }
+  const ready=(async()=>{state.busy=true;try{await seed();state.busy=false;if(await openGestionDraft())return;}
+    catch(error){state.feedback=error.message;state.tone='error';}
+    finally{state.busy=false;}if(!readPublishedPage())render();})();
   if(publishedPortfolio)window.addEventListener?.('hashchange',()=>ready.then(()=>readPublishedPage(true)));
   window.DemoJourney = Object.freeze({ready,inspect:() => clone({state,records,clients,clockTick}),portfolio:() => clone(kpiMetrics()),saveCurrent:() => saveRecord(current()),openReview:() => transition('review')});
 })();

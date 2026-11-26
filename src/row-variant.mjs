@@ -347,7 +347,8 @@ function installRowVariant(boardCalculator,createCosts) {
   const nativeHeaderCost=articleHeaderRead;
   articleHeaderRead=function(id){
     const cost=nativeHeaderCost(id);
-    if(cost.source!=='LOCAL_CAPTURE'||cost.status!=='Costo incompleto')return cost;
+    const applied=app.meta?.current!==false&&breakdownRow(id)?.mode==='detailed'&&solidWoodEnabled()&&solidWoodEntries(id,true).length;
+    if(!applied&&(cost.source!=='LOCAL_CAPTURE'||cost.status!=='Costo incompleto'))return cost;
     const families=familyTotals(id),groups=Object.values(families);
     const amounts=groups.map(group=>group.cents).filter(Number.isSafeInteger);
     const precise=groups.filter(group=>group.exact).map(group=>group.exact);
@@ -357,7 +358,7 @@ function installRowVariant(boardCalculator,createCosts) {
     if(!amounts.length||!Number.isSafeInteger(cents))return cost;
     if(families.wood.workshop&&groups.every(group=>group.complete))
       return {...cost,cents,status:'Costo capturado',reason:'Costo calculado de los rubros del artículo, sin IVA.'};
-    return {...cost,cents,reason:'Costo actual de los rubros capturados, sin IVA. Hay importes pendientes.'};
+    return {...cost,cents,status:'Costo incompleto',reason:'Costo actual de los rubros capturados, sin IVA. Hay importes pendientes.'};
   };
   function refreshFamilyTotals(onlyId){
     const cache=new Map();
@@ -456,7 +457,9 @@ function installRowVariant(boardCalculator,createCosts) {
     const measureUnit=wood ? takeField(state,attr,'lengthUnit') || pending('Unidad de medidas') : '';
     const faces=wood ? takeField(state,attr,'finishFaces') || pending('Caras de acabado') : '';
     const jointed=wood ? takeField(state,attr,'jointed') || pending('Entablerado') : '';
-    const waste=wood ? takeField(state,attr,'wasteRate') || pending('Desperdicio') : '';
+    const individualWaste=wood?takeField(state,attr,'wasteRate'):'';
+    const articleWaste=wood?solidWoodState(app.openPartId)?.workshop?.wasteRate:null;
+    const waste=wood?(articleWaste!=null?'<span class="field" title="Desperdicio del artículo">'+esc(articleWaste)+' %</span>':individualWaste||pending('Desperdicio')):'';
     const reason=wood ? takeField(state,attr,'adjustment.reason') : '';
     const reset=wood ? takeRegion(state,'data-solid-action="reset"','button') : '';
     const group=wood ? takeRegion(state,'data-solid-action="group-price"','button') : '';
@@ -723,7 +726,8 @@ function installRowVariant(boardCalculator,createCosts) {
     const price=labor?pending('Precio unitario'):f(wood?'adjustment.price':process?'detail.unitPrice':'unitPrice',priceLabel,priceValue==null?'':String(priceValue));
     const amount=wood?solidWoodMoney(result.articleCosts.woodCost):displayAmount(value,item,process,costMap);
     const jointLabel=value.jointed==null||value.jointed===''?'':String(value.jointed)==='1'?'Sí':String(value.jointed)==='0'?'No':'Por revisar';
-    const measures=wood?'<div class="rv-wood-measure-grid">'+f('width','Ancho',value.width)+f('length','Largo',value.length)+f('lengthUnit','Unidad de medidas',value.lengthUnit,true)+f('finishFaces','Caras de acabado',value.finishFaces,true)+f('jointed','Entablerado',jointLabel,true)+f('wasteRate','Desperdicio (%)',value.wasteRate)+'</div>':'';
+    const articleWaste=wood?solidWoodState(item.id)?.workshop?.wasteRate:null;
+    const measures=wood?'<div class="rv-wood-measure-grid">'+f('width','Ancho',value.width)+f('length','Largo',value.length)+f('lengthUnit','Unidad de medidas',value.lengthUnit,true)+f('finishFaces','Caras de acabado',value.finishFaces,true)+f('jointed','Entablerado',jointLabel,true)+(articleWaste!=null?'<span class="field" title="Desperdicio del artículo">'+esc(articleWaste)+' %</span>':f('wasteRate','Desperdicio (%)',value.wasteRate))+'</div>':'';
     const choice=wood?value.cnc?.decision==='yes'?'Sí':value.cnc?.decision==='no'?'No':'—':'';
     const cnc=wood?f('cnc.decision','CNC / láser',choice,true):'';
     const row=wood?woodGrid(concept,woodQuantityCell(item.id,value,quantity,unit,result),f('woodKind','Material',value.woodKind,true),f('thickness','Espesor (in)',value.thickness),measures,price,cnc,amountHtml(amount,'',false,'Calculado con medidas')):supply?supplyGrid(f('category','Tipo de insumo',value.category,true),concept,f('sku','SKU',value.sku),quantity,unit,price,amountHtml(amount)):grid(concept,quantity,unit,price,amountHtml(amount));

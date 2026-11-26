@@ -10,7 +10,7 @@ import vm from 'node:vm';
 const read=name=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 const template=read('cotizador.html');
 // A test run uses one immutable source checkpoint, even if a collaborator edits later.
-const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','astil-chrome.js','journey.js'].map(name=>[name,read(name)]);
+const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','astil-chrome.js','quote-products.js','journey.js'].map(name=>[name,read(name)]);
 const domain=[...quoteTemplate(template).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])
   .find(source=>source.includes('var QuoteSchema')&&source.includes('var QuoteManufacturing_'));
 if(!domain) throw new Error('The shared public domain is required.');
@@ -62,19 +62,21 @@ async function harness({mobile=false,portfolioFixtures=false,privateFixture=null
     globalThis.__nodes=new Map();
     function element(id=''){
       return {id,innerHTML:'',textContent:'',hidden:false,inert:false,dataset:{},disabled:false,
-        listeners:new Map(),style:{},
+        listeners:new Map(),style:{},attributes:new Map(),classList:{toggle(){}},
         addEventListener(type,fn){const list=this.listeners.get(type)||[];list.push(fn);this.listeners.set(type,list);},
         contains(target){return target===this||target?.container===this;},
         querySelector(){return null;},querySelectorAll(){return [];},
         focus(){document.activeElement=this;},scrollIntoView(){},replaceChildren(){this.innerHTML='';},
-        remove(){},before(){},setAttribute(){},removeAttribute(){},getClientRects(){return [{}];}};
+        remove(){},before(){},setAttribute(name,value){this.attributes.set(name,value);},removeAttribute(name){this.attributes.delete(name);},getClientRects(){return [{}];}};
     }
     for(const id of ['journey-root','journey-footer','quote-host','workspace','j-main']) __nodes.set(id,element(id));
+    const menuNodes=new Map(['#j-sidebar','.j-mobile-menu','.j-sidebar-backdrop'].map(selector=>[selector,element()]));
+    __nodes.get('journey-root').querySelector=selector=>menuNodes.get(selector)||null;
     globalThis.document={activeElement:null,
       getElementById(id){return __nodes.get(id)||null;},createElement(){return element();},
       addEventListener(type,fn){const list=__events.get(type)||[];list.push(fn);__events.set(type,list);}};
     globalThis.matchMedia=()=>({matches:__mobile});
-    globalThis.__client={app:{epoch:0,inputErrors:new Map()},D:QuoteDomain,editor(){},
+    globalThis.__client={app:{epoch:0,inputErrors:new Map()},D:QuoteDomain,editor(){},quoteEstimate(){return null;},
       partDraftDirty(){return Boolean(this.app.partDraft);},
       partApply(){this.app.partDraft=null;this.app.breakdownEditor=null;return true;},
       partDiscard(){this.app.partDraft=null;this.app.breakdownEditor=null;}};
@@ -119,6 +121,55 @@ async function harness({mobile=false,portfolioFixtures=false,privateFixture=null
   };
   return {sandbox,root,footer,click,field,key,inspect,metrics,setPortfolioFixtures,Q:sandbox.DemoQuote,app:sandbox.__client.app};
 }
+
+test('quote titles in Mesa and Flujo show the commercial lines of the selected quote, independently of the next step',async()=>{
+  const h=await harness();
+  for(const view of ['mesa','flujo']){
+    await h.click('view',{view});
+    assert.match(h.root.innerHTML,/data-action="quote-detail"[^>]*data-id="DEMO-101"[^>]*>Consola modular de muestra/);
+    await h.click('quote-detail',{id:'DEMO-101'});
+    assert.equal(h.inspect().state.screen,'record');
+    assert.match(h.root.innerHTML,/<th scope="row">Consola modular<\/th><td>2<\/td><td>Pieza<\/td>/);
+    assert.doesNotMatch(h.root.innerHTML,/Objeto de muestra con madera pendiente/);
+    await h.click('list');
+    await h.click('quote-detail',{id:'DEMO-102'});
+    assert.match(h.root.innerHTML,/<th scope="row">Objeto de muestra con madera pendiente<\/th>/);
+    await h.click('list');
+    assert.equal(h.inspect().state.view,view);
+  }
+  await h.click('quote-detail',{id:'DEMO-206'});
+  assert.match(h.root.innerHTML,/Versión enviada · V1/);
+  assert.match(h.root.innerHTML,/<th scope="row">Consola modular<\/th>/);
+  await h.click('list');
+  await h.click('quote-detail',{id:'DEMO-209'});
+  assert.match(h.root.innerHTML,/no incluye un desglose/);
+});
+
+test('reopened local details use saved draft lines or the exact sent version without writing to storage',async()=>{
+  const seed=await harness();
+  const record=seed.inspect().records.find(entry=>entry.id==='DEMO-206');
+  const snapshot=structuredClone(record.sent.snapshot);
+  const item=snapshot.quote.items[0];
+  item.description='Mesa <prueba>';
+  item.quantity='3';
+  snapshot.quote.items.push({...item,id:'ITM-SEGUNDO',description:'Banca & banco',quantity:'1',specs:[]});
+  const newRow=seed.sandbox.QuoteManufacturing_.blank({items:[{id:'ITM-SEGUNDO'}]},()=>'MFG-TEST').items[0];
+  snapshot.quote.manufacturing.items.push(plain(newRow));
+  const local=async entry=>harness({privateFixture:{user:{role:'account',username:'prueba'},
+    records:[],drafts:[{record:entry,snapshot,revision:1}],clients:{},coverage:null}});
+  const draft=await local({...record,sent:null,versions:[],acceptedVersion:null,acceptedAt:null});
+  assert.equal(draft.inspect().state.feedback,'');
+  await draft.click('quote-detail',{id:record.id});
+  assert.match(draft.root.innerHTML,/<th scope="row">Mesa &lt;prueba&gt;<\/th><td>3<\/td>/);
+  assert.match(draft.root.innerHTML,/<th scope="row">Banca &amp; banco<\/th><td>1<\/td>/);
+  assert.equal(draft.sandbox.privateWrites.length,0);
+
+  const sent=await local(record);
+  await sent.click('quote-detail',{id:record.id});
+  assert.match(sent.root.innerHTML,/<th scope="row">Consola modular<\/th><td>2<\/td>/);
+  assert.doesNotMatch(sent.root.innerHTML,/Mesa &lt;prueba&gt;|Banca &amp; banco/);
+  assert.equal(sent.sandbox.privateWrites.length,0);
+});
 
 test('public Asana quote list shows escaped titles in Mesa and Flujo without exposing other fields',async()=>{
   const publishedFixture={
@@ -219,8 +270,13 @@ test('quote omits the duplicate action strip but preserves native saving, status
   assert.doesNotMatch(h.root.innerHTML,/j-save-strip|data-action="save"/,'Quote has no duplicate upper action band');
   assert.match(h.footer.innerHTML,/data-action="stage" data-screen="review"/,'Review remains available in the footer with its existing guard');
   h.app.partDraft={synthetic:true};
-  await h.click('toggle-menu');
-  assert.match(h.root.innerHTML,/<strong class="j-save-status" role="status">Captura sin aplicar<\/strong>/);
+  const status={hidden:true,textContent:''};
+  const query=h.root.querySelector;
+  h.root.querySelector=selector=>selector==='.j-save-status'?status:query(selector);
+  for(const listener of h.sandbox.__events.get('input')) listener({target:h.sandbox.__nodes.get('quote-host')});
+  await settle();
+  assert.equal(status.textContent,'Captura sin aplicar');
+  assert.equal(status.hidden,false);
   await h.click('discard-pending');
   h.app.q.items[0].unitPrice='4000';
   await h.field('j-save-outcome','unknown',{container:h.footer});
@@ -253,13 +309,13 @@ test('refreshing the quote leaves its navigation at the same scroll position',as
   const outer=scrollingNavigation(),inner=scrollingNavigation();
   h.root.querySelector=selector=>selector==='.j-stages'&&h.root.innerHTML.includes('class="j-stages"')?outer.navigation:null;
   h.sandbox.__nodes.get('quote-host').querySelector=selector=>selector==='.steps'?inner.navigation:null;
-  await h.click('toggle-menu');
+  await h.click('stage',{screen:'quote'});
   assert.doesNotMatch(h.root.innerHTML,/class="j-stages"/,'The quote editor has one section bar');
   assert.equal(outer.navigation.scrollLeft,0,'The absent commercial menu does not scroll');
   assert.equal(inner.navigation.scrollLeft,0,'The quote menu does not scroll toward a later step');
   assert.equal(inner.navigation.scrollTop,75,'Vertical position is preserved');
   outer.target({left:20,right:100});inner.target({left:20,right:100});
-  await h.click('toggle-menu');
+  await h.click('stage',{screen:'quote'});
   assert.equal(inner.navigation.scrollLeft,0,'Returning to an earlier step leaves the horizontal position unchanged');
   assert.equal(inner.navigation.scrollTop,75,'Returning leaves the vertical position unchanged');
 });
@@ -476,6 +532,10 @@ test('the private view separates imported quotes and projects, with correct owne
   await h.field('j-responsible-filter','OWNER-MOCK');
   assert.match(h.root.innerHTML,/data-record-id="ASANA-QUOTE"/);
   await h.click('open',{id:'ASANA-QUOTE'});
+  assert.match(h.root.innerHTML,/Productos de la cotización/);
+  assert.match(h.root.innerHTML,/El expediente de origen no incluye un desglose/);
+  assert.equal(h.root.innerHTML.split('Detalle de la cotización').length,2);
+  assert.doesNotMatch(h.root.innerHTML,/<table class="j-quote-products"/);
   assert.match(h.root.innerHTML,/Detalle de la cotización/);
   assert.match(h.root.innerHTML,/Consultar proyecto/);
   assert.doesNotMatch(h.root.innerHTML,/data-action="convert"/);
@@ -488,6 +548,10 @@ test('the private view separates imported quotes and projects, with correct owne
   assert.match(h.root.innerHTML,/Detalle del proyecto/);
   assert.match(h.root.innerHTML,/Folio de origen<\/dt><dd>2611-14/);
   assert.doesNotMatch(h.root.innerHTML,/data-action="op-(?:plan|task|close)/);
+  await h.click('list');
+  await h.click('quote-detail',{id:'LOCAL-REQUEST'});
+  assert.match(h.root.innerHTML,/Aún no se han agregado productos/);
+  assert.doesNotMatch(h.root.innerHTML,/El expediente de origen no incluye/);
   await h.click('list');
   await h.click('open',{id:'LOCAL-REQUEST'});
   await h.click('stage',{screen:'quote'});
@@ -526,7 +590,12 @@ test('chart legends escape text, keep stable IDs/colors, and distinguish empty, 
   const label='Cliente <svg onload="x"> & "igual" \'prueba\'';
   const clients={a:{name:label,firstSaleAt:'2025-01-01'},b:{name:label,firstSaleAt:'2025-01-01'}};
   const values=[portfolioRecord('DEMO-LEGEND-A',10000,'a'),portfolioRecord('DEMO-LEGEND-B',30000,'b')];
-  h.setPortfolioFixtures(values,clients);await h.click('kpis');
+  const openWithRecords=async records=>{
+    await h.click('list');
+    h.setPortfolioFixtures(records,clients);
+    await h.click('kpis');
+  };
+  await openWithRecords(values);
   assert.ok(h.root.innerHTML.includes(escaped(label)));
   assert.doesNotMatch(h.root.innerHTML,/<svg\s+onload=/i);
   for(const key of ['a','b']) assert.ok(detailControl(h.root.innerHTML,'client',key),'Identical labels retain separate accessible client controls');
@@ -539,25 +608,25 @@ test('chart legends escape text, keep stable IDs/colors, and distinguish empty, 
     return [key,color];
   }));
   const firstColors=colors(h.root.innerHTML);
-  h.setPortfolioFixtures([...values].reverse(),clients);await h.click('kpis');
+  await openWithRecords([...values].reverse());
   assert.deepEqual(colors(h.root.innerHTML),firstColors,'Color follows the stable client ID rather than source order');
-  h.setPortfolioFixtures([],clients);await h.click('kpis');
+  await openWithRecords([]);
   assert.deepEqual(donutTotals(h.root.innerHTML),['Sin datos','Sin datos']);
   assert.match(h.root.innerHTML,/Sin observaciones/);
   assert.doesNotMatch(h.root.innerHTML,/\bdata-kpi-chart-action\b/,'Empty data cannot create an interactive proportional mark');
-  h.setPortfolioFixtures([portfolioRecord('DEMO-RENDER-PENDING',null)],clients);await h.click('kpis');
+  await openWithRecords([portfolioRecord('DEMO-RENDER-PENDING',null)]);
   assert.deepEqual(donutTotals(h.root.innerHTML),['Pendiente','Pendiente']);
   assert.match(h.root.innerHTML,/Importes pendientes/);
   assert.doesNotMatch(h.root.innerHTML,/\bdata-kpi-chart-action\b/,'A missing price is not a zero-price share');
-  h.setPortfolioFixtures([portfolioRecord('DEMO-RENDER-ZERO',0)],clients);await h.click('kpis');
+  await openWithRecords([portfolioRecord('DEMO-RENDER-ZERO',0)]);
   assert.deepEqual(donutTotals(h.root.innerHTML),['$0.00','$0.00']);
   assert.match(h.root.innerHTML,/no hay área proporcional/);
   assert.doesNotMatch(h.root.innerHTML,/\bdata-kpi-chart-action\b/);
-  h.setPortfolioFixtures([portfolioRecord('DEMO-RENDER-OVERFLOW-A',Number.MAX_SAFE_INTEGER),portfolioRecord('DEMO-RENDER-OVERFLOW-B',1)],clients);await h.click('kpis');
+  await openWithRecords([portfolioRecord('DEMO-RENDER-OVERFLOW-A',Number.MAX_SAFE_INTEGER),portfolioRecord('DEMO-RENDER-OVERFLOW-B',1)]);
   assert.deepEqual(donutTotals(h.root.innerHTML),['Fuera de rango','Fuera de rango']);
   assert.match(h.root.innerHTML,/excede el rango seguro/);
   assert.doesNotMatch(h.root.innerHTML,/\bdata-kpi-chart-action\b/,'Overflow cannot silently become a valid share');
-  h.setPortfolioFixtures([portfolioRecord('DEMO-RENDER-MAX-SAFE',Number.MAX_SAFE_INTEGER)],clients);await h.click('kpis');
+  await openWithRecords([portfolioRecord('DEMO-RENDER-MAX-SAFE',Number.MAX_SAFE_INTEGER)]);
   assert.deepEqual(donutTotals(h.root.innerHTML),['$90,071,992,547,409.91','$90,071,992,547,409.91'],'The last cent must survive rendering at the safe-integer limit');
 });
 
@@ -586,10 +655,12 @@ test('mobile KPI navigation closes its drawer before showing a dirty-draft guard
   h.app.q.items[0].unitPrice='4000';
   await h.click('toggle-menu');
   assert.equal(h.inspect().state.menu,true);
+  const nav=h.root.querySelector('#j-sidebar');
+  assert.equal(nav.attributes.get('aria-modal'),'true');
   await h.click('kpis');
   assert.equal(h.inspect().state.menu,false);
   assert.equal(h.inspect().state.guard,'dirty');
-  assert.doesNotMatch(h.root.innerHTML,/aria-modal="true"/,'The guarded journey and the mobile drawer cannot both be modal');
+  assert.equal(nav.attributes.has('aria-modal'),false,'The guarded journey and the mobile drawer cannot both be modal');
   assert.match(h.footer.innerHTML,/role="alertdialog"/);
   await h.click('stay');
   assert.equal(h.inspect().state.screen,'request');

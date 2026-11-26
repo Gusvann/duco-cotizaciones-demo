@@ -27,7 +27,7 @@ const privateAssets = new Map([
   ...['sora','public-sans'].map(name=>[
     '/src/assets/fonts/'+name+'.woff2',['src/assets/fonts/'+name+'.woff2','font/woff2']
   ]),
-  ...['astil-chrome','gestion-chrome','gestion-preview','gestion-preview-model','gestion-preview-board','gestion-preview-table'].map(name=>[
+  ...['astil-chrome','gestion-chrome','gestion-preview','gestion-preview-model','gestion-preview-board','gestion-preview-table','quote-products'].map(name=>[
     '/src/'+name+'.js',['src/'+name+'.js','text/javascript; charset=utf-8']
   ])
 ]);

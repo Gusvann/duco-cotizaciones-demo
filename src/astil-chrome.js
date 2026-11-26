@@ -26,11 +26,25 @@
     const group = (key,label,entries) => `<details class="j-nav-group" data-nav-group="${key}"${openGroup === key ? ' open' : ''}><summary class="j-module">${navIcon('portfolio')}<span>${label}</span>${navIcon('chevron')}</summary><div class="j-nav-submenu">${entries.join('')}</div></details>`;
     const operationMenu = group('operations','Operación',operationEntries);
     const portfolioMenu = group('portfolio','Portafolio',portfolioEntries);
-    return `<aside id="j-sidebar" class="j-sidebar${menuOpen ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal ? ' role="dialog" aria-modal="true"' : ''}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(accountLabel)}</strong><small>${escape(accountDetail)}</small></span></div></aside>${menuOpen ? '<button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"></button>' : ''}`;
+    return `<aside id="j-sidebar" class="j-sidebar${menuOpen ? ' j-sidebar-open' : ''}" aria-label="Navegación de Astil"${modal ? ' role="dialog" aria-modal="true"' : ''}>${brandMarkup()}<p class="j-sidebar-subtitle">GESTIÓN EMPRESARIAL</p><nav aria-label="Módulos">${inactive('panorama','Panorama')}${inactive('finance','Finanzas')}${inactive('inventory','Inventario')}${operationMenu}${portfolioMenu}${inactive('treasury','Tesorería')}<p class="j-nav-scope">Cotizaciones, proyectos y entrega.</p></nav><div class="j-sidebar-bottom"><span class="j-avatar" aria-hidden="true">D</span><span><strong>${escape(accountLabel)}</strong><small>${escape(accountDetail)}</small></span></div></aside><button type="button" class="j-sidebar-backdrop" data-action="close-menu" aria-label="Cerrar menú"${menuOpen ? '' : ' hidden'}></button>`;
+  }
+
+  function setMenuOpen(container, open, mobile) {
+    const nav = container.querySelector('#j-sidebar');
+    nav.classList.toggle('j-sidebar-open',open);
+    if (open && mobile) {
+      nav.setAttribute('role','dialog');
+      nav.setAttribute('aria-modal','true');
+    } else {
+      nav.removeAttribute('role');
+      nav.removeAttribute('aria-modal');
+    }
+    container.querySelector('.j-mobile-menu').setAttribute('aria-expanded',String(open));
+    container.querySelector('.j-sidebar-backdrop').hidden = !open;
   }
 
   function topbar(menuOpen, actions) {
     return `<header class="j-top"><div class="j-top-identity"><button type="button" class="j-mobile-menu" data-action="toggle-menu" aria-label="Abrir menú" aria-expanded="${menuOpen}" aria-controls="j-sidebar">${navIcon('menu')}</button>${brandMarkup('j-mobile-brand')}<span class="j-top-name">DUCO</span><span class="j-top-divider">/</span><span class="j-top-caption">Espacio de trabajo</span></div><div class="j-top-actions">${actions}</div></header>`;
   }
-  window.AstilChrome = Object.freeze({brandMarkup, sidebar, topbar});
+  window.AstilChrome = Object.freeze({brandMarkup, sidebar, topbar, setMenuOpen});
 })();

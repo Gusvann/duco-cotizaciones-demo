@@ -3,7 +3,6 @@
 Interfaz oficial del cotizador seleccionada por el propietario el **5 de noviembre de 2026**. La propuesta antes denominada «B» pasa a ser la base de trabajo del cotizador y sustituye la portada de este repositorio. Las menciones a B en nombres internos o pruebas identifican su origen histórico; no son otra versión vigente.
 
 - [Abrir cotizador](https://gusvann.github.io/duco-cotizaciones-demo/)
-- [Abrir Gestión DUCO](https://gusvann.github.io/duco-cotizaciones-demo/gestion.html)
 - [Ver la galería de productos](https://gusvann.github.io/duco-cotizaciones-demo/catalogo.html)
 - [Repositorio](https://github.com/Gusvann/duco-cotizaciones-demo)
 
@@ -24,17 +23,17 @@ Por corrección directa del propietario del 5 de noviembre, «Mapa del proceso»
 ### Probar una cotización en GitHub Pages
 
 1. Abre **Nueva solicitud**, completa los datos de ejemplo y entra a **Artículos → Agregar producto → Producto de línea**. El catálogo permite elegir entre 135 variantes de 12 productos. La geometría, el material y el canto ayudan a identificar la ilustración.
-2. Consulta los despieces y tarifas de fabricación en **Ver galería** o aplica la variante. Edita cantidades o despieces y pulsa **Guardar borrador**. Una vez confirmado, puedes cerrar la pestaña y abrir el expediente desde Mesa en el mismo perfil del navegador.
+2. Consulta los despieces y tarifas de fabricación en **Ver galería** o aplica la variante. Edita cantidades o despieces y pulsa **Guardar borrador**. Para retomarlo, abre **Cotizador → Cotizaciones de este navegador** en el mismo perfil. En la Mesa, el nombre abre **Productos de la cotización**, con producto, cantidad y unidad. **Continuar cotización**, en la columna **Siguiente paso**, abre el editor del borrador con sus artículos y costos. Para las versiones enviadas, la ficha consulta las partidas de esa versión.
 3. Completa los datos comerciales y las dos revisiones, registra el envío de prueba y la aceptación de esa misma versión. **Convertir en proyecto** crea la ficha en **Portafolio → Proyectos**. La ficha conserva la versión aceptada y su importe.
 4. Los cambios de la prueba se guardan en IndexedDB en el navegador que los creó. Un segundo perfil comienza con los expedientes ficticios de muestra. Borrar los datos del sitio también borra las pruebas de ese perfil.
 
 ### Gestión DUCO
 
-En **Portafolio → Gestión DUCO**, la **Mesa de seguimiento** y el **Tablero de trabajo** comparten cotizaciones y proyectos de ejemplo. La mesa reutiliza el diseño «Líneas limpias» y el tablero agrupa las tarjetas por etapa con el diseño del Flujo de oportunidades.
+La dirección `gestion.html`, relativa a la portada de Pages, sigue disponible para quienes guardaron el marcador de **Gestión DUCO**. Abre una vista de prueba con una **Mesa de seguimiento** y un **Tablero de trabajo** que comparten cotizaciones y proyectos de ejemplo. La mesa reutiliza el diseño «Líneas limpias» y el tablero agrupa las tarjetas por etapa con el diseño del Flujo de oportunidades. Para abrir el editor desde la portada, elige **Cotizador** en Portafolio y abre una solicitud nueva o un borrador de **Cotizaciones de este navegador**.
 
 Para cambiar el estado, arrastra una tarjeta a la columna de destino. En pantalla táctil, usa el asa junto al folio. Con teclado, usa **Mover a…**. La Mesa, la ficha y los conteos reflejan el cambio. Abre la ficha de una cotización aceptada y elige **Convertir en proyecto** para crear su proyecto vinculado. Desde la ficha del proyecto puedes asignar tareas y registrar notas.
 
-Los cambios de Gestión duran hasta que recargas su pestaña. Los listados públicos de Asana se consultan desde **Cotizador** y **Proyectos**.
+Desde la ficha de una solicitud o borrador del tablero, **Abrir en Cotizador** lleva sus productos al editor. Pulsa **Guardar borrador** para conservar esa cotización en **Cotizaciones de este navegador**. Las tarjetas y notas del tablero duran hasta que recargas su pestaña. Los listados públicos de Asana se consultan desde **Cotizador** y **Proyectos**.
 
 ### Listas de Cotizador y Proyectos
 
@@ -103,11 +102,23 @@ En **Costos generales**, una decisión de alcance se comparte entre las partidas
 
 ### Menú lateral
 
+**Portafolio** contiene **KPIs**, **Cotizador** y **Proyectos**. KPIs se abre en la misma pestaña. Si los indicadores ya están abiertos, volver a seleccionarlos conserva el filtro, la pestaña de análisis y la posición de lectura. Abrir o cerrar el menú móvil también conserva el panel que se está consultando.
+
 Operación y Portafolio forman un acordeón en escritorio y móvil. Portafolio inicia abierto. Al abrir un grupo se cierra el otro y el grupo abierto puede plegarse. El filtro de Cotizador y la reapertura del menú móvil conservan el último despliegue de la sesión. Al cambiar de pantalla, se abre el grupo del destino. En móvil, el foco queda dentro del menú mientras está abierto. Escape lo cierra y devuelve el foco al botón **Abrir menú**.
 
 En GitHub Pages, los borradores confirmados y los proyectos convertidos persisten en ese navegador. La apertura directa del archivo HTML conserva el modo de demostración en memoria. La vista privada usa la base local y protege su acceso con la cuenta local. La publicación del frontend no acredita integración productiva.
 
 ## Captura y recetas
+
+### Costo de una pieza y del pedido
+
+En **Artículos**, el costo unitario corresponde al despiece de una unidad. El subtotal de la partida multiplica ese costo por la cantidad solicitada. En **Costos generales** aparecen el importe de cada artículo, su parte de los gastos comunes y los indirectos. Una tarifa aplicable vacía deja el costo conocido como **parcial**. Al guardar el borrador se conservan el despiece aplicado y los datos de cálculo para la siguiente apertura.
+
+El caso de prueba usa una silla con $112.00 de madera, $8.00 de herrajes y $5.00 de maquila. Cada silla cuesta $125.00 y seis cuestan $750.00. Con una mesa de $250.00 y empaque fijo de $40.02, el pedido suma **$1,040.02 antes de IVA**, también al cerrar y reabrir el navegador. Aplicar indirectos del 10 % lleva el costo a **$1,144.02**. Los importes son ficticios. [Prueba de cálculo](tests/local-quote-editing.mjs) · [Prueba de guardado y reapertura](tests/browser/public-pages.mjs).
+
+**Desperdicio de madera del artículo** permite aplicar un porcentaje a sus piezas y recuperar los porcentajes originales. **Materiales de acabado** admite precio y rendimiento documentados. Desde **MO Ensambles** se consulta el cálculo de dóminos. En **Precio**, el margen objetivo usa el costo asignado a la partida y el ingreso después del descuento, antes de IVA. **Usar precio sugerido** aplica el resultado al artículo.
+
+### Recetas del catálogo
 
 La galería y el cotizador en Pages consultan **135 recetas reales** de 12 productos. Las fichas muestran componentes, cantidades por artículo, operaciones, tarifas históricas y referencias de hoja. Los borradores previamente guardados conservan su receta de demostración. La [guía de recetas de fabricación](docs/recetas-de-fabricacion.md) documenta las fuentes y los cortes anteriores.
 

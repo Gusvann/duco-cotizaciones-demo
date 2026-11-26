@@ -16,6 +16,7 @@ import {transformEconomicDefaults} from './economic-defaults.mjs';
 import {extendCoverageDefaults} from './coverage-defaults.mjs';
 import {extendWorkflowWarnings} from './workflow-warnings-extension.mjs';
 import {extendLocalQuoteEditing} from './local-quote-editing-extension.mjs';
+import {extendQuoteCosts} from '../src/quote-costs.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function recipeImages(){
  const directory=path.join(root,'src/assets/catalogo-sintetico');
@@ -36,7 +37,7 @@ function recipeImages(){
 export function quoteTemplate(native){
  if(createHash('sha256').update(native).digest('hex')!=='3291618da77246df866be50ce53e3a74589435797e0b75975e35d69b71bb6a67')throw Error('NATIVE_D85_CHANGED');
  const extensions=[extendRecipes,extendRecipePresentation,extendWoodPieces,extendPhone,extendArticleMeasures,extendRowVariant,
-   extendSessionAutosave,extendViewPolish,extendRecipeWorkshop,transformEconomicDefaults,extendCoverageDefaults,extendWorkflowWarnings,extendLocalQuoteEditing];
+   extendSessionAutosave,extendViewPolish,extendRecipeWorkshop,transformEconomicDefaults,extendCoverageDefaults,extendWorkflowWarnings,extendLocalQuoteEditing,extendQuoteCosts];
  return extensions.reduce((source,extend)=>extend(source),native);
 }
 export function build(){
@@ -75,6 +76,7 @@ ${scripts}
 <script>${read('portfolio-kpis.js')}</script>
 <script>${read('project-operations.js')}</script>
 <script>${read('project-views.js')}</script>
+<script>${read('quote-products.js')}</script>
 <script src="src/published-portfolio.js"></script>
 <script>${read('astil-chrome.js')}</script>
 <script>${read('journey.js')}</script>

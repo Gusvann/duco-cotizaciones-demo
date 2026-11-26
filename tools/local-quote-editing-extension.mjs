@@ -1,9 +1,14 @@
 // Local quotation controls layered over the pinned cotizador. Monetary
 // suggestions use the same cent rounding as the commercial line.
 export function suggestPrototypePrice(domain, item, articleCostCents) {
-  if (!item?.prototype || !Number.isSafeInteger(articleCostCents) || articleCostCents < 0) return null;
+  if(!item?.prototype)return null;
+  return suggestMarginPrice(domain,item,articleCostCents,item.prototypeMargin??'40');
+}
+
+export function suggestMarginPrice(domain,item,articleCostCents,targetMargin) {
+  if (!Number.isSafeInteger(articleCostCents) || articleCostCents < 0) return null;
   try {
-    const margin = domain.decimal(item.prototypeMargin ?? '40', 2, 99.99);
+    const margin = domain.decimal(targetMargin, 2, 99.99);
     const quantity = domain.decimal(item.quantity, 3, 100000);
     const discount = domain.decimal(item.discount, 2, 100);
     if (margin === null || !quantity || discount === null || discount === 10000) return null;
@@ -28,18 +33,22 @@ export function suggestPrototypePrice(domain, item, articleCostCents) {
 }
 
 function prototypePriceControl(item, index, totals) {
-  if (!item.prototype) return '';
   const estimate = prototypeEstimate(item, totals);
-  const suggestion = suggestPrototypePrice(D, item, estimate.complete ? estimate.cents : null);
+  const marginField=item.prototype?'prototypeMargin':'targetMargin';
+  const suggestion = suggestMarginPrice(D,item,estimate.complete?estimate.cents:null,item[marginField]);
   const cost = estimate.cents === null ? 'Pendiente' : QuotePdf.money(estimate.cents) + (estimate.complete ? '' : ' · parcial');
-  return '<div class="prototype-price" aria-label="Precio estimado del prototipo">'+
-    '<strong>Prototipo</strong><small>Costo asignado '+esc(cost)+'</small>'+
-    field('items.'+index+'.prototypeMargin','Margen objetivo %',{type:'number',max:99.99})+
-    '<output>'+ (suggestion ? 'Precio unitario sugerido '+QuotePdf.money(suggestion.unitPriceCents) : 'Precio sugerido pendiente')+'</output>'+
+  return '<div class="prototype-price" aria-label="Precio estimado del artículo">'+
+    (item.prototype?'<strong>Prototipo</strong>':'')+'<small>Costo asignado '+esc(cost)+'</small>'+
+    field('items.'+index+'.'+marginField,'Margen objetivo %',{type:'number',max:99.99})+
+    '<output>'+ (suggestion ? 'Precio unitario sugerido '+QuotePdf.money(suggestion.unitPriceCents)+' antes de IVA' : 'Precio sugerido pendiente')+'</output>'+
     (suggestion&&editable()?'<button type="button" class="quiet" data-apply-prototype-price="'+esc(item.id)+'">Usar precio sugerido</button>':'')+'</div>';
 }
 
 function prototypeEstimate(item, totals) {
+  if(totals.estimate){
+    const row=totals.estimate.items.find(entry=>entry.itemId===item.id);
+    return {cents:row?.hasAmount?row.assignedNet:null,complete:!!row?.hasAmount&&!row.partial&&prototypeCostsReady(app.q,item.id,totals)};
+  }
   const allocation = totals.allocation?.items?.find(row=>row.itemId===item.id);
   const captured = localRows.articleEstimate(item.id);
   const cents = allocation?.assignedNet;
@@ -317,7 +326,7 @@ export function extendLocalQuoteEditing(source) {
   source=once(source,"+'</strong><em>'+status+'</em></span></td></tr>'",
     "+'</strong><em>'+status+'</em></span>'+prototypePriceControl(r,i,totals)+'</td></tr>'");
   source=once(source,"const refreshDerived = /^(items\\.\\d+\\.(quantity|unit|unitPrice|discount|tax)",
-    "const refreshDerived = /^(items\\.\\d+\\.(quantity|unit|unitPrice|discount|tax|prototypeMargin)");
+    "const refreshDerived = /^(items\\.\\d+\\.(quantity|unit|unitPrice|discount|tax|prototypeMargin|targetMargin)");
   source=once(source,'  async function handleClick(e) {', `  async function handleClick(e) {
     const recipeAction=e.target.closest('[data-local-recipe-action]');
     if(recipeAction){await handleLocalRecipeAction(recipeAction);return;}
@@ -325,9 +334,9 @@ export function extendLocalQuoteEditing(source) {
     if(applyPrice){
       if(!editable()||app.busy||app.operation||app.step!==3)return;
       const item=app.q.items.find(row=>row.id===applyPrice.dataset.applyPrototypePrice);
-      if(!item?.prototype)return;
+      if(!item)return;
       const estimate=prototypeEstimate(item,financialTotals());
-      const suggestion=suggestPrototypePrice(D,item,estimate.complete?estimate.cents:null);
+      const suggestion=suggestMarginPrice(D,item,estimate.complete?estimate.cents:null,item.prototype?item.prototypeMargin:item.targetMargin);
       if(!suggestion)return;
       beginCapture();item.unitPrice=suggestion.unitPrice;
       const index=app.q.items.indexOf(item);
@@ -350,7 +359,7 @@ export function extendLocalQuoteEditing(source) {
     "const base=app.lineCatalog?.products||[],existing=new Set(base.map(product=>product.id));return [...base,...approvedLocalProducts.filter(product=>!existing.has(product.id))];");
   source=once(source,"app.lineState=state;editor();focusLine('#line-search');},intent);return;",
     "app.lineState=state;editor();focusLine('#line-search');refreshApprovedCatalog();},intent);return;");
-  const functions=[privateClientAltaAllowed,suggestPrototypePrice,prototypeEstimate,prototypeCostsReady,prototypePriceControl,supplierResultMarkup,supplierResultRegion,supplierSearch,
+  const functions=[privateClientAltaAllowed,suggestMarginPrice,suggestPrototypePrice,prototypeEstimate,prototypeCostsReady,prototypePriceControl,supplierResultMarkup,supplierResultRegion,supplierSearch,
     copyApprovedBreakdown,localRecipeRatio,refreshApprovedCatalog,localRecipeControls,handleLocalRecipeAction];
   return once(source,'globalThis.__client = {','const localLineRequests=new Map(),localLineActions=new Set();let approvedLocalProducts=[];\n'+functions.map(fn=>fn.toString()).join('\n')+'\nglobalThis.__client = {');
 }

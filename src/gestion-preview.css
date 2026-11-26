@@ -1,6 +1,5 @@
 /* La mesa y el tablero usan el shell, las listas y los campos del portafolio. */
 #journey-root { min-height: 100vh; }
-#gp-chrome .j-sidebar-backdrop[hidden] { display: none; }
 #gp-chrome .j-breadcrumb a { color: var(--j-blue); text-decoration: none; }
 #gp-chrome .j-breadcrumb a:is(:hover, :focus-visible) { text-decoration: underline; }
 .gp-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0; }
@@ -14,6 +13,7 @@
 #journey-root .gp-detail { padding: 16px; }
 .gp-detail-head, .gp-detail-section > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .gp-detail-head { margin-bottom: 14px; }
+.gp-quote-products { margin-bottom: 18px; }
 .gp-detail-head h2 { scroll-margin-top: 76px; overflow-wrap: anywhere; }
 #journey-root .gp-close { flex: none; padding: 3px 9px; min-height: 30px; }
 .gp-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }

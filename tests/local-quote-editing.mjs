@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {quoteTemplate} from '../tools/build.mjs';
-import {copyApprovedBreakdown,extendLocalQuoteEditing,prototypeCostsReady,suggestPrototypePrice} from '../tools/local-quote-editing-extension.mjs';
+import {copyApprovedBreakdown,extendLocalQuoteEditing,prototypeCostsReady,suggestMarginPrice,suggestPrototypePrice} from '../tools/local-quote-editing-extension.mjs';
+import {commercialCostEstimate} from '../src/quote-costs.mjs';
 
 const native=readFileSync(new URL('../src/cotizador.html',import.meta.url),'utf8');
 const built=quoteTemplate(native);
@@ -12,6 +13,32 @@ const scripts=Array.from(template.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)
 const sandbox=vm.createContext({});
 vm.runInContext(scripts.find(script=>script.includes('var QuoteDomain')),sandbox);
 const D=sandbox.QuoteDomain;
+
+test('una caja y los indirectos del pedido se reparten una vez y el margen usa el costo asignado sin IVA',()=>{
+  let sequence=0;const uid=prefix=>prefix+'-CASE-'+(++sequence);
+  const q=D.upgrade(D.blank(uid),uid),m=sandbox.QuoteManufacturing_;
+  q.items=[{...D.newItem(uid),description:'Mesa',quantity:'1'},
+    {...D.newItem(uid),description:'Silla',quantity:'6',discount:'10',tax:'16',targetMargin:'25'}];
+  q.costs=[];q.resources=[];q.needs=[];q.workUnits=[];q.coverageLinks=[];q.manufacturing=m.blank(q,uid);
+  Object.assign(q.manufacturing,{packaging:{method:'fixed',netAmount:'40.02',taxRate:'16',quality:'confirmed',basis:'Caja de control',manualAntecedents:[]},
+    indirectMethod:'percent',indirectRate:'10',installation:'no',installationReason:'Entrega sin instalación'});
+  for(const row of q.manufacturing.items)row.mode='detailed';
+  const wood=new Map([[q.items[0].id,{cents:25000,partial:false}],[q.items[1].id,{cents:75000,partial:false}]]);
+  const valuation=D.evaluate(q,{commercialWood:wood});
+  assert.equal(valuation.structuralValid,true,JSON.stringify(valuation.issues));
+  const expected=commercialCostEstimate(q,valuation,wood,m,D);
+  assert.equal(expected.netCents,114402);
+  assert.deepEqual(Array.from(expected.items,r=>[r.directNet,r.generalNet,r.indirectNet]),[[25000,7201,5200],[75000,7201,5200]]);
+  const price=suggestMarginPrice(D,q.items[1],expected.items[1].assignedNet,'25');
+  assert.equal(price.unitPrice,'202.97');
+  assert.equal(suggestMarginPrice(D,q.items[1],null,'25'),null);
+  assert.equal(D.sanitize(q).items[1].targetMargin,'25');
+  wood.get(q.items[1].id).partial=true;
+  const partial= commercialCostEstimate(q,D.evaluate(q,{commercialWood:wood}),wood,m,D);
+  assert.equal(partial.netCents,104002);
+  assert.equal(partial.complete,false);
+  assert.equal(partial.items[1].partial,true);
+});
 
 test('suggests the first unit-price cent that reaches each prototype margin after the line discount',()=>{
   const first={prototype:true,quantity:'2',discount:'10',tax:'16'};

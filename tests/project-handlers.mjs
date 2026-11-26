@@ -9,7 +9,7 @@ import vm from 'node:vm';
 // markup only. No browser layout, backend, authentication or real services.
 const read=name=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 const template=read('cotizador.html');
-const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','astil-chrome.js','journey.js'].map(name=>[name,read(name)]);
+const scripts=['country-codes.js','demo-phone.js','recipe-reference.js','recipe-catalog.js','quote-issues.js','quote-bridge.js','portfolio-kpis.js','project-operations.js','project-views.js','astil-chrome.js','quote-products.js','journey.js'].map(name=>[name,read(name)]);
 const hash=source=>createHash('sha256').update(source).digest('hex');
 const sourceCheckpoint={native:hash(template),scripts:Object.fromEntries(scripts.map(([name,source])=>[name,hash(source)])),test:hash(readFileSync(new URL(import.meta.url),'utf8'))};
 const domain=[...quoteTemplate(template).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1])
@@ -23,13 +23,15 @@ async function harness(){
   vm.runInContext(`
     globalThis.window=globalThis;globalThis.__events=new Map();globalThis.__nodes=new Map();
     function element(id=''){
-      return {id,innerHTML:'',textContent:'',hidden:false,inert:false,dataset:{},disabled:false,style:{},listeners:new Map(),
+      return {id,innerHTML:'',textContent:'',hidden:false,inert:false,dataset:{},disabled:false,style:{},listeners:new Map(),attributes:new Map(),classList:{toggle(){}},
         addEventListener(type,fn){const list=this.listeners.get(type)||[];list.push(fn);this.listeners.set(type,list);},
         contains(target){return target===this||target?.container===this;},querySelector(){return null;},querySelectorAll(){return [];},
         focus(){document.activeElement=this;},scrollIntoView(){},replaceChildren(){this.innerHTML='';},remove(){},before(){},
-        setAttribute(){},removeAttribute(){},getClientRects(){return [{}];}};
+        setAttribute(name,value){this.attributes.set(name,value);},removeAttribute(name){this.attributes.delete(name);},getClientRects(){return [{}];}};
     }
     for(const id of ['journey-root','journey-footer','quote-host','workspace','j-main'])__nodes.set(id,element(id));
+    const menuNodes=new Map(['#j-sidebar','.j-mobile-menu','.j-sidebar-backdrop'].map(selector=>[selector,element()]));
+    __nodes.get('journey-root').querySelector=selector=>menuNodes.get(selector)||null;
     globalThis.document={activeElement:null,getElementById(id){return __nodes.get(id)||null;},createElement(){return element();},
       addEventListener(type,fn){const list=__events.get(type)||[];list.push(fn);__events.set(type,list);}};
     globalThis.matchMedia=()=>({matches:false});
@@ -118,7 +120,7 @@ test('navigation omits the process map on desktop and in the mobile menu',async(
     assert.ok(sidebar);
     assert.doesNotMatch(sidebar,/Mapa del proceso|data-action="workflow"/);
     for(const action of ['kpis','list','projects'])assert.ok(sidebar.includes(`data-action="${action}"`));
-    if(mobile)assert.match(sidebar,/role="dialog"/);
+    if(mobile)assert.equal(h.root.querySelector('#j-sidebar').attributes.get('role'),'dialog');
   }
 });
 

@@ -139,7 +139,12 @@ const fresh = async () => {
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
   await waitForDemoReady();
 };
-const open = id => action('open', `[data-id="${id}"]`).first().click();
+async function open(id) {
+  const selector = `[data-id="${id}"]`;
+  const next = action('open', selector).first();
+  if (!await next.count()) await action('quote-detail', selector).click();
+  await next.click();
+}
 const results = [];
 async function test(name, run) {
   if (process.env.DEMO_TEST_FILTER && !new RegExp(process.env.DEMO_TEST_FILTER, 'i').test(name)) return;
@@ -429,7 +434,6 @@ try {
     const navSummary=page.locator('#j-sidebar [data-nav-group="portfolio"] > summary');
     const operationSummary=page.locator('#j-sidebar [data-nav-group="operations"] > summary');
     const navProjects=page.locator('#j-sidebar [data-action="projects"]');
-    const navManagement=page.getByRole('link',{name:'Gestión DUCO'});
     const navKpis=page.locator('#j-sidebar [data-action="kpis"]');
     assert.equal(await navSummary.evaluate(element=>element===document.activeElement),true);
     await page.keyboard.press('Tab');
@@ -439,11 +443,7 @@ try {
     await page.keyboard.press('Shift+Tab');
     assert.equal(await operationSummary.evaluate(element=>element===document.activeElement),true,'The closed section still has a reachable heading');
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await navManagement.evaluate(element=>element===document.activeElement),true,'Backward focus wraps to Gestión DUCO, the last visible entry');
-    await page.keyboard.press('Shift+Tab');
-    assert.equal(await navProjects.evaluate(element=>element===document.activeElement),true,'Proyectos precedes Gestión DUCO');
-    await page.keyboard.press('Tab');
-    assert.equal(await navManagement.evaluate(element=>element===document.activeElement),true);
+    assert.equal(await navProjects.evaluate(element=>element===document.activeElement),true,'Backward focus wraps to the last visible entry');
     await page.keyboard.press('Tab');
     assert.equal(await operationSummary.evaluate(element=>element===document.activeElement),true,'Forward focus wraps within the open navigation');
     await capture({path:path.join(artifacts,'astil-shell-after-menu-390.png'),fullPage:true});
@@ -717,16 +717,16 @@ try {
     assert.equal(await page.locator('[data-record-id="DEMO-102"]').count(), 0);
     await action('view', '[data-view="flujo"]').click();
     assert.equal(await page.locator('#j-search').inputValue(), records[0].request.title);
-    assert.equal(await action('open', '[data-id="DEMO-101"]').count(), 1);
-    assert.equal(await action('open', '[data-id="DEMO-102"]').count(), 0);
+    assert.equal(await action('quote-detail', '[data-id="DEMO-101"]').count(), 1);
+    assert.equal(await action('quote-detail', '[data-id="DEMO-102"]').count(), 0);
     await page.locator('#j-search').fill('NO-EXISTE-SINTETICO-928');
-    assert.equal(await action('open').count(), 0);
+    assert.equal(await action('quote-detail').count(), 0);
     await page.locator('#j-search').fill('');
     await page.locator('#j-status-filter').selectOption('project');
-    assert.equal(await action('open').count(), seedProjectIds.length);
-    for (const id of seedProjectIds) assert.equal(await action('open', `[data-id="${id}"]`).count(), 1);
+    assert.equal(await action('quote-detail').count(), seedProjectIds.length);
+    for (const id of seedProjectIds) assert.equal(await action('quote-detail', `[data-id="${id}"]`).count(), 1);
     await page.locator('#j-status-filter').selectOption('all');
-    assert.equal(await action('open').count(), seedIds.length);
+    assert.equal(await action('quote-detail').count(), seedIds.length);
   });
 
   await test('Guardar distingue fallo, resultado desconocido y confirmación', async () => {
@@ -1262,7 +1262,7 @@ try {
       const flow = action('view', '[data-view="flujo"]');
       await flow.focus();
       await page.keyboard.press('Enter');
-      assert.equal(await action('open').count(), seedIds.length);
+      assert.equal(await action('quote-detail').count(), seedIds.length);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `Overflow in board at ${width}px`);
       await open('DEMO-101');
       await stage('quote');

@@ -1,6 +1,7 @@
 // Browser acceptance for the public portfolio. The local host exposes only public assets.
 // PAGES_TEST_URL optionally exercises the identical build on the official GitHub Pages URL.
 import assert from 'node:assert/strict';
+import {prepareFurniture} from './furniture-fixture.mjs';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -21,7 +22,7 @@ if(publicURL && publicURL!==official)throw Error('PAGES_TEST_URL must be the off
 const digest=buffer=>createHash('sha256').update(buffer).digest('hex');
 const expectedHash=digest(await fs.readFile(path.join(root,'index.html')));
 const managementAsset=relative=>relative==='gestion.html' ||
-  /^src\/(?:astil-chrome|gestion-chrome|gestion-preview(?:-model|-table|-board)?)\.js$/.test(relative) ||
+  /^src\/(?:astil-chrome|gestion-chrome|quote-products|gestion-preview(?:-model|-table|-board)?)\.js$/.test(relative) ||
   /^src\/(?:gestion-fonts|journey|integration|list-tables|gestion-preview(?:-table|-board)?)\.css$/.test(relative) ||
   /^src\/assets\/fonts\/(?:sora|public-sans)\.woff2$/.test(relative);
 const allowedFile=relative=>managementAsset(relative) || /^(?:index|catalogo)\.html$/.test(relative) ||
@@ -78,6 +79,11 @@ const record=(p,id)=>p.evaluate(id=>window.DemoJourney.inspect().records.find(r=
 async function open(p,id){
   const browserSource=action(p,'quote-source','[data-source="browser"]');
   if(await browserSource.isVisible()&&await browserSource.getAttribute('aria-pressed')!=='true')await browserSource.click();
+  const detail=action(p,'quote-detail','[data-id="'+id+'"]');
+  if(await detail.count()){
+    await detail.click();
+    await p.getByRole('heading',{name:'Productos de la cotización',exact:true}).waitFor();
+  }
   await action(p,'open','[data-id="'+id+'"]').click();
 }
 const title=(p,value)=>quote(p,'[data-path="name"]').fill(value);
@@ -122,14 +128,33 @@ async function checkPublishedDetail(p,kind,entry,fields){
 let madeId,productItem,confirmed;
 try{
   let p=await start();
-  await caseTest('Gestión abre desde Portafolio y mueve expedientes de ejemplo en escritorio y móvil',async()=>{
-    const entry=p.getByRole('link',{name:'Gestión DUCO'});
+  await caseTest('Portafolio abre el cotizador y conserva el panel de KPIs en escritorio y móvil',async()=>{
+    assert.equal(await p.locator('#j-sidebar a[href*="gestion.html"]').count(),0);
+    const pagesBefore=context.pages().length;
+    for(const width of [1400,390]){
+      await p.setViewportSize({width,height:900});
+      const menu=p.locator('.j-mobile-menu');
+      const kpis=p.locator('#j-sidebar [data-action="kpis"]');
+      if(width===390)await menu.click();
+      await kpis.click();
+      await p.locator('#journey-root[data-journey-screen="kpis"]').waitFor();
+      const main=await p.locator('#j-main').elementHandle();
+      if(width===390)await menu.click();
+      await kpis.press('Enter');
+      assert.ok(await main.evaluate(node=>node===document.querySelector('#j-main')));
+      assert.equal(context.pages().length,pagesBefore);
+      if(width===390)await menu.click();
+      await p.locator('#j-sidebar [data-action="list"]').click();
+    }
+    await p.setViewportSize({width:1400,height:980});
+  });
+  await caseTest('Gestión abre por URL directa y mueve expedientes de ejemplo en escritorio y móvil',async()=>{
     const managementUrl=new URL('gestion.html',base).href;
-    assert.equal(new URL(await entry.getAttribute('href'),base).href,managementUrl);
     const requests=[];
     const track=request=>requests.push(request.url());
     context.on('request',track);
-    const [board]=await Promise.all([context.waitForEvent('page'),entry.click()]);
+    const board=await context.newPage();
+    await board.goto(managementUrl);
     await board.waitForURL(managementUrl);
     const changeView=mode=>board.locator('[data-view="'+mode+'"]').click();
     const table=board.locator('.j-list-table');
@@ -166,11 +191,92 @@ try{
     assert.ok(requests.every(url=>url.startsWith(base)&&managementAsset(new URL(url).pathname.slice(prefix.length))),
       'La prueba de Gestión solo necesita sus recursos estáticos públicos');
 
-    const back=board.getByRole('link',{name:'Volver al espacio de trabajo'});
+    const back=board.locator('.j-breadcrumb a');
     assert.equal(new URL(await back.getAttribute('href'),managementUrl).href,base);
     await back.click();
     await ready(board);
+    await board.goto(managementUrl);
+    await board.getByRole('button',{name:'Mobiliario para sala de lectura',exact:true}).click();
+    const [editor]=await Promise.all([
+      context.waitForEvent('page'),
+      board.getByRole('button',{name:'Abrir en Cotizador'}).click()
+    ]);
+    await ready(editor);
+    assert.equal(await quote(editor,'[data-path="name"]').inputValue(),'Mobiliario para sala de lectura');
+    await stage(editor,'quote');
+    assert.equal(await quote(editor,'.part-accordion').count(),2);
+    await editor.close();
+    await board.locator('.j-mobile-menu').click();
+    const kpiLink=board.locator('#j-sidebar').getByRole('link',{name:'KPIs',exact:true});
+    assert.equal(await kpiLink.getAttribute('target'),null);
+    await kpiLink.click();
+    await board.locator('#journey-root[data-journey-screen="kpis"]').waitFor();
     await board.close();
+  });
+  await caseTest('Una mesa y seis sillas conservan madera, herrajes, maquila y gastos comunes al reabrir',async()=>{
+    await action(p,'new-request').click();
+    const id=await currentId(p);
+    await title(p,'Conciliación de mobiliario de prueba');
+    await stage(p,'quote');
+    const ids=await prepareFurniture(p);
+    const summary=()=>p.evaluate(id=>window.DemoQuote.summary(id),id);
+    const check=(s,chair,total)=>{
+      assert.ok(s.estimatedCosts,JSON.stringify(s.saveBlockers));
+      assert.deepEqual(s.estimatedCosts.items.map(row=>[row.itemId,row.directNet,row.generalNet]),[[ids[0],25000,2001],[ids[1],chair,2001]]);
+      assert.equal(s.costCents,total);assert.equal(s.estimatedCosts.netCents,total);
+      assert.equal(s.estimatedCosts.complete,false,'Unpriced labor leaves a known, partial amount');
+    };
+    check(await summary(),12500,41502);
+    let quantity=quote(p,'.header-quantity-control input').nth(1);
+    await quantity.click();
+    let detail=quote(p,'#part-detail-'+ids[1]);
+    let captured=detail.locator('[data-part-captured-net]').first();
+    assert.match(await captured.innerText(),/125\.00/);
+    assert.match(await detail.locator('[data-estimate-unit]').innerText(),/125\.00 por unidad/);
+    await quantity.fill('6');await quantity.press('Tab');
+    await p.waitForFunction(id=>document.querySelector('#part-detail-'+id+' [data-part-captured-net]')?.textContent.includes('750.00'),ids[1]);
+    await quote(p,'.steps [data-step="2"]').click();
+    assert.equal(await p.evaluate(()=>window.__client.app.q.items[1].quantity),'6',
+      await p.evaluate(()=>JSON.stringify({step:window.__client.app.step,edit:window.__client.app.partDraft?.error,capture:window.__client.app.rowAutosave?.text})));
+    check(await summary(),75000,104002);
+    const visibleTotal=()=>quote(p,'[data-estimate-order]').innerText();
+    assert.match(await visibleTotal(),/1,040\.02/);
+    await save(p);
+    const saved=await p.evaluate(id=>window.DemoQuote.snapshot(id),id);
+    check(saved.summary,75000,104002);
+    p=await restart();await open(p,id);await stage(p,'quote');
+    await quote(p,'.steps [data-step="2"]').click();
+    assert.match(await visibleTotal(),/1,040\.02/);
+    check(await summary(),75000,104002);
+    const reopened=await p.evaluate(id=>window.DemoQuote.snapshot(id),id);
+    assert.deepEqual(reopened.local.wood,saved.local.wood);
+    assert.deepEqual(reopened.quote.items.map(item=>item.quantity),['1','6']);
+    await quote(p,'.steps [data-step="1"]').click();
+    quantity=quote(p,'.header-quantity-control input').nth(1);
+    detail=quote(p,'#part-detail-'+ids[1]);
+    captured=detail.locator('[data-part-captured-net]').first();
+    await quantity.click();
+    const wood=detail.locator('[data-article-fold="wood"]');
+    async function expand(panel){if(!await panel.evaluate(node=>node.open))await panel.locator(':scope > summary').click();}
+    await expand(wood);await expand(wood.locator('[data-fab-panel="workshop-dimensions"]'));
+    await wood.locator('#waste-'+ids[1]).fill('20');
+    await wood.getByRole('button',{name:'Aplicar a todas las piezas'}).click();
+    assert.match(await captured.innerText(),/884\.40/);
+    await wood.getByRole('button',{name:'Usar valores por pieza'}).click();
+    assert.match(await captured.innerText(),/750\.00/);
+    await expand(wood.locator('[data-workshop-pending] details'));
+    const pending=wood.locator('[data-workshop-goto="labor.assembly.rate"]');
+    await pending.click();
+    const rate=wood.locator('[data-workshop-field="labor.assembly.rate"]');
+    assert.ok(await rate.evaluate(node=>document.activeElement===node));
+    await rate.fill('0');await rate.press('Tab');assert.equal(await pending.count(),0);
+    await wood.getByRole('button',{name:'Ver cálculo de dóminos'}).click();
+    assert.ok(await wood.locator('[data-workshop-field="domino.unions"]').evaluate(node=>document.activeElement===node));
+    await expand(wood.locator('[data-fab-panel="workshop-finish"]'));
+    await wood.locator('[data-finish-reference]').selectOption('FINISH');
+    assert.equal(await wood.locator('[data-workshop-field="finish.0.price"]').inputValue(),'403.00');
+    assert.equal(await wood.locator('[data-workshop-field="finish.0.yield"]').inputValue(),'7');
+    await p.goto(base);await ready(p);
   });
   await caseTest('El corte de Asana muestra los títulos completos y permite buscar por folio o título',async()=>{
     const quotes=p.locator('[data-published-quote]');

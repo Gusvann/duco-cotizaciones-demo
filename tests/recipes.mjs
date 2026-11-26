@@ -701,6 +701,7 @@ function harness({partDraftFault=false,expansion=false,publicCatalog=false,priva
     vm.runInContext(operationsSource,sandbox,{filename:'project-operations.js'});
     vm.runInContext(projectViewsSource,sandbox,{filename:'project-views.js'});
     vm.runInContext(chromeSource,sandbox,{filename:'astil-chrome.js'});
+    vm.runInContext(read('src/quote-products.js'),sandbox,{filename:'quote-products.js'});
     vm.runInContext(journeySource,sandbox,{filename:'journey.js'});
     await sandbox.DemoJourney.ready;
     const action=async(action,extra={})=>{
@@ -2466,13 +2467,18 @@ test('reference workshop refresh keeps the active input and table in place while
     setAttribute:(key,value)=>attrs.set(key,value),closest:()=>({querySelector:()=>error})};
   const amount={dataset:{workshopLive:'glue-amount'},innerHTML:'',setAttribute(){},removeAttribute(){}};
   const table={scrollLeft:230};
-  const root={querySelectorAll(selector){if(selector==='[data-workshop-live]')return [amount];if(selector==='[data-workshop-field]')return [control];return [table];},
+  const pending={contents:'',firstElementChild:{open:true},
+    get innerHTML(){return this.contents;},
+    set innerHTML(value){this.contents=value;this.firstElementChild=value?{open:false}:null;}};
+  const root={querySelector:selector=>selector==='[data-workshop-pending]'?pending:null,
+    querySelectorAll(selector){if(selector==='[data-workshop-live]')return [amount];if(selector==='[data-workshop-field]')return [control];return [table];},
     set outerHTML(_){throw Error('Replacing the workshop would lose the active input and horizontal position');}};
   const originalQuery=h.host.querySelector.bind(h.host),originalCreate=h.sandbox.document.createElement;
   h.host.querySelector=selector=>selector.startsWith('[data-workshop-article=')?root:originalQuery(selector);
   h.sandbox.document.createElement=name=>{
     if(name!=='template')return originalCreate(name);
     const template={innerHTML:'',content:{querySelector:()=>({querySelector(selector){
+      if(selector==='[data-workshop-pending]')return {innerHTML:/<div data-workshop-pending>([\s\S]*?)<\/div>/.exec(template.innerHTML)?.[1]??''};
       const key=/data-workshop-live="([^"]+)"/.exec(selector)?.[1];
       const match=key&&new RegExp('<output\\b[^>]*data-workshop-live="'+key+'"[^>]*>([\\s\\S]*?)<\\/output>').exec(template.innerHTML);
       return match?{innerHTML:match[1],getAttribute:()=>null}:null;
@@ -2484,9 +2490,12 @@ test('reference workshop refresh keeps the active input and table in place while
   assert.equal(h.c.workshopRead(itemId).other.glue.unitCents,'4320');assert.match(amount.innerHTML,/\$ 43\.20/);
   assert.equal(h.sandbox.document.activeElement,control);assert.equal(control.value,'200');assert.equal(control.selectionStart,2);assert.equal(table.scrollLeft,230);
   assert.equal(attrs.get('aria-invalid'),'false');assert.equal(error.hidden,true);
+  assert.doesNotMatch(pending.innerHTML,/data-workshop-goto="other.glue.price"/);
   await h.event('input',{workshopItem:itemId,workshopField:'other.glue.price'},'bad');
   assert.match(amount.innerHTML,/Pendiente/);assert.equal(attrs.get('aria-invalid'),'true');assert.equal(error.hidden,false);
   assert.equal(h.sandbox.document.activeElement,control);assert.equal(table.scrollLeft,230);
+  assert.match(pending.innerHTML,/data-workshop-goto="other\.glue\.price"/);
+  assert.equal(pending.firstElementChild.open,true);
 });
 
 test('wood capture uses requirement stars instead of a pending-details disclosure without changing saved recipe values',async()=>{
