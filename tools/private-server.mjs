@@ -63,7 +63,9 @@ const signInScript = `document.getElementById('login').addEventListener('submit'
   try {
     const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(form))});
     if(!response.ok){feedback.textContent=(await response.json()).message;return;}
-    location.replace(location.pathname==='/gestion.html'?'/gestion.html':'/');
+    const destination=location.pathname==='/gestion.html'?'/gestion.html':'/';
+    const intent=destination==='/'&&location.hash==='#nueva-cotizacion'?'#nueva-cotizacion':'';
+    location.replace(destination+intent);
   } catch {feedback.textContent='El servidor local no respondió.';}
 });`;
 

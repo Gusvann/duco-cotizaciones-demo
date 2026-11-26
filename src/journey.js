@@ -1262,9 +1262,20 @@
     await handleAction({dataset:{action:'new-request'}},{id,title:data.title,dueDate:data.dueDate,items:data.items});
     return true;
   }
-  const ready=(async()=>{state.busy=true;try{await seed();state.busy=false;if(await openGestionDraft())return;}
-    catch(error){state.feedback=error.message;state.tone='error';}
-    finally{state.busy=false;}if(!readPublishedPage())render();})();
+  const ready=(async()=>{
+    state.busy=true;
+    try {
+      await seed();
+      state.busy=false;
+      if(window.location?.hash==='#nueva-cotizacion'){
+        window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search);
+        await handleAction({dataset:{action:'new-request'}});
+        if(state.screen==='request')return;
+      } else if(await openGestionDraft())return;
+    } catch(error){state.feedback=error.message;state.tone='error';}
+    finally{state.busy=false;}
+    if(!readPublishedPage())render();
+  })();
   if(publishedPortfolio)window.addEventListener?.('hashchange',()=>ready.then(()=>readPublishedPage(true)));
   window.DemoJourney = Object.freeze({ready,inspect:() => clone({state,records,clients,clockTick}),portfolio:() => clone(kpiMetrics()),saveCurrent:() => saveRecord(current()),openReview:() => transition('review')});
 })();

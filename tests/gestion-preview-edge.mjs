@@ -158,6 +158,7 @@ try{
   await shot('a-mesa.png');
   const kind=type=>page.locator('[data-kind="'+type+'"]');
   const view=type=>page.locator('[data-view="'+type+'"]');
+  const section=(p,step)=>p.locator('#quote-host .steps [data-step="'+step+'"]');
   const modal=page.locator('#gp-dialog');
   const detail=page.locator('#gp-detail');
   const lane=stage=>page.locator('.gp-board-lane[data-stage="'+stage+'"]');
@@ -195,11 +196,25 @@ try{
   await shot('b-tablero.png');
   await view('mesa').click();
 
-  await page.getByRole('button',{name:'Nueva cotización'}).click();
-  await modal.getByLabel('Nombre').fill('Mostrador de prueba');
-  await modal.getByLabel('Responsable').selectOption('Comercial');
-  await modal.getByRole('button',{name:'Crear cotización'}).click();
-  await detail.getByRole('heading',{name:'Mostrador de prueba'}).waitFor();
+  for(const mode of ['mesa','tablero']){
+    await view(mode).click();
+    const openPages=page.context().pages().length;
+    await page.locator('#gp-new').click();
+    await page.locator('#journey-root[data-journey-screen="request"]').waitFor();
+    await page.locator('#quote-host .mainform [data-path="name"]').waitFor();
+    assert.equal(page.context().pages().length,openPages);
+    assert.equal(await page.locator('#gp-dialog[open]').count(),0);
+    assert.equal(new URL(page.url()).hash,'');
+    await section(page,1).click();
+    await page.locator('#journey-root[data-journey-screen="quote"]').waitFor();
+    assert.equal(await page.locator('#quote-host .part-accordion').count(),0);
+    assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,0);
+    await page.goto(home+'/gestion.html');
+    assert.equal(await page.locator('[data-select]').count(),9);
+  }
+  const title='Señalética para recepción';
+  await page.getByRole('button',{name:title,exact:true}).click();
+  await detail.getByRole('heading',{name:title,exact:true}).waitFor();
   async function openDraft(){
     const receiving=page.context().waitForEvent('page');
     await detail.getByRole('button',{name:'Abrir en Cotizador'}).click();
@@ -209,7 +224,7 @@ try{
   }
   const firstDraft=await openDraft();
   const quoteId=await firstDraft.evaluate(()=>window.DemoJourney.inspect().state.id);
-  assert.equal(await firstDraft.locator('#quote-host [data-path="name"]').inputValue(),'Mostrador de prueba');
+  assert.equal(await firstDraft.locator('#quote-host [data-path="name"]').inputValue(),title);
   assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,0,'Abrir la ficha no crea escrituras');
   await firstDraft.locator('#quote-host [data-path="name"]').fill('Mostrador con cambios de prueba');
   await firstDraft.setViewportSize(viewports[2]);
@@ -222,7 +237,6 @@ try{
   assert.equal(await firstDraft.locator('#quote-host [data-path="name"]').inputValue(),'Mostrador con cambios de prueba');
   assert.equal(db.prepare('SELECT count(*) AS count FROM quotes').get().count,0);
   await firstDraft.setViewportSize(viewports[0]);
-  const section=(p,step)=>p.locator('#quote-host .steps [data-step="'+step+'"]');
   await section(firstDraft,1).click();
   const furniture=await prepareFurniture(firstDraft);
   const qty=firstDraft.locator('#quote-host .header-quantity-control input').nth(1);
@@ -283,7 +297,6 @@ try{
   await detail.getByRole('button',{name:'Guardar cambios'}).click();
   await view('tablero').click();
   assert.equal(await page.locator('.gp-board-lane').count(),7);
-  const title='Mostrador de prueba';
   const card=namedCard(title);
   await page.getByLabel('Buscar').fill(title);
   assert.equal(await laneCount('draft'),0,'La columna vacía acepta tarjetas');
@@ -299,11 +312,11 @@ try{
     assert.equal(await detail.getByLabel('Etapa').inputValue(),'draft');
   }
   await card.getByRole('combobox').selectOption('accepted');
-  assert.equal(await page.locator('[data-stage="accepted"]').getByText('Mostrador de prueba',{exact:true}).count(),1);
+  assert.equal(await page.locator('[data-stage="accepted"]').getByText(title,{exact:true}).count(),1);
   await detail.getByRole('button',{name:'Convertir en proyecto'}).click();
   assert.equal(await kind('project').getAttribute('aria-pressed'),'true');
   assert.deepEqual(await heading(page),projectHeading);
-  assert.equal(await page.locator('.gp-board-card').filter({hasText:'Mostrador de prueba'}).count(),1);
+  assert.equal(await page.locator('.gp-board-card').filter({hasText:title}).count(),1);
   await verifyMove(title,'plan','supply');
   await detail.getByRole('button',{name:'Agregar tarea'}).click();
   await modal.getByLabel('Tarea').fill('Revisar plano de prueba');
@@ -359,7 +372,7 @@ try{
     await pointer.send('Emulation.setTouchEmulationEnabled',{enabled:false});
     await pointer.detach();
   }
-  await page.getByLabel('Buscar').fill('mostrador de prueba');
+  await page.getByLabel('Buscar').fill(title);
   assert.equal(await page.locator('[data-select]').count(),1);
 
   await page.getByRole('button',{name:'Reiniciar prueba'}).click();

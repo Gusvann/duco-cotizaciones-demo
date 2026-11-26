@@ -22,6 +22,8 @@ Por corrección directa del propietario del 5 de noviembre, «Mapa del proceso»
 
 ### Probar una cotización en GitHub Pages
 
+**Nueva cotización** en la Mesa y el Tablero de Gestión abre **Cliente y solicitud** en la misma pestaña. Es el mismo formulario que abre **Nueva solicitud** en el Cotizador. Desde ahí se capturan los artículos, costos y precio. **Guardar borrador** conserva el expediente.
+
 1. Abre **Nueva solicitud**, completa los datos de ejemplo y entra a **Artículos → Agregar producto → Producto de línea**. El catálogo permite elegir entre 135 variantes de 12 productos. La geometría, el material y el canto ayudan a identificar la ilustración.
 2. Consulta los despieces y tarifas de fabricación en **Ver galería** o aplica la variante. Edita cantidades o despieces y pulsa **Guardar borrador**. Para retomarlo, abre **Cotizador → Cotizaciones de este navegador** en el mismo perfil. En la Mesa, el nombre abre **Productos de la cotización**, con producto, cantidad y unidad. **Continuar cotización**, en la columna **Siguiente paso**, abre el editor del borrador con sus artículos y costos. Para las versiones enviadas, la ficha consulta las partidas de esa versión.
 3. Completa los datos comerciales y las dos revisiones, registra el envío de prueba y la aceptación de esa misma versión. **Convertir en proyecto** crea la ficha en **Portafolio → Proyectos**. La ficha conserva la versión aceptada y su importe.

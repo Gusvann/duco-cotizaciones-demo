@@ -181,7 +181,7 @@
 
   function openDialog(action){
     const configurations={
-      new:[types[state.kind].create,fields(),'Crear '+types[state.kind].singular],
+      'new-project':[types.project.create,fields(),'Crear proyecto'],
       task:['Agregar tarea','<div class="gp-fields"><label class="j-field j-wide">Tarea<input class="j-input" name="title" required maxlength="160"></label>'+
         '<label class="j-field">Responsable<select class="j-input" name="owner">'+ownerOptions('')+'</select></label><label class="j-field">Vencimiento<input class="j-input" name="dueDate" type="date"></label></div>','Agregar tarea'],
       note:['Agregar nota','<div class="gp-fields"><label class="j-field j-wide">Nota<textarea class="j-input" name="note" required maxlength="600" rows="3"></textarea></label></div>','Guardar nota'],
@@ -218,7 +218,14 @@
       renderControls();renderResults();
     }else if(select||related)selectRecord(select||related);
     else if(action==='open-quote')openQuote(model.get(state.selectedId));
-    else if(['new','task','note','reset'].includes(action))openDialog(action);
+    else if(action==='new'){
+      if(state.kind==='project')openDialog('new-project');
+      else {
+        const editor=location.protocol==='file:'?'index.html':'./';
+        location.assign(editor+'#nueva-cotizacion');
+      }
+    }
+    else if(['task','note','reset'].includes(action))openDialog(action);
     else if(action==='cancel')dialog.close();
     else if(action==='close'){
       const previous=state.selectedId;
@@ -267,7 +274,7 @@
     try{
       const operation=dialogAction;
       let id=state.selectedId;
-      if(operation==='new')id=model.create(state.kind,data).id;
+      if(operation==='new-project')id=model.create('project',data).id;
       else if(operation==='task')model.addTask(id,data);
       else if(operation==='note')model.addNote(id,data.note);
       else if(operation==='reset'){
@@ -279,7 +286,7 @@
       }
       dialog.close();
       if(operation!=='reset'&&id)selectRecord(id);
-      const notices={new:'Expediente creado.',task:'Tarea agregada.',note:'Nota guardada.',reset:'Se restauraron los datos de ejemplo.'};
+      const notices={'new-project':'Proyecto creado.',task:'Tarea agregada.',note:'Nota guardada.',reset:'Se restauraron los datos de ejemplo.'};
       feedback(notices[operation]);
     }catch(error){
       const output=$('gp-dialog-error');

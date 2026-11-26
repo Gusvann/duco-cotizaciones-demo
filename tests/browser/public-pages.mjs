@@ -159,12 +159,7 @@ try{
     const changeView=mode=>board.locator('[data-view="'+mode+'"]').click();
     const table=board.locator('.j-list-table');
     await table.waitFor();
-    const name='Expediente ficticio de prueba Pages';
-    await board.getByRole('button',{name:'Nueva cotización'}).click();
-    const modal=board.locator('#gp-dialog');
-    await modal.getByLabel('Nombre').fill(name);
-    await modal.getByRole('button',{name:'Crear cotización'}).click();
-    await board.getByRole('button',{name:'Cerrar ficha'}).click();
+    const name='Señalética para recepción';
     await changeView('tablero');
     const card=board.locator('.gp-board-card').filter({has:board.getByRole('button',{name,exact:true})});
     const lane=stage=>board.locator('.gp-board-lane[data-stage="'+stage+'"]');
@@ -214,7 +209,22 @@ try{
     await board.close();
   });
   await caseTest('Una mesa y seis sillas conservan madera, herrajes, maquila y gastos comunes al reabrir',async()=>{
-    await action(p,'new-request').click();
+    const savedIds=()=>p.evaluate(async()=>(await window.DemoBrowserStore.initial()).map(entry=>entry.record.id).sort());
+    const before=await savedIds();
+    for(const mode of ['mesa','tablero']){
+      await p.goto(new URL('gestion.html',base).href);
+      await p.locator('[data-view="'+mode+'"]').click();
+      const openPages=context.pages().length;
+      await p.locator('#gp-new').click();
+      await p.locator('#journey-root[data-journey-screen="request"]').waitFor();
+      await ready(p);
+      await quote(p,'.mainform [data-path="name"]').waitFor();
+      assert.equal(context.pages().length,openPages);
+      assert.equal(await p.locator('#gp-dialog[open]').count(),0);
+      assert.equal(new URL(p.url()).hash,'');
+      assert.equal(await p.evaluate(()=>window.__client.app.q.items.length),0);
+      assert.deepEqual(await savedIds(),before);
+    }
     const id=await currentId(p);
     await title(p,'Conciliación de mobiliario de prueba');
     await stage(p,'quote');
